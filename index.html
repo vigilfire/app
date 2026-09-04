@@ -97,14 +97,15 @@
   .toggle button + button{border-left:1px solid var(--line-strong);}
   .toggle button.active.pass{background:var(--green); color:#fff;}
   .toggle button.active.fail{background:var(--red); color:#fff;}
+  .toggle button.active:not(.pass):not(.fail){background:var(--ink); color:#fff;}
 
   .site-card{display:flex; align-items:center; justify-content:space-between; padding:15px 16px; margin-bottom:10px; cursor:pointer;}
   .site-card:active{border-color:var(--line-strong);}
   .site-card .name{font-weight:700; font-size:1rem;}
   .site-card .meta{font-size:0.8rem; color:var(--grey); margin-top:2px;}
   .site-card .count{background:var(--paper-dim); border-radius:5px; padding:4px 9px; font-size:0.72rem; font-weight:700; flex-shrink:0; margin-left:10px;}
-  .site-card .edit-ic{color:var(--grey); margin-left:8px; display:inline-flex; padding:4px; cursor:pointer;}
-  .site-card .edit-ic svg{width:16px; height:16px;}
+  .edit-ic{color:var(--grey); margin-left:8px; display:inline-flex; padding:4px; cursor:pointer;}
+  .edit-ic svg{width:16px; height:16px;}
 
   .tag-card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); margin-bottom:12px; overflow:hidden; position:relative; border-left:4px solid var(--line-strong);}
   .tag-card.status-pass{border-left-color:var(--green);}
@@ -288,6 +289,86 @@
   </div>
 
   <main>
+
+    <!-- ===== MY TRAINING (trainee only) ===== -->
+    <section id="view-my-training" class="view">
+      <div class="section-title"><h2>My training</h2></div>
+      <p class="hint" style="margin:0 0 12px;">SAQCC (Fire) registered trainee — 6 months of supervised field training under a registered technician.</p>
+      <div class="card" id="myTrainingCard"></div>
+
+      <div class="section-title"><h2>Competency checklist</h2></div>
+      <div class="card" id="myCompetencyCard"></div>
+
+      <div class="section-title"><h2>My logbook</h2></div>
+      <button class="btn" style="margin-bottom:14px;" onclick="openLogbookEntryForm(null)">+ Log an entry</button>
+      <div id="myLogbookList"><div class="empty">Loading…</div></div>
+    </section>
+
+    <!-- ===== LOGBOOK ENTRY (trainee: create/edit a draft, or view a signed one) ===== -->
+    <section id="view-logbook-entry-form" class="view">
+      <div class="backbar"><button onclick="showView('view-my-training')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="logbookEntryFormTitle">New logbook entry</h2></div>
+      <div class="card">
+        <label style="margin-top:0;">Date</label>
+        <input id="lbDate" type="date">
+        <label>Training type</label>
+        <div class="toggle" id="lbTypeToggle">
+          <button type="button" data-type="workshop" onclick="setLbTrainingType('workshop')">Workshop</button>
+          <button type="button" data-type="on-the-job" onclick="setLbTrainingType('on-the-job')">On-the-job</button>
+        </div>
+        <label>Site / client <span style="text-transform:none;font-weight:500;">(initials only — no confidential detail)</span></label>
+        <input id="lbSiteClient" placeholder="e.g. BBC - Pretoria">
+        <label>Work performed</label>
+        <textarea id="lbWorkPerformed" placeholder="Describe what you did, showing the competencies being addressed"></textarea>
+        <label>Registered technician who witnessed this</label>
+        <select id="lbWitness"><option value="">Select technician…</option></select>
+        <div class="hint">Only the technician who was directly present may sign this off — it's fraud otherwise, per the SAQCC logbook rules.</div>
+
+        <div id="lbSignedBlock" style="display:none;"></div>
+
+        <div class="row" style="margin-top:16px;">
+          <button class="btn secondary" onclick="showView('view-my-training')">Cancel</button>
+          <button class="btn" id="lbSaveBtn" onclick="saveLogbookEntry()">Save entry</button>
+        </div>
+        <button class="btn ghost" id="lbDeleteBtn" style="margin-top:10px; display:none;" onclick="deleteLogbookEntry()">Delete this entry</button>
+      </div>
+    </section>
+
+    <!-- ===== SIGN-OFFS (technician only) — logbook entries awaiting this technician's sign-off ===== -->
+    <section id="view-signoffs" class="view">
+      <div class="section-title"><h2>Sign-offs</h2></div>
+      <p class="hint" style="margin:0 0 12px;">Trainee logbook entries naming you as the technician who witnessed the work. Only sign an entry you were personally present for.</p>
+      <div id="signoffList"><div class="empty">Loading…</div></div>
+    </section>
+
+    <section id="view-signoff-form" class="view">
+      <div class="backbar"><button onclick="showView('view-signoffs')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2>Sign logbook entry</h2></div>
+      <div class="card">
+        <div id="signoffTraineeInfo"></div>
+        <label>Work performed</label>
+        <div class="readonly-field" id="signoffWorkPerformed" style="white-space:pre-wrap;"></div>
+        <label>Your comments</label>
+        <textarea id="signoffComments" placeholder="Feedback on the work, safety, thoroughness, etc."></textarea>
+        <div class="hint">Signing confirms you were directly present and witnessed this work. Once signed, the entry is locked and can't be edited.</div>
+        <div class="row" style="margin-top:16px;">
+          <button class="btn secondary" onclick="showView('view-signoffs')">Cancel</button>
+          <button class="btn" onclick="signLogbookEntry()">Sign &amp; confirm</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== MY TRAINEES (technician only) — mark competencies for trainees you supervise ===== -->
+    <section id="view-my-trainees" class="view">
+      <div class="section-title"><h2>Trainees</h2></div>
+      <p class="hint" style="margin:0 0 12px;">Trainees currently under your supervision — mark competencies as they're demonstrated.</p>
+      <div id="myTraineesList"><div class="empty">Loading…</div></div>
+    </section>
+
+    <section id="view-my-trainee-detail" class="view">
+      <div class="backbar"><button onclick="showView('view-my-trainees')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="myTraineeDetailName">Trainee</h2></div>
+      <div class="card" id="myTraineeStatusCard"></div>
+      <div class="section-title"><h2>Competency checklist</h2></div>
+      <div class="card" id="myTraineeCompetencyCard"></div>
+    </section>
 
     <!-- ===== SITES (shared: admin sees all + manage, tech sees assigned only) ===== -->
     <section id="view-sites" class="view active">
@@ -583,6 +664,64 @@
       </div>
     </section>
 
+    <!-- ===== TRAINEES (admin only) — SAQCC (Fire) registered trainees, 6-month
+         supervised field placements under a registered technician ===== -->
+    <section id="view-trainees" class="view">
+      <div class="section-title"><h2>Trainees</h2></div>
+      <p class="hint" style="margin:0 0 12px;">SAQCC (Fire) registered trainees complete 6 months of supervised field training under a registered technician before qualifying.</p>
+      <div id="traineeList"></div>
+      <button class="btn" onclick="openTraineeForm()">+ Add trainee</button>
+    </section>
+
+    <!-- ===== TRAINEE DETAIL (admin) — status, competencies, logbook, export, qualify ===== -->
+    <section id="view-trainee-detail" class="view">
+      <div class="backbar">
+        <button onclick="showView('view-trainees')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <div><h2 id="trDetailName">Trainee</h2><div class="hint" id="trDetailSub"></div></div>
+      </div>
+      <div class="card" id="trDetailStatusCard"></div>
+      <div class="row" style="margin-bottom:10px;">
+        <button class="btn secondary" onclick="openTraineeForm(currentTraineeId)">Edit</button>
+        <button class="btn secondary" onclick="openTraineeLogbookReport(currentTraineeId, 'view-trainee-detail')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>Print logbook</button>
+      </div>
+      <button class="btn secondary" id="qualifyTraineeBtn" style="margin-bottom:14px; display:none; background:var(--green-bg); color:var(--green); border:1px solid var(--green);" onclick="qualifyTrainee()">✓ Qualify — end training</button>
+
+      <div class="section-title"><h2>Competency checklist</h2></div>
+      <div class="card" id="trCompetencyCard"></div>
+
+      <div class="section-title"><h2>Logbook</h2></div>
+      <div id="trDetailLogbookList"><div class="empty">Loading…</div></div>
+    </section>
+
+    <section id="view-trainee-form" class="view">
+      <div class="backbar"><button onclick="showView('view-trainees')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="traineeFormTitle">New trainee</h2></div>
+      <div class="card">
+        <label>Full name</label><input id="trName" placeholder="e.g. Sipho Dlamini">
+        <label>Trainee registration number</label><input id="trNumber" type="text" placeholder="e.g. TR1042">
+        <label>Temporary password</label><input id="trPassword" type="text" placeholder="Set an initial password">
+        <div class="hint" id="trPasswordHint">Share this trainee number and password with them — they can log in immediately with it.</div>
+        <label>Date registered as a trainee</label><input id="trRegisteredDate" type="date">
+        <label>Phone (optional)</label><input id="trPhone" placeholder="e.g. 082 123 4567">
+
+        <div class="divider"></div>
+        <label style="margin-top:0;">Supervision</label>
+        <label>Supervising technician</label>
+        <select id="trSupervisor"><option value="">Select supervisor…</option></select>
+        <div class="row">
+          <div><label>Period start</label><input id="trStartDate" type="date" onchange="onTraineeStartDateChange()"></div>
+          <div><label>Period end <span style="text-transform:none;font-weight:500;">(6 mths)</span></label><input id="trEndDate" type="date"></div>
+        </div>
+        <div class="hint">The end date auto-fills to 6 months after the start — adjust it if needed. The supervisor can be changed at any time without resetting this period; a change is kept in the trainee's history.</div>
+
+        <div class="row" style="margin-top:16px;">
+          <button class="btn secondary" onclick="showView('view-trainees')">Cancel</button>
+          <button class="btn" onclick="saveTrainee()">Save trainee</button>
+        </div>
+        <button class="btn ghost" id="deactivateTraineeBtn" style="margin-top:10px; display:none;">Deactivate this trainee</button>
+        <div class="hint" style="margin-top:10px;">Deactivating blocks sign-in but keeps their logbook records for compliance history. Reactivate at any time.</div>
+      </div>
+    </section>
+
     <!-- ===== COMPANY PROFILE (admin only) ===== -->
     <section id="view-company" class="view">
       <div class="section-title"><h2>Company profile</h2></div>
@@ -623,7 +762,7 @@
 
       <div class="card">
         <label style="margin-top:0;">Records backup</label>
-        <p class="hint" style="margin:0 0 10px;">A complete machine-readable snapshot of every site, equipment record, service-history entry, monthly check and calibration entry. Keep it filed with your printed registers — SANS 1475 requires records for at least 3 years.</p>
+        <p class="hint" style="margin:0 0 10px;">A complete machine-readable snapshot of every site, equipment record, service-history entry, monthly check, calibration entry and trainee placement. Keep it filed with your printed registers — SANS 1475 requires records for at least 3 years.</p>
         <div class="row">
           <div><label>Automatic backup</label>
             <select id="coBackupEvery">
@@ -766,6 +905,9 @@
     <button id="navDue" onclick="showView('view-due')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></svg></span><span>Due</span></button>
     <button id="navCalibration" style="display:none;" onclick="showView('view-calibration')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14l4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg></span><span>Calib.</span></button>
     <button id="navTechnicians" style="display:none;" onclick="showView('view-technicians')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><span>Techs</span></button>
+    <button id="navTrainees" style="display:none;" onclick="showView('view-trainees')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span><span>Trainees</span></button>
+    <button id="navSignoffs" style="display:none;" onclick="showView('view-signoffs')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg></span><span>Sign-offs</span></button>
+    <button id="navMyTrainees" style="display:none;" onclick="showView('view-my-trainees')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span><span>Trainees</span></button>
     <button id="navCompany" style="display:none;" onclick="showView('view-company')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="7" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></span><span>Company</span></button>
     <button id="navExport" style="display:none;" onclick="showView('view-export')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg></span><span>Reports</span></button>
   </nav>
@@ -870,7 +1012,7 @@ auth.onAuthStateChanged(async (user)=>{
   document.getElementById('authError').style.display='none';
   setupRoleUI();
   updateSyncPill();
-  showView('view-sites');
+  showView(currentRole === 'trainee' ? 'view-my-training' : 'view-sites');
   maybeAutoBackup();
 });
 
@@ -898,9 +1040,25 @@ function doLogout(){ auth.signOut(); }
 
 function setupRoleUI(){
   const isAdmin = currentRole === 'admin';
+  const isTrainee = currentRole === 'trainee';
+  const bottomNav = document.getElementById('bottomNav');
+  if(isTrainee){
+    // A trainee has exactly one screen in the app today (My training) — no
+    // bottom nav to route between others yet.
+    document.getElementById('headerSub').textContent = 'Trainee · ' + (currentProfile.name||'');
+    if(bottomNav) bottomNav.style.display = 'none';
+    return;
+  }
+  if(bottomNav) bottomNav.style.display = 'flex';
   document.getElementById('headerSub').textContent = isAdmin ? 'Administrator' : ('Technician · ' + (currentProfile.name||''));
   document.getElementById('addSiteBtn').style.display = isAdmin ? 'block' : 'none';
   document.getElementById('navTechnicians').style.display = isAdmin ? 'flex' : 'none';
+  document.getElementById('navTrainees').style.display = isAdmin ? 'flex' : 'none';
+  // Any registered technician can be tagged as the witness on a trainee's
+  // logbook entry, not just an assigned supervisor, so every technician
+  // (not admin) gets this tab.
+  document.getElementById('navSignoffs').style.display = (currentRole === 'technician') ? 'flex' : 'none';
+  document.getElementById('navMyTrainees').style.display = (currentRole === 'technician') ? 'flex' : 'none';
   document.getElementById('sitesTitle').textContent = isAdmin ? 'All sites' : 'My sites';
   document.getElementById('navCompany').style.display = isAdmin ? 'flex' : 'none';
   document.getElementById('navExport').style.display = isAdmin ? 'flex' : 'none';
@@ -916,6 +1074,9 @@ let currentEquipmentId = null;   // equipment item currently open
 let editingAssetId = null;       // equipment item being created/edited on the form
 let editingSiteId = null;
 let editingTechId = null;
+let editingTraineeId = null;
+let currentTraineeId = null;    // trainee currently open on the admin's detail view
+let myTraineeDetailId = null;   // trainee currently open on a supervising technician's detail view
 
 const SITES_VIEWS = ['view-sites','view-site-form','view-site-detail','view-equipment-form','view-monthly','view-certificate','view-register'];
 let registerBackView = 'view-site-detail';   // where the printable register's Back returns to
@@ -928,6 +1089,9 @@ function showView(id){
   document.getElementById('navSites').classList.toggle('active', (SITES_VIEWS.includes(id) && !registerFromExport) || sitesReport);
   document.getElementById('navDue').classList.toggle('active', id==='view-due');
   document.getElementById('navTechnicians').classList.toggle('active', ['view-technicians','view-tech-form'].includes(id));
+  document.getElementById('navTrainees').classList.toggle('active', ['view-trainees','view-trainee-form','view-trainee-detail'].includes(id));
+  document.getElementById('navSignoffs').classList.toggle('active', ['view-signoffs','view-signoff-form'].includes(id));
+  document.getElementById('navMyTrainees').classList.toggle('active', ['view-my-trainees','view-my-trainee-detail'].includes(id));
   document.getElementById('navCompany').classList.toggle('active', id==='view-company');
   const calReport = id==='view-report' && reportBackView==='view-calibration';
   document.getElementById('navExport').classList.toggle('active', id==='view-export' || registerFromExport || id==='view-email' || (id==='view-report' && !calReport && !sitesReport));
@@ -938,16 +1102,23 @@ function showView(id){
   if(id==='view-company') loadCompanySettings();
   if(id==='view-export'){ refreshExport(); loadCompanySettings(); }
   if(id==='view-calibration') renderCalibrationView();
+  if(id==='view-trainees') renderTrainees();
+  if(id==='view-trainee-detail') renderTraineeDetail();
+  if(id==='view-my-training') renderMyTraining();
+  if(id==='view-signoffs') renderSignoffs();
+  if(id==='view-my-trainees') renderMyTrainees();
+  if(id==='view-my-trainee-detail') renderMyTraineeDetail();
 }
 
 /* ---------- Firestore listener bookkeeping ---------- */
-let unsubSites = null, unsubEquipment = null, unsubInspections = null, unsubTechs = null, unsubCal = null;
+let unsubSites = null, unsubEquipment = null, unsubInspections = null, unsubTechs = null, unsubCal = null, unsubTrainees = null;
 function detachAllListeners(){
   if(unsubSites){ unsubSites(); unsubSites=null; }
   if(unsubEquipment){ unsubEquipment(); unsubEquipment=null; }
   if(unsubInspections){ unsubInspections(); unsubInspections=null; }
   if(unsubTechs){ unsubTechs(); unsubTechs=null; }
   if(unsubCal){ unsubCal(); unsubCal=null; }
+  if(unsubTrainees){ unsubTrainees(); unsubTrainees=null; }
 }
 
 /* ---------- Sites ---------- */
@@ -1355,9 +1526,10 @@ async function saveBackupSettings(){
 
 async function downloadFullBackup(fromSchedule){
   toast('Gathering records…');
-  const out = { app:'Vigil Fire', schemaVersion:3, exportedAt:new Date().toISOString(),
+  const out = { app:'Vigil Fire', schemaVersion:6, exportedAt:new Date().toISOString(),
     exportedBy: currentProfile.name || currentUser.uid,
-    company:{}, sites:[], technicians:[], equipment:[], serviceEvents:[], monthlyChecks:[], calibrations:[], emailLog:[] };
+    company:{}, sites:[], technicians:[], equipment:[], serviceEvents:[], monthlyChecks:[], calibrations:[], emailLog:[],
+    traineeAssignments:[], logbookEntries:[], traineeCompetencies:[] };
   try{
     const co = await db.collection('settings').doc('company').get();
     out.company = co.exists ? co.data() : {};
@@ -1371,6 +1543,18 @@ async function downloadFullBackup(fromSchedule){
     try{
       const calSnap = await db.collection('calibrations').get();
       out.calibrations = calSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    }catch(_){}
+    try{
+      const trSnap = await db.collection('traineeAssignments').get();
+      out.traineeAssignments = trSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    }catch(_){}
+    try{
+      const lbSnap = await db.collection('logbookEntries').get();
+      out.logbookEntries = lbSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    }catch(_){}
+    try{
+      const tcSnap = await db.collection('traineeCompetencies').get();
+      out.traineeCompetencies = tcSnap.docs.map(d=>({id:d.id, ...d.data()}));
     }catch(_){}
     for(const sid of siteIds){
       const eq = await db.collection('equipment').where('siteId','==', sid).get();
@@ -2167,6 +2351,15 @@ function addMonths(m, n){
   const tot = y*12 + (mm-1) + n;
   return String(Math.floor(tot/12)).padStart(4,'0') + '-' + String(tot%12 + 1).padStart(2,'0');
 }
+// Full-date (YYYY-MM-DD) equivalent — used for the trainee 6-month placement
+// period, where day-level dates matter rather than just month/year.
+function addMonthsToDate(dateStr, months){
+  if(!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  if(isNaN(d)) return '';
+  d.setMonth(d.getMonth() + months);
+  return toLocalISO(d);
+}
 function onServiceDateChange(){
   const d = document.getElementById('eqServiceDate').value;
   if(!d) return;
@@ -2679,6 +2872,719 @@ async function reactivateTechnician(id){
     await db.collection('technicians').doc(id).update({ active:true });
     toast('Technician reactivated — reassign them to sites as needed');
     showView('view-technicians');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+
+/* ========================================================================
+   Trainees (admin only) — SAQCC (Fire) registered trainees. A trainee is a
+   `technicians` doc like any other (role:"trainee"), which is what lets them
+   log in through the existing technician-number flow with no changes there.
+   Their 6-month supervised placement lives in its own `traineeAssignments`
+   doc, keyed by the trainee's own uid — one active assignment per trainee,
+   which keeps the security rules a single lookup and means reassigning a
+   supervisor is just an update, not a new document. The supervisor's name
+   and SAQCC number are denormalised onto the assignment because a trainee
+   can only read their own `technicians` doc, not their supervisor's.
+   ======================================================================== */
+let traineesCache = [];
+let traineeAssignmentsCache = {};   // { [traineeId]: assignment data }
+
+function renderTrainees(){
+  if(unsubTrainees) unsubTrainees();
+  unsubTrainees = db.collection('technicians').where('role','==','trainee').onSnapshot(async snap=>{
+    traineesCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    await loadTraineeAssignments();
+    paintTrainees();
+  }, err=>{ toast('Could not load trainees: ' + err.message); });
+}
+
+async function loadTraineeAssignments(){
+  traineeAssignmentsCache = {};
+  try{
+    const snap = await db.collection('traineeAssignments').get();
+    snap.forEach(d=>{ traineeAssignmentsCache[d.id] = d.data(); });
+  }catch(e){ /* best-effort — the list still renders without status pills */ }
+}
+
+// {label, cls} for the pass/fail/due-style pill, from an assignment doc.
+function traineeStatusInfo(a){
+  if(!a) return { label:'No supervisor assigned', cls:'fail' };
+  if(a.status === 'completed') return { label:'Qualified', cls:'pass' };
+  if(!a.endDateExpected) return { label:'Active', cls:'due' };
+  const daysLeft = Math.round((new Date(a.endDateExpected+'T00:00:00') - new Date(toLocalISO(new Date())+'T00:00:00')) / 86400000);
+  if(daysLeft < 0) return { label:`${Math.abs(daysLeft)} day${Math.abs(daysLeft)===1?'':'s'} overdue`, cls:'fail' };
+  return { label:`${daysLeft} day${daysLeft===1?'':'s'} left`, cls:'due' };
+}
+
+function paintTrainees(){
+  const wrap = document.getElementById('traineeList');
+  if(traineesCache.length===0){
+    wrap.innerHTML = `<div class="empty"><div class="big">${ICON.user}</div>No trainees yet.</div>`;
+    return;
+  }
+  const ordered = traineesCache.slice().sort((a,b)=>(a.active===false)-(b.active===false));
+  wrap.innerHTML = ordered.map(t=>{
+    const inactive = t.active === false;
+    const a = traineeAssignmentsCache[t.id];
+    const st = traineeStatusInfo(a);
+    const right = inactive
+      ? `<span class="pill" style="margin:0;">Deactivated</span>`
+      : `<span class="pill ${st.cls}" style="margin:0;">${escapeHtml(st.label)}</span>`;
+    const editBtn = `<span class="edit-ic" onclick="event.stopPropagation(); openTraineeForm('${t.id}')" aria-label="Edit trainee">${ICON.pencil}</span>`;
+    return `<div class="card site-card" onclick="openTraineeDetail('${t.id}')" style="${inactive?'opacity:0.55;':''}">
+      <div>
+        <div class="name">${escapeHtml(t.name)}</div>
+        <div class="meta">Trainee no. ${escapeHtml(t.techNumber||'')}${(!inactive && a && a.supervisorName) ? (' · Supervisor: '+escapeHtml(a.supervisorName)) : ''}</div>
+      </div>
+      <div style="display:flex; align-items:center;">${right}${editBtn}</div>
+    </div>`;
+  }).join('');
+}
+
+function openTraineeDetail(id){
+  currentTraineeId = id;
+  showView('view-trainee-detail');
+}
+
+async function renderTraineeDetail(){
+  const id = currentTraineeId;
+  if(!id) return;
+  const t = traineesCache.find(x=>x.id===id);
+  if(!t){ toast('Trainee not found'); showView('view-trainees'); return; }
+  document.getElementById('trDetailName').textContent = t.name;
+  document.getElementById('trDetailSub').textContent = 'Trainee no. ' + (t.techNumber||'');
+
+  const statusCard = document.getElementById('trDetailStatusCard');
+  statusCard.innerHTML = `<div class="empty">Loading…</div>`;
+  let a = null;
+  try{
+    const doc = await db.collection('traineeAssignments').doc(id).get();
+    a = doc.exists ? doc.data() : null;
+  }catch(e){}
+  const st = traineeStatusInfo(a);
+  statusCard.innerHTML = `
+    <div class="kv"><div class="k">Registered</div><div class="v">${escapeHtml(t.traineeRegisteredDate||'—')}</div></div>
+    <div class="kv"><div class="k">Supervisor</div><div class="v">${a ? escapeHtml(a.supervisorName||'—')+(a.supervisorSaqcc?(' · '+escapeHtml(a.supervisorSaqcc)):'') : '—'}</div></div>
+    <div class="kv"><div class="k">Period</div><div class="v">${a ? escapeHtml(a.startDate||'—')+' – '+escapeHtml(a.endDateExpected||'—') : '—'}</div></div>
+    <div class="kv"><div class="k">Status</div><div class="v"><span class="pill ${st.cls}">${escapeHtml(st.label)}</span></div></div>`;
+
+  document.getElementById('qualifyTraineeBtn').style.display =
+    (t.active !== false && a && a.status !== 'completed') ? 'block' : 'none';
+
+  await renderCompetencyPanel(id, { markable:true, containerId:'trCompetencyCard' });
+  await renderTraineeLogbookList(id, 'trDetailLogbookList');
+}
+
+async function openTraineeForm(id){
+  editingTraineeId = id || null;
+  await loadTechsCache();   // populates the supervisor dropdown
+  document.getElementById('traineeFormTitle').textContent = id ? 'Edit trainee' : 'New trainee';
+  const actionBtn = document.getElementById('deactivateTraineeBtn');
+  const numberField = document.getElementById('trNumber');
+  const passField = document.getElementById('trPassword');
+  const supSel = document.getElementById('trSupervisor');
+  supSel.innerHTML = '<option value="">Select supervisor…</option>' +
+    techsCache.filter(t=>t.active!==false)
+      .map(t=>`<option value="${t.id}">${escapeHtml(t.name)}${t.saqcc?(' · '+escapeHtml(t.saqcc)):''}</option>`).join('');
+  if(id){
+    const t = traineesCache.find(x=>x.id===id);
+    if(!t){ toast('Trainee not found'); return; }
+    actionBtn.style.display = 'block';
+    if(t.active === false){
+      actionBtn.textContent = 'Reactivate this trainee';
+      actionBtn.onclick = ()=>reactivateTrainee(id);
+    } else {
+      actionBtn.textContent = 'Deactivate this trainee';
+      actionBtn.onclick = ()=>deactivateTrainee(id);
+    }
+    document.getElementById('trName').value = t.name||'';
+    numberField.value = t.techNumber||'';
+    numberField.disabled = true;
+    passField.value = '';
+    document.getElementById('trPasswordHint').textContent = "Passwords can't be changed from here — use Firebase Console → Authentication → Users → Reset password. This field is ignored when editing.";
+    document.getElementById('trRegisteredDate').value = t.traineeRegisteredDate || '';
+    document.getElementById('trPhone').value = t.phone||'';
+    const a = traineeAssignmentsCache[id] || {};
+    supSel.value = a.supervisorId || '';
+    document.getElementById('trStartDate').value = a.startDate || '';
+    document.getElementById('trEndDate').value = a.endDateExpected || '';
+  } else {
+    actionBtn.style.display = 'none';
+    ['trName','trNumber','trPassword','trPhone'].forEach(fid=>document.getElementById(fid).value='');
+    const today = toLocalISO(new Date());
+    document.getElementById('trRegisteredDate').value = today;
+    document.getElementById('trStartDate').value = today;
+    document.getElementById('trEndDate').value = addMonthsToDate(today, 6);
+    supSel.value = '';
+    numberField.disabled = false;
+    document.getElementById('trPasswordHint').textContent = 'Share this trainee number and password with them — they can log in immediately with it.';
+  }
+  showView('view-trainee-form');
+}
+
+function onTraineeStartDateChange(){
+  const s = document.getElementById('trStartDate').value;
+  if(s) document.getElementById('trEndDate').value = addMonthsToDate(s, 6);
+}
+
+async function saveTrainee(){
+  const name = document.getElementById('trName').value.trim();
+  const techNumber = document.getElementById('trNumber').value.trim();
+  const password = document.getElementById('trPassword').value;
+  const registeredDate = document.getElementById('trRegisteredDate').value || null;
+  const phone = document.getElementById('trPhone').value.trim();
+  const supervisorId = document.getElementById('trSupervisor').value;
+  const startDate = document.getElementById('trStartDate').value || null;
+  const endDateExpected = document.getElementById('trEndDate').value || null;
+  if(!name || !techNumber){ toast('Name and trainee number are required'); return; }
+  if(!supervisorId){ toast('Choose a supervising technician'); return; }
+  const supervisor = techsCache.find(t=>t.id===supervisorId);
+
+  const assignmentPayload = {
+    // Denormalised so the supervisor — who can only read this one assignment
+    // doc, not the trainee's own technicians/{uid} record — can still show a
+    // name on their "My trainees" list.
+    traineeName: name,
+    traineeNumber: techNumber,
+    supervisorId,
+    supervisorName: supervisor ? supervisor.name : '',
+    supervisorSaqcc: supervisor ? (supervisor.saqcc||'') : '',
+    startDate, endDateExpected,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedBy: currentUser.uid
+  };
+
+  if(editingTraineeId){
+    try{
+      await db.collection('technicians').doc(editingTraineeId).update({ name, phone, traineeRegisteredDate: registeredDate });
+      const existing = traineeAssignmentsCache[editingTraineeId] || {};
+      const payload = Object.assign({ status: existing.status || 'active' }, assignmentPayload);
+      // Keep a record of who supervised this trainee and when, so a
+      // mid-placement change isn't silently lost.
+      if(existing.supervisorId && existing.supervisorId !== supervisorId){
+        payload.supervisorHistory = firebase.firestore.FieldValue.arrayUnion({
+          supervisorId: existing.supervisorId,
+          supervisorName: existing.supervisorName || '',
+          to: toLocalISO(new Date())
+        });
+      }
+      await db.collection('traineeAssignments').doc(editingTraineeId).set(payload, {merge:true});
+      toast('Trainee updated');
+      showView('view-trainees');
+    }catch(e){ toast('Error: ' + e.message); }
+    return;
+  }
+
+  if(!password || password.length < 6){ toast('Set a password of at least 6 characters'); return; }
+  const email = `tech${techNumber}@${TECH_EMAIL_DOMAIN}`;
+  try{
+    const lookupExisting = await db.collection('technicianLookup').doc(techNumber).get();
+    if(lookupExisting.exists){ toast('That trainee/technician number is already in use'); return; }
+    const secondaryApp = firebase.initializeApp(firebaseConfig, 'Secondary_' + Date.now());
+    const cred = await secondaryApp.auth().createUserWithEmailAndPassword(email, password);
+    const newUid = cred.user.uid;
+    await secondaryApp.auth().signOut();
+    await secondaryApp.delete();
+    await db.collection('technicians').doc(newUid).set({
+      name, techNumber, email, role:'trainee', phone, active:true, traineeRegisteredDate: registeredDate,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    await db.collection('technicianLookup').doc(techNumber).set({ email });
+    await db.collection('traineeAssignments').doc(newUid).set(Object.assign({ status:'active',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: currentUser.uid }, assignmentPayload));
+    toast('Trainee created');
+    showView('view-trainees');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+
+async function deactivateTrainee(id){
+  if(!id) return;
+  const t = traineesCache.find(x=>x.id===id);
+  if(!confirm(`Deactivate ${t?t.name:'this trainee'}? They will no longer be able to sign in. Their logbook records are kept, and you can reactivate them later.`)) return;
+  try{
+    await db.collection('technicians').doc(id).update({ active:false });
+    toast('Trainee deactivated');
+    showView('view-trainees');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+
+async function reactivateTrainee(id){
+  if(!id) return;
+  try{
+    await db.collection('technicians').doc(id).update({ active:true });
+    toast('Trainee reactivated');
+    showView('view-trainees');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+
+async function renderTraineeLogbookList(traineeId, containerId){
+  const wrap = document.getElementById(containerId);
+  if(!wrap) return;
+  wrap.innerHTML = `<div class="empty">Loading…</div>`;
+  try{
+    const snap = await db.collection('logbookEntries').where('traineeId','==', traineeId).get();
+    const entries = snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    if(entries.length===0){ wrap.innerHTML = `<div class="empty">No entries yet.</div>`; return; }
+    wrap.innerHTML = entries.map(e=>{
+      const signed = e.status === 'signed';
+      return `<div class="insp-row status-${signed?'pass':'due'}">
+        <div class="top">
+          <span class="date">${escapeHtml(e.date||'')}</span>
+          <span class="pill ${signed?'pass':'due'}">${signed?'Signed':'Awaiting sign-off'}</span>
+        </div>
+        <div class="sub">${escapeHtml(trainingTypeLabel(e.trainingType))}${e.siteClient?(' · '+escapeHtml(e.siteClient)):''}${e.technicianName?(' · Witness: '+escapeHtml(e.technicianName)):''}</div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    wrap.innerHTML = `<div class="empty">Could not load logbook: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// Flips the role to technician, drops the "TR" prefix from the login number
+// (same account, same history — per how qualifying was scoped), and closes
+// the assignment. A trainee who leaves without qualifying is instead just
+// Deactivated (see deactivateTrainee) — their record stays a trainee record.
+async function qualifyTrainee(){
+  const id = currentTraineeId;
+  if(!id) return;
+  const t = traineesCache.find(x=>x.id===id);
+  if(!t){ toast('Trainee not found'); return; }
+  const suggested = (t.techNumber||'').replace(/^TR/i,'');
+  const newNumber = prompt(`Qualifying ${t.name}. Enter their new, permanent technician number (the trainee number without "TR"):`, suggested);
+  if(newNumber === null) return;   // cancelled
+  const trimmed = newNumber.trim();
+  if(!trimmed){ toast('Enter a technician number'); return; }
+  if(!confirm(`Qualify ${t.name} as a registered technician, logging in from now on as "${trimmed}" instead of "${t.techNumber}"? Let them know their new number.`)) return;
+  try{
+    if(trimmed !== t.techNumber){
+      const lookupExisting = await db.collection('technicianLookup').doc(trimmed).get();
+      if(lookupExisting.exists){ toast('That technician number is already in use'); return; }
+    }
+    const batch = db.batch();
+    batch.update(db.collection('technicians').doc(id), { role:'technician', techNumber: trimmed });
+    batch.set(db.collection('technicianLookup').doc(trimmed), { email: t.email });
+    if(t.techNumber && t.techNumber !== trimmed){
+      batch.delete(db.collection('technicianLookup').doc(t.techNumber));
+    }
+    batch.set(db.collection('traineeAssignments').doc(id), {
+      status:'completed',
+      completedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      completedBy: currentUser.uid
+    }, {merge:true});
+    await batch.commit();
+    toast(`${t.name} qualified — now listed under Technicians. Add their SAQCC registration number there.`);
+    showView('view-trainees');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+
+/* ========================================================================
+   Competency checklist — "Aspects to practice on-the-job" from the SAQCC
+   (Fire) trainee logbook. One flat list, source of truth here (same pattern
+   as CHECKLISTS / PT_CHECKLIST), grouped by category only for display.
+   [key, competency statement, category]
+   ======================================================================== */
+const TRAINEE_COMPETENCIES = [
+  ['ext_safety','Understands general safety precautions when servicing fire extinguishers','Extinguisher servicing'],
+  ['ext_docs','Understands documentary requirements to record an extinguisher service','Extinguisher servicing'],
+  ['ext_inspect','Able to inspect an extinguisher to assess the work required','Extinguisher servicing'],
+  ['ext_depressurise','De-pressurise an extinguisher safely','Extinguisher servicing'],
+  ['ext_components_stp','Able to identify all components of a stored pressure extinguisher','Extinguisher servicing'],
+  ['ext_disassemble','Disassemble an extinguisher of its components','Extinguisher servicing'],
+  ['ext_cylinder_inspect','Carry out external and internal inspection of the cylinder body','Extinguisher servicing'],
+  ['ext_condemn','Understands the criteria to condemn an extinguisher','Extinguisher servicing'],
+  ['ext_reassemble','Reassemble a fire extinguisher','Extinguisher servicing'],
+  ['ext_recharge_stp','Recharge all types of STP fire extinguishers','Extinguisher servicing'],
+  ['ext_repressurise','Re-pressurise a fire extinguisher safely','Extinguisher servicing'],
+  ['ext_final_inspect','Carry out a final inspection of all types of fire extinguishers (including +/-5% tolerance)','Extinguisher servicing'],
+  ['ext_sift_powder','Sift dry powder and identify the condition of the powder','Extinguisher servicing'],
+  ['ext_foam_mix','Understands the foam/water mixing proportions for refilling a foam unit','Extinguisher servicing'],
+  ['co2_markings','Understands markings stamped on the CO₂ extinguisher shoulder','CO₂ & cartridge'],
+  ['co2_hp_test','Understands a CO₂ cylinder high pressure test requirements','CO₂ & cartridge'],
+  ['co2_filling','Understands CO₂ gas filling procedures and weight tolerances','CO₂ & cartridge'],
+  ['co2_trolley',"Can identify a trolley unit's external, actuating cylinder is CO₂ or N₂",'CO₂ & cartridge'],
+  ['cart_components','Can identify all components of a cartridge operated fire extinguisher','CO₂ & cartridge'],
+  ['cart_weights','Can calculate the cartridge weights and tolerances','CO₂ & cartridge'],
+  ['cart_condemn','Understands the criteria to condemn a cartridge or its extinguisher','CO₂ & cartridge'],
+  ['hr_docs','Understands documentary requirements to record a hose reel service','Hose reel'],
+  ['hr_jet_distance','Understands the minimum water jet distance in terms of SANS 1475','Hose reel'],
+  ['hr_pressure','Understands the minimum pressure in terms of SANS 10105','Hose reel'],
+  ['hr_components','Can identify all components of a hose reel','Hose reel'],
+  ['hr_inspect','Able to inspect a hose reel to assess the work required','Hose reel'],
+  ['hr_faults','Take correct action on faults as they are detected','Hose reel'],
+  ['hr_condemn','Understands the criteria to condemn a hose reel','Hose reel'],
+  ['hy_docs','Understands documentary requirements to record a hydrant service','Hydrant'],
+  ['hy_pressure','Understands water pressure requirements for hydrants','Hydrant'],
+  ['hy_components','Can identify all components of a hydrant installation','Hydrant'],
+  ['hy_inspect','Able to inspect a hydrant to assess work required','Hydrant'],
+  ['hy_faults','Take correct action on faults as they are detected','Hydrant']
+];
+
+// Shared by the admin's trainee detail, the supervising technician's own
+// view, and the trainee's read-only view — `markable` controls whether the
+// checkboxes are live. Firestore rules are the real gate on who may write.
+async function renderCompetencyPanel(traineeId, opts){
+  opts = opts || {};
+  const wrap = document.getElementById(opts.containerId);
+  if(!wrap) return;
+  wrap.innerHTML = `<div class="empty">Loading…</div>`;
+  let items = {};
+  try{
+    const doc = await db.collection('traineeCompetencies').doc(traineeId).get();
+    items = doc.exists ? (doc.data().items || {}) : {};
+  }catch(e){
+    wrap.innerHTML = `<div class="empty">Could not load competencies: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  const achievedCount = TRAINEE_COMPETENCIES.filter(([k])=>items[k] && items[k].achieved).length;
+  const groups = [];
+  TRAINEE_COMPETENCIES.forEach(([k,label,cat])=>{
+    let g = groups.find(x=>x.cat===cat);
+    if(!g){ g = {cat, list:[]}; groups.push(g); }
+    g.list.push([k,label]);
+  });
+  const body = groups.map(g => `
+    <h4 style="margin:14px 0 2px;">${escapeHtml(g.cat)}</h4>
+    ${g.list.map(([k,label])=>{
+      const it = items[k] || {};
+      const on = !!it.achieved;
+      const dis = opts.markable ? '' : 'disabled';
+      const onchange = opts.markable ? `toggleCompetency('${traineeId}','${k}', this.checked, '${opts.containerId}')` : '';
+      return `<label class="chk${on?' on':''}"><input type="checkbox" ${on?'checked':''} ${dis} onchange="${onchange}"><span>${escapeHtml(label)}</span></label>`;
+    }).join('')}`).join('');
+  wrap.innerHTML = `<div class="hint" style="margin:0 0 6px;">${achievedCount} / ${TRAINEE_COMPETENCIES.length} competencies achieved</div>${body}`;
+}
+
+async function toggleCompetency(traineeId, key, checked, containerId){
+  try{
+    const value = { achieved: checked, date: toLocalISO(new Date()), markedBy: currentUser.uid, markedByName: currentProfile.name||'' };
+    await db.collection('traineeCompetencies').doc(traineeId).set({ ['items.'+key]: value }, {merge:true});
+  }catch(e){ toast('Error: ' + e.message); }
+  renderCompetencyPanel(traineeId, { markable:true, containerId });
+}
+
+/* ---------- Printable trainee logbook — the full daily log plus the
+   competency checklist, for the trainee's SAQCC Portfolio of Evidence. ---------- */
+async function openTraineeLogbookReport(traineeId, backView){
+  const t = traineesCache.find(x=>x.id===traineeId);
+  if(!t){ toast('Trainee not found'); return; }
+  toast('Building logbook…');
+  await loadCompanySettings();
+  let a = null;
+  try{
+    const doc = await db.collection('traineeAssignments').doc(traineeId).get();
+    a = doc.exists ? doc.data() : null;
+  }catch(e){}
+  let entries = [];
+  try{
+    const snap = await db.collection('logbookEntries').where('traineeId','==', traineeId).get();
+    entries = snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  }catch(e){ toast('Could not load logbook entries: ' + e.message); return; }
+  let competencyItems = {};
+  try{
+    const cdoc = await db.collection('traineeCompetencies').doc(traineeId).get();
+    competencyItems = cdoc.exists ? (cdoc.data().items || {}) : {};
+  }catch(e){}
+
+  const co = companySettings || {};
+  const today = toLocalISO(new Date());
+
+  const rows = entries.map(e=>`<tr>
+    <td>${escapeHtml(e.date||'')}</td>
+    <td>${escapeHtml(trainingTypeLabel(e.trainingType))}</td>
+    <td>${escapeHtml(e.siteClient||'')}</td>
+    <td>${escapeHtml(e.workPerformed||'')}</td>
+    <td>${escapeHtml(e.technicianComments||'')}</td>
+    <td>${escapeHtml(e.technicianName||'')}</td>
+    <td>${escapeHtml(e.technicianSaqcc||'')}</td>
+    <td style="text-align:center;">${e.status==='signed' ? '✓' : '—'}</td>
+  </tr>`).join('') || `<tr><td colspan="8">No entries recorded yet.</td></tr>`;
+
+  const compRows = TRAINEE_COMPETENCIES.map(([k,label,cat])=>{
+    const it = competencyItems[k] || {};
+    return `<tr><td>${escapeHtml(cat)}</td><td>${escapeHtml(label)}</td><td style="text-align:center;">${it.achieved?'✓':''}</td><td>${escapeHtml(it.date||'')}</td></tr>`;
+  }).join('');
+
+  showReport('Trainee logbook', `${letterheadHTML(co)}
+    <h2 style="margin-top:16px; font-size:1rem;">SAQCC (Fire) Registered Trainee Daily Logbook</h2>
+    <div class="meta">
+      <strong>Trainee:</strong> ${escapeHtml(t.name)}<br>
+      <strong>Trainee registration no.:</strong> ${escapeHtml(t.techNumber||'')}<br>
+      <strong>Date registered as a trainee:</strong> ${escapeHtml(t.traineeRegisteredDate||'—')}<br>
+      <strong>Company:</strong> ${escapeHtml(co.name||'—')}<br>
+      <strong>Period of training:</strong> ${a ? escapeHtml(a.startDate||'—') : '—'} to ${a ? escapeHtml(a.endDateExpected||'—') : '—'}<br>
+      <strong>Generated:</strong> ${today}
+    </div>
+    <h3>Daily log</h3>
+    <div class="hint" style="margin:0 0 8px;">Print in landscape — this table is wide.</div>
+    <div class="tablewrap"><table class="mlog">
+      <thead><tr><th>Date</th><th>Type</th><th>Site/client</th><th>Work performed</th><th>Technician comments</th><th>Technician</th><th>SAQCC no.</th><th>Signed</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <h3 style="margin-top:20px;">Competency checklist — aspects to practice on-the-job</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Category</th><th>Competency</th><th style="text-align:center;">Achieved</th><th>Date</th></tr></thead>
+      <tbody>${compRows}</tbody>
+    </table></div>
+    <div class="hint" style="margin-top:14px;">Generated by Vigil Fire on ${today}. This logbook is the property of the trainee and forms part of their Portfolio of Evidence for the SAQCC EISA.</div>`,
+    backView || 'view-trainees');
+}
+
+/* ---------- My trainees (any technician currently supervising someone) ---------- */
+async function renderMyTrainees(){
+  const wrap = document.getElementById('myTraineesList');
+  wrap.innerHTML = `<div class="empty">Loading…</div>`;
+  try{
+    const snap = await db.collection('traineeAssignments').where('supervisorId','==', currentUser.uid).get();
+    const assignments = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(a=>a.status!=='completed');
+    if(assignments.length===0){
+      wrap.innerHTML = `<div class="empty">You're not currently supervising any trainees.</div>`;
+      return;
+    }
+    wrap.innerHTML = assignments.map(a=>{
+      const st = traineeStatusInfo(a);
+      return `<div class="card tech-card" onclick="openMyTraineeDetail('${a.id}')" style="cursor:pointer;">
+        <div><div class="name">${escapeHtml(a.traineeName||'Trainee')}</div><div class="meta">Trainee no. ${escapeHtml(a.traineeNumber||'')}</div></div>
+        <span class="pill ${st.cls}" style="margin:0;">${escapeHtml(st.label)}</span>
+      </div>`;
+    }).join('');
+  }catch(e){
+    wrap.innerHTML = `<div class="empty">Could not load: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function openMyTraineeDetail(traineeId){
+  myTraineeDetailId = traineeId;
+  showView('view-my-trainee-detail');
+}
+
+async function renderMyTraineeDetail(){
+  const id = myTraineeDetailId;
+  if(!id) return;
+  let a = null;
+  try{
+    const doc = await db.collection('traineeAssignments').doc(id).get();
+    a = doc.exists ? doc.data() : null;
+  }catch(e){}
+  document.getElementById('myTraineeDetailName').textContent = a ? (a.traineeName || 'Trainee') : 'Trainee';
+  const st = traineeStatusInfo(a);
+  document.getElementById('myTraineeStatusCard').innerHTML = a ? `
+    <div class="kv"><div class="k">Trainee no.</div><div class="v">${escapeHtml(a.traineeNumber||'—')}</div></div>
+    <div class="kv"><div class="k">Period</div><div class="v">${escapeHtml(a.startDate||'—')} – ${escapeHtml(a.endDateExpected||'—')}</div></div>
+    <div class="kv"><div class="k">Status</div><div class="v"><span class="pill ${st.cls}">${escapeHtml(st.label)}</span></div></div>`
+    : `<div class="empty">Assignment not found.</div>`;
+  await renderCompetencyPanel(id, { markable:true, containerId:'myTraineeCompetencyCard' });
+}
+
+/* ---------- My training (trainee's own read-only status screen) ---------- */
+async function renderMyTraining(){
+  const card = document.getElementById('myTrainingCard');
+  card.innerHTML = `<div class="empty">Loading…</div>`;
+  try{
+    await loadCompanySettings();
+    const doc = await db.collection('traineeAssignments').doc(currentUser.uid).get();
+    if(!doc.exists){
+      card.innerHTML = `<div class="empty">No supervisor assigned yet. Contact your administrator.</div>`;
+    } else {
+      const a = doc.data();
+      const st = traineeStatusInfo(a);
+      card.innerHTML = `
+        <div class="kv"><div class="k">Company</div><div class="v">${escapeHtml(companySettings.name||'—')}</div></div>
+        <div class="kv"><div class="k">Supervisor</div><div class="v">${escapeHtml(a.supervisorName||'—')}${a.supervisorSaqcc?(' · '+escapeHtml(a.supervisorSaqcc)):''}</div></div>
+        <div class="kv"><div class="k">Period start</div><div class="v">${escapeHtml(a.startDate||'—')}</div></div>
+        <div class="kv"><div class="k">Period end</div><div class="v">${escapeHtml(a.endDateExpected||'—')}</div></div>
+        <div class="kv"><div class="k">Status</div><div class="v"><span class="pill ${st.cls}">${escapeHtml(st.label)}</span></div></div>`;
+    }
+  }catch(e){
+    card.innerHTML = `<div class="empty">Could not load your training status: ${escapeHtml(e.message)}</div>`;
+  }
+  renderCompetencyPanel(currentUser.uid, { markable:false, containerId:'myCompetencyCard' });
+  renderMyLogbookList();
+}
+
+/* ========================================================================
+   Trainee logbook — mirrors the SAQCC (Fire) paper daily logbook. A trainee
+   records an entry as a draft; only the registered technician they name as
+   witness can add comments and sign it, which locks it (matches the paper
+   form's fraud warning: only whoever was actually present may sign).
+   `logbookEntries` is a flat, top-level collection (not nested under the
+   trainee) so a technician's "awaiting my sign-off" query — filtering by
+   technicianId across every trainee — needs no cross-collection lookup.
+   ======================================================================== */
+function trainingTypeLabel(t){ return t==='workshop' ? 'Workshop training' : 'On-the-job training'; }
+
+let myLogbookEntries = [];
+async function renderMyLogbookList(){
+  const wrap = document.getElementById('myLogbookList');
+  if(!wrap) return;
+  try{
+    const snap = await db.collection('logbookEntries').where('traineeId','==', currentUser.uid).get();
+    myLogbookEntries = snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    if(myLogbookEntries.length===0){ wrap.innerHTML = `<div class="empty">No entries yet — log your first day above.</div>`; return; }
+    wrap.innerHTML = myLogbookEntries.map(e=>{
+      const signed = e.status === 'signed';
+      return `<div class="insp-row status-${signed?'pass':'due'}" onclick="openLogbookEntryForm('${e.id}')">
+        <div class="top">
+          <span class="date">${escapeHtml(e.date||'')}</span>
+          <span class="pill ${signed?'pass':'due'}">${signed?'Signed':'Awaiting sign-off'}</span>
+        </div>
+        <div class="sub">${escapeHtml(trainingTypeLabel(e.trainingType))}${e.siteClient?(' · '+escapeHtml(e.siteClient)):''}${e.technicianName?(' · Witness: '+escapeHtml(e.technicianName)):''}</div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    wrap.innerHTML = `<div class="empty">Could not load your logbook: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+let editingLogbookEntryId = null;
+let lbTrainingType = 'on-the-job';
+function setLbTrainingType(t){
+  lbTrainingType = t;
+  document.querySelectorAll('#lbTypeToggle button').forEach(b=>b.classList.toggle('active', b.dataset.type===t));
+}
+
+async function openLogbookEntryForm(id){
+  editingLogbookEntryId = id || null;
+  const e = id ? myLogbookEntries.find(x=>x.id===id) : null;
+  if(id && !e){ toast('Entry not found'); return; }
+  const readOnly = !!(e && e.status === 'signed');
+
+  document.getElementById('logbookEntryFormTitle').textContent = id ? (readOnly ? 'Logbook entry' : 'Edit entry') : 'New logbook entry';
+
+  await loadTechsCache();   // technician list for the witness dropdown
+  const witnessSel = document.getElementById('lbWitness');
+  witnessSel.innerHTML = '<option value="">Select technician…</option>' +
+    techsCache.filter(t=>t.active!==false)
+      .map(t=>`<option value="${t.id}">${escapeHtml(t.name)}${t.saqcc?(' · '+escapeHtml(t.saqcc)):''}</option>`).join('');
+
+  document.getElementById('lbDate').value = e ? (e.date||'') : toLocalISO(new Date());
+  setLbTrainingType(e ? (e.trainingType||'on-the-job') : 'on-the-job');
+  document.getElementById('lbSiteClient').value = e ? (e.siteClient||'') : '';
+  document.getElementById('lbWorkPerformed').value = e ? (e.workPerformed||'') : '';
+  witnessSel.value = e ? (e.technicianId||'') : '';
+
+  ['lbDate','lbSiteClient','lbWorkPerformed','lbWitness'].forEach(fid=>{ document.getElementById(fid).disabled = readOnly; });
+  document.querySelectorAll('#lbTypeToggle button').forEach(b=>{ b.disabled = readOnly; });
+  document.getElementById('lbSaveBtn').style.display = readOnly ? 'none' : '';
+  document.getElementById('lbDeleteBtn').style.display = (id && !readOnly) ? 'block' : 'none';
+
+  const signedBlock = document.getElementById('lbSignedBlock');
+  if(readOnly){
+    signedBlock.style.display = 'block';
+    signedBlock.innerHTML = `
+      <div class="divider"></div>
+      <label style="margin-top:0;">Registered technician sign-off</label>
+      <div class="kv"><div class="k">Comments</div><div class="v">${escapeHtml(e.technicianComments||'—')}</div></div>
+      <div class="kv"><div class="k">Signed by</div><div class="v">${escapeHtml(e.technicianName||'')}${e.technicianSaqcc?(' · '+escapeHtml(e.technicianSaqcc)):''}</div></div>
+      <div class="kv"><div class="k">Signed</div><div class="v">${(e.signedAt && e.signedAt.toDate) ? toLocalISO(e.signedAt.toDate()) : '—'}</div></div>`;
+  } else {
+    signedBlock.style.display = 'none';
+    signedBlock.innerHTML = '';
+  }
+
+  showView('view-logbook-entry-form');
+}
+
+async function saveLogbookEntry(){
+  const date = document.getElementById('lbDate').value;
+  const siteClient = document.getElementById('lbSiteClient').value.trim();
+  const workPerformed = document.getElementById('lbWorkPerformed').value.trim();
+  const technicianId = document.getElementById('lbWitness').value;
+  if(!date){ toast('Pick a date'); return; }
+  if(!workPerformed){ toast('Describe the work performed'); return; }
+  if(!technicianId){ toast('Choose the technician who witnessed this'); return; }
+  const witness = techsCache.find(t=>t.id===technicianId);
+  const payload = {
+    traineeId: currentUser.uid,
+    traineeName: currentProfile.name || '',
+    traineeNumber: currentProfile.techNumber || '',
+    date, trainingType: lbTrainingType, siteClient, workPerformed,
+    technicianId,
+    technicianName: witness ? witness.name : '',
+    technicianSaqcc: witness ? (witness.saqcc||'') : '',
+    status: 'draft',
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  try{
+    if(editingLogbookEntryId){
+      await db.collection('logbookEntries').doc(editingLogbookEntryId).update(payload);
+      toast('Entry updated');
+    } else {
+      payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      payload.createdBy = currentUser.uid;
+      await db.collection('logbookEntries').add(payload);
+      toast('Entry saved');
+    }
+    showView('view-my-training');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+
+async function deleteLogbookEntry(){
+  if(!editingLogbookEntryId) return;
+  if(!confirm('Delete this draft entry? This cannot be undone.')) return;
+  try{
+    await db.collection('logbookEntries').doc(editingLogbookEntryId).delete();
+    toast('Entry deleted');
+    showView('view-my-training');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+
+/* ---------- Sign-offs (any registered technician can be tagged as a
+   trainee's witness — not just an assigned supervisor) ---------- */
+let mySignoffs = [];
+async function renderSignoffs(){
+  const wrap = document.getElementById('signoffList');
+  wrap.innerHTML = `<div class="empty">Loading…</div>`;
+  try{
+    const snap = await db.collection('logbookEntries')
+      .where('technicianId','==', currentUser.uid)
+      .where('status','==','draft')
+      .get();
+    mySignoffs = snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    if(mySignoffs.length===0){
+      wrap.innerHTML = `<div class="empty"><div class="big">${ICON.check}</div>Nothing awaiting your sign-off.</div>`;
+      return;
+    }
+    wrap.innerHTML = mySignoffs.map(e=>`
+      <div class="insp-row status-due" onclick="openSignoffForm('${e.id}')">
+        <div class="top"><span class="date">${escapeHtml(e.traineeName||'Trainee')}</span><span class="pill due">Awaiting sign-off</span></div>
+        <div class="sub">${escapeHtml(e.date||'')} · ${escapeHtml(trainingTypeLabel(e.trainingType))}${e.siteClient?(' · '+escapeHtml(e.siteClient)):''}</div>
+      </div>`).join('');
+  }catch(e){
+    wrap.innerHTML = `<div class="empty">Could not load: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+let editingSignoffId = null;
+function openSignoffForm(id){
+  editingSignoffId = id;
+  const e = mySignoffs.find(x=>x.id===id);
+  if(!e){ toast('Entry not found'); return; }
+  document.getElementById('signoffTraineeInfo').innerHTML = `
+    <div class="kv"><div class="k">Trainee</div><div class="v">${escapeHtml(e.traineeName||'')}${e.traineeNumber?(' · '+escapeHtml(e.traineeNumber)):''}</div></div>
+    <div class="kv"><div class="k">Date</div><div class="v">${escapeHtml(e.date||'')}</div></div>
+    <div class="kv"><div class="k">Type</div><div class="v">${escapeHtml(trainingTypeLabel(e.trainingType))}</div></div>
+    <div class="kv"><div class="k">Site / client</div><div class="v">${escapeHtml(e.siteClient||'—')}</div></div>`;
+  document.getElementById('signoffWorkPerformed').textContent = e.workPerformed || '';
+  document.getElementById('signoffComments').value = '';
+  showView('view-signoff-form');
+}
+
+async function signLogbookEntry(){
+  if(!editingSignoffId) return;
+  if(!confirm('Sign this entry? You are confirming you were personally present and witnessed this work. Once signed it cannot be edited.')) return;
+  const comments = document.getElementById('signoffComments').value.trim();
+  try{
+    await db.collection('logbookEntries').doc(editingSignoffId).update({
+      technicianComments: comments,
+      technicianName: currentProfile.name || '',
+      technicianSaqcc: currentProfile.saqcc || '',
+      status: 'signed',
+      signedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      signedBy: currentUser.uid,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    toast('Entry signed');
+    showView('view-signoffs');
   }catch(e){ toast('Error: ' + e.message); }
 }
 

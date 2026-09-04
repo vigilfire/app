@@ -19,13 +19,80 @@ service cloud.firestore {
     }
 
     match /technicians/{uid} {
-      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      // Anyone signed in may also see the roster of *registered technicians*
+      // specifically (not other admins' or trainees' docs) — needed to list
+      // possible site-assignees, and for a trainee to pick which technician
+      // witnessed a logbook entry. `technicianLookup` (below) is already
+      // world-readable even pre-login, so this is a narrower exposure than
+      // what already exists, not a new one.
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin() || resource.data.role == 'technician');
       allow write: if isAdmin();
     }
 
     match /technicianLookup/{techNumber} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    // SAQCC (Fire) trainee 6-month supervised placement. One doc per trainee,
+    // keyed by the trainee's own uid (never an auto-ID) — that keeps "is this
+    // my assignment" a free path check and "am I the supervisor" a single
+    // resource-data read, with no query needed. Only an admin assigns or
+    // reassigns; the trainee and their current supervisor may read it.
+    match /traineeAssignments/{traineeId} {
+      allow read: if isAdmin()
+        || (isSignedIn() && request.auth.uid == traineeId)
+        || (isSignedIn() && resource.data.supervisorId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    // A trainee's daily logbook entry (SAQCC Fire paper form, digitised). The
+    // trainee owns and can freely edit their own entry while it's a draft;
+    // only the registered technician named as witness may add comments and
+    // flip it to "signed" — the SAQCC form is explicit that signing off work
+    // you didn't personally witness is fraud, so that transition is
+    // restricted to their own uid and to exactly the sign-off fields. Once
+    // signed, nobody but an admin may touch it again.
+    match /logbookEntries/{id} {
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.traineeId == request.auth.uid)
+        || (isSignedIn() && resource.data.technicianId == request.auth.uid);
+
+      allow create: if isAdmin()
+        || (
+          isSignedIn()
+          && request.resource.data.traineeId == request.auth.uid
+          && request.resource.data.status == 'draft'
+          && get(/databases/$(database)/documents/technicians/$(request.resource.data.technicianId)).data.role == 'technician'
+        );
+
+      allow update: if isAdmin()
+        || (
+          isSignedIn() && resource.data.traineeId == request.auth.uid
+          && resource.data.status == 'draft' && request.resource.data.status == 'draft'
+        )
+        || (
+          isSignedIn() && resource.data.technicianId == request.auth.uid
+          && resource.data.status == 'draft' && request.resource.data.status == 'signed'
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['technicianComments','status','signedAt','signedBy','technicianName','technicianSaqcc','updatedAt'])
+        );
+
+      allow delete: if isAdmin()
+        || (isSignedIn() && resource.data.traineeId == request.auth.uid && resource.data.status == 'draft');
+    }
+
+    // Progress against the SAQCC (Fire) "aspects to practice on-the-job"
+    // checklist. One doc per trainee, keyed by their uid like the assignment
+    // it's read alongside. Assessing competence is the current supervisor's
+    // call (or admin's) — unlike a daily logbook entry, this isn't something
+    // any witnessing technician should be able to sign off.
+    match /traineeCompetencies/{traineeId} {
+      allow read: if isAdmin()
+        || (isSignedIn() && request.auth.uid == traineeId)
+        || (isSignedIn() && get(/databases/$(database)/documents/traineeAssignments/$(traineeId)).data.supervisorId == request.auth.uid);
+      allow write: if isAdmin()
+        || (isSignedIn() && get(/databases/$(database)/documents/traineeAssignments/$(traineeId)).data.supervisorId == request.auth.uid);
     }
 
     match /sites/{siteId} {
