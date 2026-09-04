@@ -780,8 +780,9 @@ const storage = firebase.storage();
    `emailSiteDocuments` Cloud Function. Leave this false until the function is
    deployed and Resend is configured — see the "Emailing the register &
    certificate" section of SETUP.md. When false, the "Email to site" button
-   still appears but explains that delivery isn't switched on yet. */
-const EMAIL_SENDING_ENABLED = false;
+   still appears but explains that delivery isn't switched on yet.
+   Deployed 2026-09-04: emailSiteDocuments (us-central1, nodejs22). */
+const EMAIL_SENDING_ENABLED = true;
 db.enablePersistence({synchronizeTabs:true}).catch(()=>{ /* multiple tabs open, or unsupported browser — sync still works, just no offline cache */ });
 
 /* ---------- Online/offline indicator ---------- */

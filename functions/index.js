@@ -11,41 +11,49 @@
  */
 
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { defineSecret, defineString } = require("firebase-functions/params");
+const { defineSecret } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
-const chromium = require("@sparticuz/chromium");
-const puppeteer = require("puppeteer-core");
-const { Resend } = require("resend");
+
+// NB: @sparticuz/chromium, puppeteer-core and resend are require()d lazily
+// inside the handler, not here. Loading them at module scope pushes cold-start /
+// deploy-time source analysis past Firebase's 10s discovery budget.
 
 admin.initializeApp();
 
 // Secret — set with: firebase functions:secrets:set RESEND_API_KEY
 const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
 
-// Overridable via functions/.env . Until a domain is verified in Resend, leave
-// EMAIL_FROM as the Resend onboarding sender — mail then only reaches the
-// Resend account owner's own address. After verifying e.g. vigilfire.co.za,
-// set EMAIL_FROM to "Vigil Fire <certificates@vigilfire.co.za>" and redeploy.
-const EMAIL_FROM = defineString("EMAIL_FROM", {
-  default: "Vigil Fire <onboarding@resend.dev>",
-});
-// Optional fixed reply-to. When blank, the company email from settings/company
-// is used (so a client's reply reaches the servicing company's real inbox).
-const EMAIL_REPLY_TO = defineString("EMAIL_REPLY_TO", { default: "" });
+// Non-secret config, read at runtime from functions/.env (git-ignored) with
+// sensible defaults. Until a domain is verified in Resend, EMAIL_FROM stays as
+// the Resend onboarding sender and mail only reaches the Resend account owner's
+// own address; after verifying e.g. vigilfire.co.za, set
+//   EMAIL_FROM="Vigil Fire <certificates@vigilfire.co.za>"
+// in functions/.env and redeploy. EMAIL_REPLY_TO blank => use the company email
+// from settings/company (so a client's reply reaches the servicing company).
+const DEFAULT_EMAIL_FROM = "Vigil Fire <onboarding@resend.dev>";
+function emailFrom() {
+  return (process.env.EMAIL_FROM || "").trim() || DEFAULT_EMAIL_FROM;
+}
+function emailReplyToOverride() {
+  return (process.env.EMAIL_REPLY_TO || "").trim();
+}
 
 const MAX_DOCUMENTS = 3;
 const MAX_HTML_BYTES = 2 * 1024 * 1024; // 2 MB of HTML per document
 
-// Skip WebGL / graphics stack — we only render static HTML, and this keeps the
-// Chromium memory footprint down. Harmless if the property isn't present.
-try {
-  chromium.setGraphicsMode = false;
-} catch (e) {
-  /* older @sparticuz/chromium — ignore */
-}
-
 async function renderPdf(html, landscape) {
+  const chromium = require("@sparticuz/chromium");
+  const puppeteer = require("puppeteer-core");
+
+  // Skip the WebGL / graphics stack — we only render static HTML, and this
+  // keeps the Chromium memory footprint down. Harmless if not supported.
+  try {
+    chromium.setGraphicsMode = false;
+  } catch (e) {
+    /* older @sparticuz/chromium — ignore */
+  }
+
   const browser = await puppeteer.launch({
     args: chromium.args,
     executablePath: await chromium.executablePath(),
@@ -165,9 +173,9 @@ exports.emailSiteDocuments = onCall(
       .join("\n")
       .trim();
 
-    const replyTo =
-      (EMAIL_REPLY_TO.value() || "").trim() || company.email || undefined;
+    const replyTo = emailReplyToOverride() || company.email || undefined;
 
+    const { Resend } = require("resend");
     const resend = new Resend(RESEND_API_KEY.value());
     let providerMessageId = null;
     let status = "sent";
@@ -175,7 +183,7 @@ exports.emailSiteDocuments = onCall(
 
     try {
       const sendRes = await resend.emails.send({
-        from: EMAIL_FROM.value(),
+        from: emailFrom(),
         to: [to],
         replyTo,
         subject,
