@@ -296,12 +296,13 @@
       <p class="hint" style="margin:0 0 12px;">SAQCC (Fire) registered trainee — 6 months of supervised field training under a registered technician.</p>
       <div class="card" id="myTrainingCard"></div>
 
-      <div class="section-title"><h2>Competency checklist</h2></div>
-      <div class="card" id="myCompetencyCard"></div>
-
       <div class="section-title"><h2>My logbook</h2></div>
       <button class="btn" style="margin-bottom:14px;" onclick="openLogbookEntryForm(null)">+ Log an entry</button>
       <div id="myLogbookList"><div class="empty">Loading…</div></div>
+
+      <div class="section-title"><h2>Competency checklist</h2></div>
+      <p class="hint" style="margin:0 0 10px;">Marked off by your supervisor as you demonstrate each one — for reference only here.</p>
+      <div class="card" id="myCompetencyCard"></div>
     </section>
 
     <!-- ===== LOGBOOK ENTRY (trainee: create/edit a draft, or view a signed one) ===== -->
@@ -3242,14 +3243,19 @@ async function renderCompetencyPanel(traineeId, opts){
     if(!g){ g = {cat, list:[]}; groups.push(g); }
     g.list.push([k,label]);
   });
+  // `markable` decides more than styling: a non-markable trainee gets no
+  // form control at all (not even a disabled checkbox), so there's nothing
+  // to inspect-element around. The write is rules-gated to the supervisor
+  // regardless, but the UI shouldn't even suggest a trainee can self-mark.
   const body = groups.map(g => `
     <h4 style="margin:14px 0 2px;">${escapeHtml(g.cat)}</h4>
     ${g.list.map(([k,label])=>{
       const it = items[k] || {};
       const on = !!it.achieved;
-      const dis = opts.markable ? '' : 'disabled';
-      const onchange = opts.markable ? `toggleCompetency('${traineeId}','${k}', this.checked, '${opts.containerId}')` : '';
-      return `<label class="chk${on?' on':''}"><input type="checkbox" ${on?'checked':''} ${dis} onchange="${onchange}"><span>${escapeHtml(label)}</span></label>`;
+      if(!opts.markable){
+        return `<div class="checklist-item"><div class="label">${escapeHtml(label)}</div><span class="pill ${on?'pass':''}">${on?'Achieved':'Not yet'}</span></div>`;
+      }
+      return `<label class="chk${on?' on':''}"><input type="checkbox" ${on?'checked':''} onchange="toggleCompetency('${traineeId}','${k}', this.checked, '${opts.containerId}')"><span>${escapeHtml(label)}</span></label>`;
     }).join('')}`).join('');
   wrap.innerHTML = `<div class="hint" style="margin:0 0 6px;">${achievedCount} / ${TRAINEE_COMPETENCIES.length} competencies achieved</div>${body}`;
 }
