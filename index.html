@@ -301,7 +301,7 @@
       <div id="myLogbookList"><div class="empty">Loading…</div></div>
 
       <div class="section-title"><h2>Competency checklist</h2></div>
-      <p class="hint" style="margin:0 0 10px;">Marked off by your supervisor as you demonstrate each one — for reference only here.</p>
+      <p class="hint" style="margin:0 0 10px;">Your supervisor logs a dated observation each time you demonstrate one — an item is achieved once it has 4. For reference only here.</p>
       <div class="card" id="myCompetencyCard"></div>
     </section>
 
@@ -3220,52 +3220,100 @@ const TRAINEE_COMPETENCIES = [
   ['hy_faults','Take correct action on faults as they are detected','Hydrant']
 ];
 
+// A competency isn't a single tick — it needs this many separate dated,
+// technician-authored observations logged against it before it counts as
+// achieved. "Achieved" is always derived from the count, never stored as its
+// own flag, so it can't drift out of sync with the observations behind it.
+const COMPETENCY_REQUIRED_OBSERVATIONS = 4;
+function competencyObservations(items, key){ return (items[key] && items[key].observations) || []; }
+function competencyAchieved(items, key){ return competencyObservations(items, key).length >= COMPETENCY_REQUIRED_OBSERVATIONS; }
+
+let competencyDataCache = {};        // { [traineeId]: items }
+let expandedCompetencyKeys = new Set(); // 'traineeId|key' — which rows are expanded (markable view only)
+
 // Shared by the admin's trainee detail, the supervising technician's own
-// view, and the trainee's read-only view — `markable` controls whether the
-// checkboxes are live. Firestore rules are the real gate on who may write.
+// view, and the trainee's read-only view — `markable` controls whether a
+// technician can add observations here. Firestore rules are the real gate on
+// who may write; a non-markable (trainee) view renders no form control at
+// all, so there's nothing to add via the UI even before the rules apply.
 async function renderCompetencyPanel(traineeId, opts){
   opts = opts || {};
   const wrap = document.getElementById(opts.containerId);
   if(!wrap) return;
   wrap.innerHTML = `<div class="empty">Loading…</div>`;
-  let items = {};
   try{
     const doc = await db.collection('traineeCompetencies').doc(traineeId).get();
-    items = doc.exists ? (doc.data().items || {}) : {};
+    competencyDataCache[traineeId] = doc.exists ? (doc.data().items || {}) : {};
   }catch(e){
     wrap.innerHTML = `<div class="empty">Could not load competencies: ${escapeHtml(e.message)}</div>`;
     return;
   }
-  const achievedCount = TRAINEE_COMPETENCIES.filter(([k])=>items[k] && items[k].achieved).length;
+  paintCompetencyPanel(traineeId, opts);
+}
+
+function paintCompetencyPanel(traineeId, opts){
+  const wrap = document.getElementById(opts.containerId);
+  if(!wrap) return;
+  const items = competencyDataCache[traineeId] || {};
+  const achievedCount = TRAINEE_COMPETENCIES.filter(([k])=>competencyAchieved(items, k)).length;
   const groups = [];
   TRAINEE_COMPETENCIES.forEach(([k,label,cat])=>{
     let g = groups.find(x=>x.cat===cat);
     if(!g){ g = {cat, list:[]}; groups.push(g); }
     g.list.push([k,label]);
   });
-  // `markable` decides more than styling: a non-markable trainee gets no
-  // form control at all (not even a disabled checkbox), so there's nothing
-  // to inspect-element around. The write is rules-gated to the supervisor
-  // regardless, but the UI shouldn't even suggest a trainee can self-mark.
   const body = groups.map(g => `
     <h4 style="margin:14px 0 2px;">${escapeHtml(g.cat)}</h4>
     ${g.list.map(([k,label])=>{
-      const it = items[k] || {};
-      const on = !!it.achieved;
+      const obs = competencyObservations(items, k);
+      const achieved = obs.length >= COMPETENCY_REQUIRED_OBSERVATIONS;
+      const progress = achieved ? 'Achieved' : `${obs.length} / ${COMPETENCY_REQUIRED_OBSERVATIONS}`;
       if(!opts.markable){
-        return `<div class="checklist-item"><div class="label">${escapeHtml(label)}</div><span class="pill ${on?'pass':''}">${on?'Achieved':'Not yet'}</span></div>`;
+        return `<div class="checklist-item"><div class="label">${escapeHtml(label)}</div><span class="pill ${achieved?'pass':''}">${progress}</span></div>`;
       }
-      return `<label class="chk${on?' on':''}"><input type="checkbox" ${on?'checked':''} onchange="toggleCompetency('${traineeId}','${k}', this.checked, '${opts.containerId}')"><span>${escapeHtml(label)}</span></label>`;
+      const expanded = expandedCompetencyKeys.has(traineeId+'|'+k);
+      const obsList = obs.length
+        ? obs.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))
+            .map(o=>`<div class="hint" style="margin:5px 0;">${escapeHtml(o.date||'')} — ${escapeHtml(o.comment||'')}${o.markedByName?` <span style="color:var(--grey);">(${escapeHtml(o.markedByName)})</span>`:''}</div>`).join('')
+        : `<div class="hint" style="margin:5px 0;">No observations logged yet.</div>`;
+      return `<div class="checklist-item" style="cursor:pointer;" onclick="toggleCompetencyExpand('${traineeId}','${k}','${opts.containerId}')">
+          <div class="label">${escapeHtml(label)}</div>
+          <span class="pill ${achieved?'pass':'due'}">${progress}</span>
+        </div>
+        ${expanded ? `<div style="padding:0 0 14px; border-bottom:1px solid var(--line);" onclick="event.stopPropagation()">
+          ${obsList}
+          <div class="row" style="margin-top:8px;">
+            <input type="date" id="obsDate-${traineeId}-${k}" value="${toLocalISO(new Date())}" style="flex:0 0 140px;">
+            <input type="text" id="obsComment-${traineeId}-${k}" placeholder="Dated observation">
+          </div>
+          <button class="btn secondary" style="margin-top:8px; width:auto; padding:9px 14px;" onclick="addCompetencyObservation('${traineeId}','${k}','${opts.containerId}')">+ Add observation</button>
+        </div>` : ''}`;
     }).join('')}`).join('');
-  wrap.innerHTML = `<div class="hint" style="margin:0 0 6px;">${achievedCount} / ${TRAINEE_COMPETENCIES.length} competencies achieved</div>${body}`;
+  wrap.innerHTML = `<div class="hint" style="margin:0 0 6px;">${achievedCount} / ${TRAINEE_COMPETENCIES.length} competencies achieved — needs ${COMPETENCY_REQUIRED_OBSERVATIONS} dated observations each</div>${body}`;
 }
 
-async function toggleCompetency(traineeId, key, checked, containerId){
+function toggleCompetencyExpand(traineeId, key, containerId){
+  const k = traineeId + '|' + key;
+  if(expandedCompetencyKeys.has(k)) expandedCompetencyKeys.delete(k); else expandedCompetencyKeys.add(k);
+  paintCompetencyPanel(traineeId, { markable:true, containerId });
+}
+
+async function addCompetencyObservation(traineeId, key, containerId){
+  const dateEl = document.getElementById(`obsDate-${traineeId}-${key}`);
+  const commentEl = document.getElementById(`obsComment-${traineeId}-${key}`);
+  const date = dateEl.value;
+  const comment = commentEl.value.trim();
+  if(!date){ toast('Pick a date'); return; }
+  if(!comment){ toast('Add a short observation'); return; }
+  const items = competencyDataCache[traineeId] || {};
+  const updated = competencyObservations(items, key).concat([{
+    date, comment, markedBy: currentUser.uid, markedByName: currentProfile.name || ''
+  }]);
   try{
-    const value = { achieved: checked, date: toLocalISO(new Date()), markedBy: currentUser.uid, markedByName: currentProfile.name||'' };
-    await db.collection('traineeCompetencies').doc(traineeId).set({ ['items.'+key]: value }, {merge:true});
-  }catch(e){ toast('Error: ' + e.message); }
-  renderCompetencyPanel(traineeId, { markable:true, containerId });
+    await db.collection('traineeCompetencies').doc(traineeId).set({ ['items.'+key]: { observations: updated } }, {merge:true});
+    toast(updated.length >= COMPETENCY_REQUIRED_OBSERVATIONS ? 'Observation added — competency achieved' : `Observation added (${updated.length}/${COMPETENCY_REQUIRED_OBSERVATIONS})`);
+  }catch(e){ toast('Error: ' + e.message); return; }
+  await renderCompetencyPanel(traineeId, { markable:true, containerId });
 }
 
 /* ---------- Printable trainee logbook — the full daily log plus the
@@ -3306,8 +3354,10 @@ async function openTraineeLogbookReport(traineeId, backView){
   </tr>`).join('') || `<tr><td colspan="8">No entries recorded yet.</td></tr>`;
 
   const compRows = TRAINEE_COMPETENCIES.map(([k,label,cat])=>{
-    const it = competencyItems[k] || {};
-    return `<tr><td>${escapeHtml(cat)}</td><td>${escapeHtml(label)}</td><td style="text-align:center;">${it.achieved?'✓':''}</td><td>${escapeHtml(it.date||'')}</td></tr>`;
+    const obs = competencyObservations(competencyItems, k);
+    const achieved = obs.length >= COMPETENCY_REQUIRED_OBSERVATIONS;
+    const dates = obs.map(o=>o.date).filter(Boolean).sort().join(', ');
+    return `<tr><td>${escapeHtml(cat)}</td><td>${escapeHtml(label)}</td><td style="text-align:center;">${obs.length}</td><td style="text-align:center;">${achieved?'✓':''}</td><td>${escapeHtml(dates)}</td></tr>`;
   }).join('');
 
   showReport('Trainee logbook', `${letterheadHTML(co)}
@@ -3328,7 +3378,7 @@ async function openTraineeLogbookReport(traineeId, backView){
     </table></div>
     <h3 style="margin-top:20px;">Competency checklist — aspects to practice on-the-job</h3>
     <div class="tablewrap"><table>
-      <thead><tr><th>Category</th><th>Competency</th><th style="text-align:center;">Achieved</th><th>Date</th></tr></thead>
+      <thead><tr><th>Category</th><th>Competency</th><th style="text-align:center;">Observations</th><th style="text-align:center;">Achieved</th><th>Dates</th></tr></thead>
       <tbody>${compRows}</tbody>
     </table></div>
     <div class="hint" style="margin-top:14px;">Generated by Vigil Fire on ${today}. This logbook is the property of the trainee and forms part of their Portfolio of Evidence for the SAQCC EISA.</div>`,
