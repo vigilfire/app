@@ -3276,9 +3276,10 @@ function paintCompetencyPanel(traineeId, opts){
         ? obs.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))
             .map(o=>`<div class="hint" style="margin:5px 0;">${escapeHtml(o.date||'')} — ${escapeHtml(o.comment||'')}${o.markedByName?` <span style="color:var(--grey);">(${escapeHtml(o.markedByName)})</span>`:''}</div>`).join('')
         : `<div class="hint" style="margin:5px 0;">No observations logged yet.</div>`;
+      const chevron = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px; flex-shrink:0; color:var(--grey); transform:rotate(${expanded?90:0}deg); transition:transform .15s;"><path d="M9 18l6-6-6-6"/></svg>`;
       return `<div class="checklist-item" style="cursor:pointer;" onclick="toggleCompetencyExpand('${traineeId}','${k}','${opts.containerId}')">
-          <div class="label">${escapeHtml(label)}</div>
-          <span class="pill ${achieved?'pass':'due'}">${progress}</span>
+          <div class="label">${escapeHtml(label)}${obs.length ? `<div class="hint" style="margin:2px 0 0;">${obs.length} observation${obs.length===1?'':'s'} logged — tap to view / add</div>` : ''}</div>
+          <span style="display:flex; align-items:center; gap:6px; flex-shrink:0;"><span class="pill ${achieved?'pass':'due'}">${progress}</span>${chevron}</span>
         </div>
         ${expanded ? `<div style="padding:0 0 14px; border-bottom:1px solid var(--line);" onclick="event.stopPropagation()">
           ${obsList}
@@ -3286,7 +3287,7 @@ function paintCompetencyPanel(traineeId, opts){
             <input type="date" id="obsDate-${traineeId}-${k}" value="${toLocalISO(new Date())}" style="flex:0 0 140px;">
             <input type="text" id="obsComment-${traineeId}-${k}" placeholder="Dated observation">
           </div>
-          <button class="btn secondary" style="margin-top:8px; width:auto; padding:9px 14px;" onclick="addCompetencyObservation('${traineeId}','${k}','${opts.containerId}')">+ Add observation</button>
+          <button class="btn secondary" style="margin-top:8px; width:auto; padding:9px 14px;" onclick="addCompetencyObservation('${traineeId}','${k}','${opts.containerId}')">Save observation</button>
         </div>` : ''}`;
     }).join('')}`).join('');
   wrap.innerHTML = `<div class="hint" style="margin:0 0 6px;">${achievedCount} / ${TRAINEE_COMPETENCIES.length} competencies achieved — needs ${COMPETENCY_REQUIRED_OBSERVATIONS} dated observations each</div>${body}`;
@@ -3310,7 +3311,15 @@ async function addCompetencyObservation(traineeId, key, containerId){
     date, comment, markedBy: currentUser.uid, markedByName: currentProfile.name || ''
   }]);
   try{
-    await db.collection('traineeCompetencies').doc(traineeId).set({ ['items.'+key]: { observations: updated } }, {merge:true});
+    // A dotted string key passed to set(..., {merge:true}) is NOT treated as a
+    // nested field path — it would create a literal top-level field named
+    // "items.<key>" (dot and all), which is why the count/list looked like
+    // they never updated. update() is what actually parses "items.<key>" as
+    // a path to the nested map field; it just needs the document to already
+    // exist, hence the harmless set({}, {merge:true}) first.
+    const ref = db.collection('traineeCompetencies').doc(traineeId);
+    await ref.set({}, {merge:true});
+    await ref.update({ ['items.'+key]: { observations: updated } });
     toast(updated.length >= COMPETENCY_REQUIRED_OBSERVATIONS ? 'Observation added — competency achieved' : `Observation added (${updated.length}/${COMPETENCY_REQUIRED_OBSERVATIONS})`);
   }catch(e){ toast('Error: ' + e.message); return; }
   await renderCompetencyPanel(traineeId, { markable:true, containerId });
