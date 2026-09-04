@@ -1,0 +1,11 @@
+# Cloud Functions — installed by `npm install` / rebuilt on deploy, never committed
+functions/node_modules/
+functions/.env
+functions/lib/
+
+# Firebase CLI
+.firebase/
+firebase-debug*.log
+firestore-debug*.log
+ui-debug*.log
+*.local

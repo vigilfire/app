@@ -15,7 +15,7 @@
    Bump CACHE (e.g. -v2) whenever index.html or sw.js changes so clients pick
    up the new version. */
 
-const CACHE = 'vigil-fire-v1';
+const CACHE = 'vigil-fire-v2';
 
 const LOCAL_SHELL = [
   './index.html',
@@ -28,7 +28,8 @@ const VENDOR = [
   'https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js',
   'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js',
   'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js',
-  'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js'
+  'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js',
+  'https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js'
 ];
 
 self.addEventListener('install', (event) => {

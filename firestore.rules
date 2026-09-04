@@ -33,12 +33,13 @@ service cloud.firestore {
       allow create, delete: if isAdmin();
       // Admins may change anything. An assigned technician may only touch a
       // restricted set of fields (site details + completion markers).
+      // `serviceType` is deliberately absent here: only an administrator sets it.
       allow update: if isAdmin()
         || (
           isSignedIn()
           && request.auth.uid in resource.data.assignedTo
           && request.resource.data.diff(resource.data).affectedKeys()
-               .hasOnly(['name','address','notes','category','assignedTo','completed','completedAt','lastCompletedDate','lastCompletedBy'])
+               .hasOnly(['name','address','notes','email','contactPerson','contactPhone','category','assignedTo','completed','completedAt','lastCompletedDate','lastCompletedBy'])
         );
     }
 
@@ -74,6 +75,14 @@ service cloud.firestore {
       allow read:          if isAdmin() || (isSignedIn() && isAssignedToSite(resource.data.siteId));
       allow create:        if isAdmin() || (isSignedIn() && isAssignedToSite(request.resource.data.siteId));
       allow update, delete: if false;
+    }
+
+    // Audit log of register / certificate emails sent from a site. Written only
+    // by the `emailSiteDocuments` Cloud Function via the Admin SDK (which
+    // bypasses these rules); no client may write. Admins read it in the app.
+    match /emailLog/{id} {
+      allow read:  if isAdmin();
+      allow write: if false;
     }
 
     // An "equipment" doc is the physical asset (type, serial, location) plus a
