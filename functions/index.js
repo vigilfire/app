@@ -420,12 +420,17 @@ exports.createTechnician = onCall(async (request) => {
   // Seat-limit check. This has to live here, not in a Firestore rule: a rule
   // can restrict a single write but can't reliably count how many
   // technicians a company already has before allowing the next one.
+  // Only active technicians occupy a seat — deactivating someone (the app's
+  // "remove a technician" action) keeps their Firestore doc for compliance
+  // history but must free up their seat immediately, or a company could
+  // never replace someone they let go without upgrading their plan.
   const companySnap = await db.collection("companies").doc(companyId).get();
   const seatLimit = companySnap.exists ? companySnap.data().seatLimit : undefined;
   if (seatLimit !== null && seatLimit !== undefined) {
     const countSnap = await db
       .collection("technicians")
       .where("companyId", "==", companyId)
+      .where("active", "==", true)
       .count()
       .get();
     if (countSnap.data().count >= seatLimit) {

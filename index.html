@@ -457,10 +457,8 @@
           <option value="">Select type…</option>
           <!-- options populated from EQUIPMENT_TYPES at startup -->
         </select>
-        <div class="row">
-          <div><label>Weight / size</label><input id="eqSize" placeholder="e.g. 4.5 kg / 9 L"></div>
-          <div><label>Make</label><input id="eqMake" placeholder="e.g. SafeQuip, Centa"></div>
-        </div>
+        <label>Make</label>
+        <input id="eqMake" placeholder="e.g. SafeQuip, Centa">
         <label>Asset tag / serial no.</label>
         <input id="eqSerial" placeholder="e.g. FW-0231">
         <label>Location description</label>
@@ -1816,7 +1814,6 @@ async function openRegister(siteId, backView, opts){
 
   const rows = active.map(e=>`<tr>
     <td>${escapeHtml(typeLabel(e.type))}</td>
-    <td>${escapeHtml(e.size||'')}</td>
     <td>${escapeHtml(e.serial||'')}</td>
     <td>${escapeHtml(e.location||'')}</td>
     <td>${escapeHtml(ym(e.serviceDate))}</td>
@@ -1827,15 +1824,14 @@ async function openRegister(siteId, backView, opts){
     <td>${escapeHtml(ym(e.weightCheckDue) || ym(e.hoseReplacedDue) || '')}</td>
     <td>${escapeHtml(ym(e.rechargeDate) || (e.rechargeRequired ? 'Outstanding' : '—'))}</td>
     <td>${escapeHtml(e.inspectionDate ? statusLabel(e.status) : 'Not inspected')}</td>
-  </tr>`).join('') || `<tr><td colspan="12">No equipment in service at this site.</td></tr>`;
+  </tr>`).join('') || `<tr><td colspan="11">No equipment in service at this site.</td></tr>`;
 
   const removedTable = removed.length ? `
     <h3 style="margin-top:22px;">Removed from service / condemned</h3>
     <div class="tablewrap"><table>
-      <thead><tr><th>Type</th><th>Size</th><th>Serial / tag</th><th>Location</th><th>Removed</th><th>Reason</th><th>Replaced by</th></tr></thead>
+      <thead><tr><th>Type</th><th>Serial / tag</th><th>Location</th><th>Removed</th><th>Reason</th><th>Replaced by</th></tr></thead>
       <tbody>${removed.map(e=>`<tr>
         <td>${escapeHtml(typeLabel(e.type))}</td>
-        <td>${escapeHtml(e.size||'')}</td>
         <td>${escapeHtml(e.serial||'')}</td>
         <td>${escapeHtml(e.location||'')}</td>
         <td>${escapeHtml(ym(e.condemnedDate)||'')}</td>
@@ -1848,7 +1844,7 @@ async function openRegister(siteId, backView, opts){
   const page2 = `<div class="regpage">
     <h2 style="font-size:1rem;">Equipment Register — ${escapeHtml(site.name)}</h2>
     <div class="tablewrap"><table>
-      <thead><tr><th>Type</th><th>Size</th><th>Serial / tag</th><th>Location</th><th>Serviced</th><th>Next service</th><th>Mass (kg)</th><th>Pressure tested</th><th>Pressure test due</th><th>Weight / hose due</th><th>Recharged</th><th>Status</th></tr></thead>
+      <thead><tr><th>Type</th><th>Serial / tag</th><th>Location</th><th>Serviced</th><th>Next service</th><th>Mass (kg)</th><th>Pressure tested</th><th>Pressure test due</th><th>Weight / hose due</th><th>Recharged</th><th>Status</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
     ${removedTable}
@@ -2077,7 +2073,7 @@ function paintEquipment(){
   const list = equipmentCache.filter(e=>{
     if(equipmentFilter!=='all' && equipmentClass(e)!==equipmentFilter) return false;
     if(q){
-      const hay = `${typeLabel(e.type)} ${e.serial||''} ${e.location||''} ${e.make||''} ${e.size||''}`.toLowerCase();
+      const hay = `${typeLabel(e.type)} ${e.serial||''} ${e.location||''} ${e.make||''}`.toLowerCase();
       if(!hay.includes(q)) return false;
     }
     return true;
@@ -2095,7 +2091,7 @@ function paintEquipment(){
     if(e.condemned){
       return `<div class="tag-card status-fail" onclick="openEquipmentForm('${e.id}')" style="opacity:0.65;">
         <div class="tag-body">
-          <div class="type">${escapeHtml(typeLabel(e.type))} ${e.size?('· '+escapeHtml(e.size)):''}${e.make?(' · '+escapeHtml(e.make)):''}</div>
+          <div class="type">${escapeHtml(typeLabel(e.type))}${e.make?(' · '+escapeHtml(e.make)):''}</div>
           <div class="sub">${escapeHtml(e.location||'No location noted')}${e.serial?(' · Tag '+escapeHtml(e.serial)):''}</div>
           <div class="pillrow">
             <span class="pill fail">Removed from service${e.condemnedDate?(' · '+escapeHtml(ym(e.condemnedDate))):''}</span>
@@ -2107,7 +2103,7 @@ function paintEquipment(){
     const statusClass = rechargeOut ? 'fail' : (!inspected ? '' : (e.status==='fail' ? 'fail' : (dueInfo.overdue ? 'due' : (e.status==='attention' ? 'due' : 'pass'))));
     return `<div class="tag-card status-${statusClass}" onclick="openEquipmentForm('${e.id}')">
       <div class="tag-body">
-        <div class="type">${escapeHtml(typeLabel(e.type))} ${e.size?('· '+escapeHtml(e.size)):''}${e.make?(' · '+escapeHtml(e.make)):''}</div>
+        <div class="type">${escapeHtml(typeLabel(e.type))}${e.make?(' · '+escapeHtml(e.make)):''}</div>
         <div class="sub">${escapeHtml(e.location||'No location noted')}${e.serial?(' · Tag '+escapeHtml(e.serial)):''}</div>
         <div class="pillrow">
           ${inspected
@@ -2476,7 +2472,6 @@ async function openEquipmentForm(id){
 
   // Identity
   document.getElementById('eqType').value     = e ? (e.type||'')     : '';
-  document.getElementById('eqSize').value     = e ? (e.size||'')     : '';
   document.getElementById('eqMake').value     = e ? (e.make||'')     : '';
   document.getElementById('eqSerial').value   = e ? (e.serial||'')   : '';
   document.getElementById('eqLocation').value = e ? (e.location||'') : '';
@@ -2578,7 +2573,6 @@ async function saveEquipment(){
   const val = id => document.getElementById(id).value.trim();
   const payload = {
     type,
-    size: document.getElementById('eqSize').value.trim(),
     make: document.getElementById('eqMake').value.trim(),
     serial: document.getElementById('eqSerial').value.trim(),
     location: document.getElementById('eqLocation').value.trim(),
@@ -2690,7 +2684,7 @@ async function logServiceEvent(equipmentId, p, e){
       siteId: p.siteId || (e && e.siteId) || currentSiteId,
       companyId: p.companyId || (e && e.companyId) || currentCompanyId,
       kind: eventKind(p),
-      type: p.type||'', size: p.size||'', make: p.make||'', serial: p.serial||'', location: p.location||'',
+      type: p.type||'', make: p.make||'', serial: p.serial||'', location: p.location||'',
       serviceDate: p.serviceDate||null, inspectionDate: p.inspectionDate||null, nextServiceDue: p.nextServiceDue||null,
       pressureTestDate: p.pressureTestDate||null, pressureTestDue: p.pressureTestDue||null,
       ptPerformed: !!p.ptPerformed, ptPrevDate: p.ptPrevDate||null, ptTestPressure: p.ptTestPressure||'',
@@ -3740,7 +3734,7 @@ async function openPressureTestReport(){
     return;
   }
   const blocks = items.map(e=>`<div class="rep-item">
-    <h3>${escapeHtml(typeLabel(e.type))}${e.size?(' · '+escapeHtml(e.size)):''}${e.make?(' · '+escapeHtml(e.make)):''}</h3>
+    <h3>${escapeHtml(typeLabel(e.type))}${e.make?(' · '+escapeHtml(e.make)):''}</h3>
     <div class="kv"><span class="k">Serial / tag</span><span class="v">${escapeHtml(e.serial||'—')}</span></div>
     <div class="kv"><span class="k">Location</span><span class="v">${escapeHtml(e.location||'—')}</span></div>
     <div class="kv"><span class="k">Previous pressure test</span><span class="v">${escapeHtml(ym(e.ptPrevDate)||'—')}</span></div>
@@ -3784,7 +3778,7 @@ async function openRechargeReport(){
     return;
   }
   const blocks = items.map(e=>`<div class="rep-item">
-    <h3>${escapeHtml(typeLabel(e.type))}${e.size?(' · '+escapeHtml(e.size)):''}${e.make?(' · '+escapeHtml(e.make)):''}</h3>
+    <h3>${escapeHtml(typeLabel(e.type))}${e.make?(' · '+escapeHtml(e.make)):''}</h3>
     <div class="kv"><span class="k">Serial / tag</span><span class="v">${escapeHtml(e.serial||'—')}</span></div>
     <div class="kv"><span class="k">Location</span><span class="v">${escapeHtml(e.location||'—')}</span></div>
     <div class="kv"><span class="k">Recharged</span><span class="v">${escapeHtml(ym(e.rechargeDate)||'—')}</span></div>
