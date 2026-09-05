@@ -1267,7 +1267,7 @@ async function saveSite(){
 }
 
 async function deleteSite(){
-  if(!editingSiteId) return;
+  if(!editingSiteId || currentRole!=='admin') return;
   if(!confirm('Delete this site? Equipment records at this site will remain but be orphaned. This cannot be undone.')) return;
   try{
     await db.collection('sites').doc(editingSiteId).delete();
@@ -1653,8 +1653,10 @@ function fullMonthLabel(m){
 async function openCertificate(siteId, opts){
   opts = opts || {};
   const say = m => { if(!opts.silent) toast(m); };
+  if(currentRole !== 'admin'){ say('Only an administrator can generate the certificate'); return opts.silent ? {error:'Admins only'} : undefined; }
   const site = sitesCache.find(s=>s.id===siteId);
   if(!site){ say('Site not found'); return opts.silent ? {error:'Site not found'} : undefined; }
+  if(!site.completed){ say('Mark this site complete before generating a certificate'); return opts.silent ? {error:'Site not completed'} : undefined; }
   say('Building certificate…');
   await loadCompanySettings();
   let items = [];
@@ -1759,7 +1761,7 @@ async function openRegister(siteId, backView, opts){
   // Service summary — count by equipment type (active items only)
   const summaryRows = equipmentSummaryRows(active);
   // Technician(s) who worked the site, each with their SAQCC registration no.
-  const techLine = technicianSummaryHTML(items);
+  const techLine = technicianSummaryHTML(active);
   const rechargedCount = active.filter(e=>e.rechargeRequired && e.rechargeDate).length;
 
   const letterhead = `
