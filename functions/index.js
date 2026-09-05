@@ -55,7 +55,7 @@ const TECH_EMAIL_DOMAIN = "technicians.invalid";
 // SUPERADMIN_EMAIL in functions/.env if you ever need to change it without
 // editing source.
 function superadminEmail() {
-  return (process.env.SUPERADMIN_EMAIL || "").trim() || "sapphorion@gmail.com";
+  return (process.env.SUPERADMIN_EMAIL || "").trim() || "vigilfire1@gmail.com";
 }
 
 async function requireSuperadmin(request) {
