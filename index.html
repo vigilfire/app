@@ -976,10 +976,11 @@ function toast(msg){
 let currentUser = null;   // firebase auth user
 let currentProfile = null; // technicians/{uid} doc data
 let currentRole = null;
+let currentCompanyId = null;  // this technician's tenant — scopes every multi-tenant read/write
 
 auth.onAuthStateChanged(async (user)=>{
   if(!user){
-    currentUser = null; currentProfile = null; currentRole = null;
+    currentUser = null; currentProfile = null; currentRole = null; currentCompanyId = null;
     document.getElementById('authScreen').style.display='flex';
     document.getElementById('appShell').style.display='none';
     detachAllListeners();
@@ -996,6 +997,7 @@ auth.onAuthStateChanged(async (user)=>{
     }
     currentProfile = doc.data();
     currentRole = currentProfile.role;
+    currentCompanyId = currentProfile.companyId || null;
     if(currentProfile.active === false){
       document.getElementById('authError').style.display='block';
       document.getElementById('authError').textContent = 'This account has been deactivated. Contact your administrator.';
@@ -1129,7 +1131,11 @@ let techsCache = [];
 function renderSites(){
   if(unsubSites) unsubSites();
   const isAdmin = currentRole === 'admin';
-  const query = isAdmin ? db.collection('sites') : db.collection('sites').where('assignedTo','array-contains', currentUser.uid);
+  // companyId has to be an explicit filter here, not just checked by the rule
+  // — a list query can only be validated against a rule that depends on
+  // resource.data (like the tenant check) if the query itself constrains
+  // that same field.
+  const query = isAdmin ? db.collection('sites').where('companyId','==', currentCompanyId) : db.collection('sites').where('assignedTo','array-contains', currentUser.uid);
   unsubSites = query.onSnapshot(snap=>{
     sitesCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
     paintSites();
@@ -1195,7 +1201,11 @@ function openSite(id){
 }
 
 async function loadTechsCache(){
-  const snap = await db.collection('technicians').where('role','==','technician').get();
+  // companyId must be an explicit query filter, not just checked in the rule
+  // — Firestore rejects a whole list query outright unless it can prove every
+  // possible result satisfies the rule, which for a get()-derived value like
+  // companyId means the query has to filter on it directly.
+  const snap = await db.collection('technicians').where('role','==','technician').where('companyId','==',currentCompanyId).get();
   techsCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
 }
 
@@ -1259,6 +1269,7 @@ async function saveSite(){
       await db.collection('sites').doc(editingSiteId).update(payload);
     } else {
       payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      payload.companyId = currentCompanyId;
       await db.collection('sites').add(payload);
     }
     toast('Site saved');
@@ -1346,7 +1357,8 @@ async function reopenSite(){
 }
 
 /* ---------- Company profile ----------
-   Logo + details, stored in settings/company (admin-writable per firestore.rules).
+   Logo + details, stored in settings/{companyId} — one doc per tenant, keyed
+   by the signed-in admin's own companyId (admin-writable per firestore.rules).
    The logo is held inline as a data: URL — small enough after the 400px resize to
    sit comfortably under Firestore's 1 MiB document limit, and it avoids needing
    Storage rules that Storage can't express (no Firestore role lookup there). */
@@ -1356,7 +1368,7 @@ let pendingSignature;   // undefined = unchanged, string = new signature, '' = c
 
 async function loadCompanySettings(){
   try{
-    const doc = await db.collection('settings').doc('company').get();
+    const doc = await db.collection('settings').doc(currentCompanyId).get();
     companySettings = doc.exists ? doc.data() : {};
   }catch(e){ companySettings = companySettings || {}; }
   pendingLogo = undefined;
@@ -1474,7 +1486,7 @@ async function saveCompanySettings(){
   if(pendingLogo !== undefined) payload.logo = pendingLogo;             // '' clears it
   if(pendingSignature !== undefined) payload.signature = pendingSignature; // '' clears it
   try{
-    await db.collection('settings').doc('company').set(payload, {merge:true});
+    await db.collection('settings').doc(currentCompanyId).set(payload, {merge:true});
     companySettings = Object.assign({}, companySettings, payload);
     pendingLogo = undefined;
     pendingSignature = undefined;
@@ -1500,7 +1512,7 @@ function dismissBackupBanner(){ document.getElementById('backupBanner').style.di
 async function maybeAutoBackup(){
   if(currentRole !== 'admin') return;
   try{
-    const doc = await db.collection('settings').doc('company').get();
+    const doc = await db.collection('settings').doc(currentCompanyId).get();
     companySettings = doc.exists ? doc.data() : {};
   }catch(_){ return; }
   if(backupDue(companySettings)){
@@ -1518,7 +1530,7 @@ async function saveBackupSettings(){
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
   try{
-    await db.collection('settings').doc('company').set(payload, {merge:true});
+    await db.collection('settings').doc(currentCompanyId).set(payload, {merge:true});
     companySettings = Object.assign({}, companySettings, payload);
     toast('Backup schedule saved');
     maybeAutoBackup();
@@ -1532,40 +1544,44 @@ async function downloadFullBackup(fromSchedule){
     company:{}, sites:[], technicians:[], equipment:[], serviceEvents:[], monthlyChecks:[], calibrations:[], emailLog:[],
     traineeAssignments:[], logbookEntries:[], traineeCompetencies:[] };
   try{
-    const co = await db.collection('settings').doc('company').get();
+    const co = await db.collection('settings').doc(currentCompanyId).get();
     out.company = co.exists ? co.data() : {};
-    const siteSnap = await db.collection('sites').get();
+    const siteSnap = await db.collection('sites').where('companyId','==',currentCompanyId).get();
     out.sites = siteSnap.docs.map(d=>({id:d.id, ...d.data()}));
     const siteIds = out.sites.map(s=>s.id);
     try{
-      const techSnap = await db.collection('technicians').get();
+      const techSnap = await db.collection('technicians').where('companyId','==',currentCompanyId).get();
       out.technicians = techSnap.docs.map(d=>({id:d.id, ...d.data()}));
     }catch(_){}
     try{
-      const calSnap = await db.collection('calibrations').get();
+      const calSnap = await db.collection('calibrations').where('companyId','==',currentCompanyId).get();
       out.calibrations = calSnap.docs.map(d=>({id:d.id, ...d.data()}));
     }catch(_){}
     try{
-      const trSnap = await db.collection('traineeAssignments').get();
+      const trSnap = await db.collection('traineeAssignments').where('companyId','==',currentCompanyId).get();
       out.traineeAssignments = trSnap.docs.map(d=>({id:d.id, ...d.data()}));
     }catch(_){}
     try{
-      const lbSnap = await db.collection('logbookEntries').get();
+      const lbSnap = await db.collection('logbookEntries').where('companyId','==',currentCompanyId).get();
       out.logbookEntries = lbSnap.docs.map(d=>({id:d.id, ...d.data()}));
     }catch(_){}
     try{
-      const tcSnap = await db.collection('traineeCompetencies').get();
+      const tcSnap = await db.collection('traineeCompetencies').where('companyId','==',currentCompanyId).get();
       out.traineeCompetencies = tcSnap.docs.map(d=>({id:d.id, ...d.data()}));
     }catch(_){}
     for(const sid of siteIds){
-      const eq = await db.collection('equipment').where('siteId','==', sid).get();
+      // companyId is included alongside siteId on every query below — an
+      // admin who isn't personally in a site's assignedTo can only be proven
+      // to have access via the tenant check, and that check only validates a
+      // list query when companyId is one of the query's own filters.
+      const eq = await db.collection('equipment').where('siteId','==', sid).where('companyId','==',currentCompanyId).get();
       eq.forEach(d=>out.equipment.push({id:d.id, ...d.data()}));
-      const se = await db.collection('serviceEvents').where('siteId','==', sid).get();
+      const se = await db.collection('serviceEvents').where('siteId','==', sid).where('companyId','==',currentCompanyId).get();
       se.forEach(d=>out.serviceEvents.push({id:d.id, ...d.data()}));
-      const mc = await db.collection('monthlyChecks').where('siteId','==', sid).get();
+      const mc = await db.collection('monthlyChecks').where('siteId','==', sid).where('companyId','==',currentCompanyId).get();
       mc.forEach(d=>out.monthlyChecks.push({id:d.id, ...d.data()}));
       try{
-        const el = await db.collection('emailLog').where('siteId','==', sid).get();
+        const el = await db.collection('emailLog').where('siteId','==', sid).where('companyId','==',currentCompanyId).get();
         el.forEach(d=>out.emailLog.push({id:d.id, ...d.data()}));
       }catch(_){}
     }
@@ -1589,7 +1605,7 @@ async function downloadFullBackup(fromSchedule){
   // Mark this scheduled period satisfied.
   if(fromSchedule || (companySettings.backupEveryMonths|0)){
     try{
-      await db.collection('settings').doc('company').set(
+      await db.collection('settings').doc(currentCompanyId).set(
         { lastBackupPeriod: thisMonth(), lastBackupDate: today, lastBackupAt: firebase.firestore.FieldValue.serverTimestamp() },
         {merge:true});
       companySettings.lastBackupPeriod = thisMonth();
@@ -1661,7 +1677,7 @@ async function openCertificate(siteId, opts){
   await loadCompanySettings();
   let items = [];
   try{
-    const snap = await db.collection('equipment').where('siteId','==', siteId).get();
+    const snap = await db.collection('equipment').where('siteId','==', siteId).where('companyId','==',currentCompanyId).get();
     items = snap.docs.map(d=>({id:d.id, ...d.data()}));
   }catch(e){ say('Could not load equipment: ' + e.message); return opts.silent ? {error:e.message} : undefined; }
   items = items.filter(e=>!e.condemned);
@@ -1739,7 +1755,7 @@ async function openRegister(siteId, backView, opts){
   await loadCompanySettings();
   let items = [];
   try{
-    const snap = await db.collection('equipment').where('siteId','==', siteId).get();
+    const snap = await db.collection('equipment').where('siteId','==', siteId).where('companyId','==',currentCompanyId).get();
     items = snap.docs.map(d=>({id:d.id, ...d.data()}));
   }catch(e){ say('Could not load equipment: ' + e.message); return opts.silent ? {error:e.message} : undefined; }
 
@@ -1980,7 +1996,7 @@ async function renderEmailLog(siteId){
   if(!wrap) return;
   if(!siteId){ wrap.innerHTML = `<div class="empty">Choose a site above to see its email history.</div>`; return; }
   try{
-    const snap = await db.collection('emailLog').where('siteId','==', siteId).get();
+    const snap = await db.collection('emailLog').where('siteId','==', siteId).where('companyId','==',currentCompanyId).get();
     const rows = snap.docs.map(d=>d.data())
       .sort((a,b)=>(b.sentAtMs||0)-(a.sentAtMs||0))
       .slice(0,10);
@@ -2011,7 +2027,7 @@ let equipmentFilter = 'all';   // all | overdue | uninspected | failed
 
 function loadEquipmentForSite(siteId){
   if(unsubEquipment) unsubEquipment();
-  unsubEquipment = db.collection('equipment').where('siteId','==', siteId).onSnapshot(snap=>{
+  unsubEquipment = db.collection('equipment').where('siteId','==', siteId).where('companyId','==',currentCompanyId).onSnapshot(snap=>{
     equipmentCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
     equipmentCache.sort((a,b)=>(b.inspectionDate||'').localeCompare(a.inspectionDate||''));
     paintEquipment();
@@ -2136,7 +2152,7 @@ async function renderDueDashboard(){
   let items = [];
   try{
     for(let i=0; i<siteIds.length; i+=10){
-      const snap = await db.collection('equipment').where('siteId','in', siteIds.slice(i, i+10)).get();
+      const snap = await db.collection('equipment').where('siteId','in', siteIds.slice(i, i+10)).where('companyId','==',currentCompanyId).get();
       snap.forEach(d=>items.push({ id:d.id, ...d.data() }));
     }
   }catch(e){
@@ -2633,6 +2649,7 @@ async function saveEquipment(){
       toast('Equipment saved');
     } else {
       payload.siteId = currentSiteId;
+      payload.companyId = currentCompanyId;
       payload.createdBy = currentUser.uid;
       payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
       const newRef = await db.collection('equipment').add(payload);
@@ -2671,6 +2688,7 @@ async function logServiceEvent(equipmentId, p, e){
     await db.collection('serviceEvents').add({
       equipmentId,
       siteId: p.siteId || (e && e.siteId) || currentSiteId,
+      companyId: p.companyId || (e && e.companyId) || currentCompanyId,
       kind: eventKind(p),
       type: p.type||'', size: p.size||'', make: p.make||'', serial: p.serial||'', location: p.location||'',
       serviceDate: p.serviceDate||null, inspectionDate: p.inspectionDate||null, nextServiceDue: p.nextServiceDue||null,
@@ -2742,7 +2760,7 @@ function handlePhoto(evt){
 /* ---------- Technicians (admin only) ---------- */
 function renderTechnicians(){
   if(unsubTechs) unsubTechs();
-  unsubTechs = db.collection('technicians').where('role','==','technician').onSnapshot(snap=>{
+  unsubTechs = db.collection('technicians').where('role','==','technician').where('companyId','==',currentCompanyId).onSnapshot(snap=>{
     techsCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
     paintTechnicians();
   }, err=>{ toast('Could not load technicians: ' + err.message); });
@@ -2770,8 +2788,6 @@ function paintTechnicians(){
     </div>`;
   }).join('');
 }
-
-const TECH_EMAIL_DOMAIN = 'technicians.invalid';
 
 function openTechForm(id){
   editingTechId = id || null;
@@ -2827,20 +2843,13 @@ async function saveTechnician(){
   }
 
   if(!password || password.length < 6){ toast('Set a password of at least 6 characters'); return; }
-  const email = `tech${techNumber}@${TECH_EMAIL_DOMAIN}`;
   try{
-    const lookupExisting = await db.collection('technicianLookup').doc(techNumber).get();
-    if(lookupExisting.exists){ toast('That technician number is already in use'); return; }
-    const secondaryApp = firebase.initializeApp(firebaseConfig, 'Secondary_' + Date.now());
-    const cred = await secondaryApp.auth().createUserWithEmailAndPassword(email, password);
-    const newUid = cred.user.uid;
-    await secondaryApp.auth().signOut();
-    await secondaryApp.delete();
-    await db.collection('technicians').doc(newUid).set({
-      name, techNumber, email, role:'technician', saqcc, phone, active:true, canCalibrate,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    await db.collection('technicianLookup').doc(techNumber).set({ email });
+    // Account creation, the technicianLookup entry and the seat-limit check
+    // all happen server-side in this callable (Admin SDK) — a client can no
+    // longer write a technicians doc directly (see firestore.rules), because
+    // the seat count it's checked against can't be trusted to a security rule.
+    const call = firebase.functions().httpsCallable('createTechnician');
+    await call({ name, techNumber, password, saqcc, phone, canCalibrate, role:'technician' });
     toast('Technician created');
     showView('view-technicians');
   }catch(e){ toast('Error: ' + e.message); }
@@ -2894,7 +2903,7 @@ let traineeAssignmentsCache = {};   // { [traineeId]: assignment data }
 
 function renderTrainees(){
   if(unsubTrainees) unsubTrainees();
-  unsubTrainees = db.collection('technicians').where('role','==','trainee').onSnapshot(async snap=>{
+  unsubTrainees = db.collection('technicians').where('role','==','trainee').where('companyId','==',currentCompanyId).onSnapshot(async snap=>{
     traineesCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
     await loadTraineeAssignments();
     paintTrainees();
@@ -2904,7 +2913,7 @@ function renderTrainees(){
 async function loadTraineeAssignments(){
   traineeAssignmentsCache = {};
   try{
-    const snap = await db.collection('traineeAssignments').get();
+    const snap = await db.collection('traineeAssignments').where('companyId','==',currentCompanyId).get();
     snap.forEach(d=>{ traineeAssignmentsCache[d.id] = d.data(); });
   }catch(e){ /* best-effort — the list still renders without status pills */ }
 }
@@ -3079,21 +3088,13 @@ async function saveTrainee(){
   }
 
   if(!password || password.length < 6){ toast('Set a password of at least 6 characters'); return; }
-  const email = `tech${techNumber}@${TECH_EMAIL_DOMAIN}`;
   try{
-    const lookupExisting = await db.collection('technicianLookup').doc(techNumber).get();
-    if(lookupExisting.exists){ toast('That trainee/technician number is already in use'); return; }
-    const secondaryApp = firebase.initializeApp(firebaseConfig, 'Secondary_' + Date.now());
-    const cred = await secondaryApp.auth().createUserWithEmailAndPassword(email, password);
-    const newUid = cred.user.uid;
-    await secondaryApp.auth().signOut();
-    await secondaryApp.delete();
-    await db.collection('technicians').doc(newUid).set({
-      name, techNumber, email, role:'trainee', phone, active:true, traineeRegisteredDate: registeredDate,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    await db.collection('technicianLookup').doc(techNumber).set({ email });
-    await db.collection('traineeAssignments').doc(newUid).set(Object.assign({ status:'active',
+    // Account creation, the technicianLookup entry and the seat-limit check
+    // all happen server-side in this callable (Admin SDK) — see saveTechnician().
+    const call = firebase.functions().httpsCallable('createTechnician');
+    const result = await call({ name, techNumber, password, phone, role:'trainee', traineeRegisteredDate: registeredDate });
+    const newUid = result.data.uid;
+    await db.collection('traineeAssignments').doc(newUid).set(Object.assign({ status:'active', companyId: currentCompanyId,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: currentUser.uid }, assignmentPayload));
     toast('Trainee created');
     showView('view-trainees');
@@ -3125,7 +3126,7 @@ async function renderTraineeLogbookList(traineeId, containerId){
   if(!wrap) return;
   wrap.innerHTML = `<div class="empty">Loading…</div>`;
   try{
-    const snap = await db.collection('logbookEntries').where('traineeId','==', traineeId).get();
+    const snap = await db.collection('logbookEntries').where('traineeId','==', traineeId).where('companyId','==',currentCompanyId).get();
     const entries = snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
     if(entries.length===0){ wrap.innerHTML = `<div class="empty">No entries yet.</div>`; return; }
     wrap.innerHTML = entries.map(e=>{
@@ -3320,7 +3321,7 @@ async function addCompetencyObservation(traineeId, key, containerId){
     // a path to the nested map field; it just needs the document to already
     // exist, hence the harmless set({}, {merge:true}) first.
     const ref = db.collection('traineeCompetencies').doc(traineeId);
-    await ref.set({}, {merge:true});
+    await ref.set({companyId: currentCompanyId}, {merge:true});
     await ref.update({ ['items.'+key]: { observations: updated } });
     toast(updated.length >= COMPETENCY_REQUIRED_OBSERVATIONS ? 'Observation added — competency achieved' : `Observation added (${updated.length}/${COMPETENCY_REQUIRED_OBSERVATIONS})`);
   }catch(e){ toast('Error: ' + e.message); return; }
@@ -3341,7 +3342,7 @@ async function openTraineeLogbookReport(traineeId, backView){
   }catch(e){}
   let entries = [];
   try{
-    const snap = await db.collection('logbookEntries').where('traineeId','==', traineeId).get();
+    const snap = await db.collection('logbookEntries').where('traineeId','==', traineeId).where('companyId','==',currentCompanyId).get();
     entries = snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   }catch(e){ toast('Could not load logbook entries: ' + e.message); return; }
   let competencyItems = {};
@@ -3599,6 +3600,7 @@ async function saveLogbookEntry(){
     } else {
       payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
       payload.createdBy = currentUser.uid;
+      payload.companyId = currentCompanyId;
       await db.collection('logbookEntries').add(payload);
       toast('Entry saved');
     }
@@ -3719,7 +3721,7 @@ async function openPressureTestReport(){
   await loadCompanySettings();
   let items = [];
   try{
-    const snap = await db.collection('equipment').where('siteId','==', siteId).get();
+    const snap = await db.collection('equipment').where('siteId','==', siteId).where('companyId','==',currentCompanyId).get();
     items = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(e=>e.ptPerformed);
   }catch(e){ toast('Could not load equipment: ' + e.message); return; }
   items.sort((a,b)=>(a.location||'').localeCompare(b.location||'') || typeLabel(a.type).localeCompare(typeLabel(b.type)));
@@ -3763,7 +3765,7 @@ async function openRechargeReport(){
   await loadCompanySettings();
   let items = [];
   try{
-    const snap = await db.collection('equipment').where('siteId','==', siteId).get();
+    const snap = await db.collection('equipment').where('siteId','==', siteId).where('companyId','==',currentCompanyId).get();
     items = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(e=>e.rechargeRequired && e.rechargeDate);
   }catch(e){ toast('Could not load equipment: ' + e.message); return; }
   items.sort((a,b)=>(a.location||'').localeCompare(b.location||'') || typeLabel(a.type).localeCompare(typeLabel(b.type)));
@@ -3807,7 +3809,7 @@ function renderCalibrationView(){
   const tEl = document.getElementById('calTech');
   if(tEl && !tEl.value) tEl.value = currentProfile.name || '';
   if(unsubCal) unsubCal();
-  unsubCal = db.collection('calibrations').onSnapshot(snap=>{
+  unsubCal = db.collection('calibrations').where('companyId','==',currentCompanyId).onSnapshot(snap=>{
     calibrationsCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
     calibrationsCache.sort((a,b)=>(b.checkDate||'').localeCompare(a.checkDate||''));
     paintCalibrations();
@@ -3815,7 +3817,7 @@ function renderCalibrationView(){
 }
 async function loadCalibrations(){
   try{
-    const snap = await db.collection('calibrations').get();
+    const snap = await db.collection('calibrations').where('companyId','==',currentCompanyId).get();
     calibrationsCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
     calibrationsCache.sort((a,b)=>(b.checkDate||'').localeCompare(a.checkDate||''));
   }catch(_){}
@@ -3850,6 +3852,7 @@ async function saveCalibrationEntry(){
     technicianName: document.getElementById('calTech').value.trim() || currentProfile.name || '',
     technicianSaqcc: currentProfile.saqcc || '',
     createdBy: currentUser.uid,
+    companyId: currentCompanyId,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   };
   try{
@@ -3910,7 +3913,7 @@ function monthLabel(m){ const p = ym(m).split('-'); return p.length===2 ? `${MON
 
 async function loadMonthlyChecks(siteId){
   try{
-    const snap = await db.collection('monthlyChecks').where('siteId','==', siteId).get();
+    const snap = await db.collection('monthlyChecks').where('siteId','==', siteId).where('companyId','==',currentCompanyId).get();
     monthlyChecksCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
     monthlyChecksCache.sort((a,b)=>(b.month||'').localeCompare(a.month||''));
   }catch(_){ monthlyChecksCache = []; }
@@ -3926,7 +3929,7 @@ async function openMonthlyCheck(siteId, backView){
   // Make sure we have this site's equipment loaded
   if(!equipmentCache.length || equipmentCache[0].siteId !== siteId){
     try{
-      const snap = await db.collection('equipment').where('siteId','==', siteId).get();
+      const snap = await db.collection('equipment').where('siteId','==', siteId).where('companyId','==',currentCompanyId).get();
       equipmentCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
     }catch(_){}
   }
@@ -3992,6 +3995,7 @@ async function saveMonthlyCheck(){
   });
   const payload = {
     siteId: currentSiteId,
+    companyId: currentCompanyId,
     month,
     checkedByName: document.getElementById('monthlyBy').value.trim(),
     checkedBy: currentUser.uid,
@@ -4034,7 +4038,7 @@ async function openMonthlyLog(siteId, backView){
   await loadCompanySettings();
   let items = [];
   try{
-    const snap = await db.collection('equipment').where('siteId','==', siteId).get();
+    const snap = await db.collection('equipment').where('siteId','==', siteId).where('companyId','==',currentCompanyId).get();
     items = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(e=>!e.condemned);
   }catch(e){ toast('Could not load equipment: ' + e.message); return; }
   items.sort((a,b)=>(a.location||'').localeCompare(b.location||'') || typeLabel(a.type).localeCompare(typeLabel(b.type)));

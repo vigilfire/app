@@ -11,9 +11,12 @@
  */
 
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
+const crypto = require("crypto");
+const { PLAN_SEAT_LIMITS, VALID_PLANS } = require("./planConstants");
 
 // NB: @sparticuz/chromium, puppeteer-core and resend are require()d lazily
 // inside the handler, not here. Loading them at module scope pushes cold-start /
@@ -41,6 +44,31 @@ function emailReplyToOverride() {
 
 const MAX_DOCUMENTS = 3;
 const MAX_HTML_BYTES = 2 * 1024 * 1024; // 2 MB of HTML per document
+
+// Same fabricated domain the app has always used for a technician-number
+// login (there's no real inbox behind it — sign-in resolves the number to
+// this address via `technicianLookup`, never by the user typing an email).
+const TECH_EMAIL_DOMAIN = "technicians.invalid";
+
+// The one account allowed to ever hold the `superadmin` custom claim, i.e.
+// the only account that can reach the internal /admin section. Set via
+// SUPERADMIN_EMAIL in functions/.env if you ever need to change it without
+// editing source.
+function superadminEmail() {
+  return (process.env.SUPERADMIN_EMAIL || "").trim() || "sapphorion@gmail.com";
+}
+
+async function requireSuperadmin(request) {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Sign in first.");
+  }
+  if (request.auth.token.role !== "superadmin") {
+    throw new HttpsError(
+      "permission-denied",
+      "This account is not authorised for the admin section."
+    );
+  }
+}
 
 async function renderPdf(html, landscape) {
   const chromium = require("@sparticuz/chromium");
@@ -119,13 +147,22 @@ exports.emailSiteDocuments = onCall(
       throw new HttpsError("not-found", "Site not found.");
     }
     const site = siteSnap.data();
+    if (site.companyId !== techData.companyId) {
+      // An admin may only email documents for a site in their own company —
+      // otherwise this callable would let any company's admin reach any
+      // other company's sites, since role alone isn't tenant-scoped.
+      throw new HttpsError(
+        "permission-denied",
+        "Only an administrator can email site documents."
+      );
+    }
 
     let company = {};
     try {
-      const c = await db.collection("settings").doc("company").get();
+      const c = await db.collection("settings").doc(site.companyId || "").get();
       if (c.exists) company = c.data();
     } catch (e) {
-      logger.warn("Could not read settings/company for the sender name", e);
+      logger.warn("Could not read the company letterhead for the sender name", e);
     }
 
     // Render each document to a PDF attachment.
@@ -204,6 +241,7 @@ exports.emailSiteDocuments = onCall(
     // Audit entry — written whether or not the provider accepted the message.
     const logRef = await db.collection("emailLog").add({
       siteId,
+      companyId: site.companyId || null,
       siteName: site.name || "",
       sentBy: uid,
       sentByName: techData.name || "",
@@ -227,3 +265,233 @@ exports.emailSiteDocuments = onCall(
     return { status, emailLogId: logRef.id, providerMessageId };
   }
 );
+
+/* ========================================================================
+   Internal /admin section (separate admin.html, superadmin-only — see
+   SETUP.md). Three callables: grant the one-time custom claim to the
+   operator's own account, provision a new tenant company, and provision a
+   technician while enforcing that company's seat limit.
+   ======================================================================== */
+
+exports.grantSuperadmin = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Sign in first.");
+  }
+  const email = (request.auth.token.email || "").toLowerCase();
+  if (email !== superadminEmail().toLowerCase()) {
+    throw new HttpsError(
+      "permission-denied",
+      "This account is not authorised for the admin section."
+    );
+  }
+  await admin.auth().setCustomUserClaims(request.auth.uid, { role: "superadmin" });
+  return { granted: true };
+});
+
+exports.createCompany = onCall({ secrets: [RESEND_API_KEY] }, async (request) => {
+  await requireSuperadmin(request);
+
+  const data = request.data || {};
+  const name = String(data.name || "").trim();
+  const adminEmail = String(data.adminEmail || "").trim();
+  const adminName = String(data.adminName || "").trim();
+  const plan = String(data.plan || "starter").trim();
+
+  if (!name) throw new HttpsError("invalid-argument", "Company name is required.");
+  if (!/^\S+@\S+\.\S+$/.test(adminEmail)) {
+    throw new HttpsError("invalid-argument", "A valid admin email is required.");
+  }
+  if (!adminName) throw new HttpsError("invalid-argument", "Admin name is required.");
+  if (!VALID_PLANS.includes(plan)) throw new HttpsError("invalid-argument", "Unknown plan.");
+
+  const db = admin.firestore();
+  const companyRef = db.collection("companies").doc();
+  const companyId = companyRef.id;
+
+  // Never emailed or returned to the caller — the admin sets their own
+  // password via the reset link sent below, same as a normal "forgot
+  // password" flow.
+  const tempPassword = crypto.randomBytes(24).toString("base64url");
+  let userRecord;
+  try {
+    userRecord = await admin.auth().createUser({
+      email: adminEmail,
+      password: tempPassword,
+      displayName: adminName,
+    });
+  } catch (e) {
+    throw new HttpsError(
+      "already-exists",
+      e.message || "Could not create the admin account — that email may already be in use."
+    );
+  }
+  await admin.auth().setCustomUserClaims(userRecord.uid, { companyId, role: "admin" });
+
+  const batch = db.batch();
+  batch.set(companyRef, {
+    name,
+    plan,
+    seatLimit: PLAN_SEAT_LIMITS[plan],
+    status: "trialing",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    notes: "",
+    usage: { storageBytes: 0, emailsSentThisMonth: 0 },
+    lastActivityAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  batch.set(db.collection("technicians").doc(userRecord.uid), {
+    name: adminName,
+    email: adminEmail,
+    role: "admin",
+    companyId,
+    active: true,
+    canCalibrate: false,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  await batch.commit();
+
+  // Best-effort: the company and account already exist even if this send
+  // fails — the operator can trigger a normal Firebase Console password
+  // reset instead.
+  let emailWarning = null;
+  try {
+    const resetLink = await admin.auth().generatePasswordResetLink(adminEmail);
+    const { Resend } = require("resend");
+    const resend = new Resend(RESEND_API_KEY.value());
+    const sendRes = await resend.emails.send({
+      from: emailFrom(),
+      to: [adminEmail],
+      subject: `You're set up on Vigil Fire — ${name}`,
+      text: [
+        `Hi ${adminName},`,
+        "",
+        `An administrator account for "${name}" has been created on Vigil Fire.`,
+        "Set your password here, then sign in at the app with this email address:",
+        resetLink,
+      ].join("\n"),
+    });
+    if (sendRes.error) emailWarning = sendRes.error.message || String(sendRes.error);
+  } catch (e) {
+    emailWarning = e.message || String(e);
+    logger.error("createCompany: could not email the new admin", e);
+  }
+
+  return { companyId, uid: userRecord.uid, emailWarning };
+});
+
+exports.createTechnician = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "Sign in first.");
+  }
+  const db = admin.firestore();
+
+  const callerSnap = await db.collection("technicians").doc(uid).get();
+  if (!callerSnap.exists || callerSnap.data().role !== "admin") {
+    throw new HttpsError("permission-denied", "Only an administrator can add technicians.");
+  }
+  const companyId = callerSnap.data().companyId;
+  if (!companyId) {
+    throw new HttpsError("failed-precondition", "Your account has no company on file.");
+  }
+
+  const data = request.data || {};
+  const name = String(data.name || "").trim();
+  const techNumber = String(data.techNumber || "").trim();
+  const password = String(data.password || "");
+  const saqcc = String(data.saqcc || "").trim();
+  const phone = String(data.phone || "").trim();
+  const canCalibrate = !!data.canCalibrate;
+  const role = data.role === "trainee" ? "trainee" : "technician";
+  const traineeRegisteredDate = role === "trainee" ? data.traineeRegisteredDate || null : null;
+
+  if (!name || !techNumber) {
+    throw new HttpsError("invalid-argument", "Name and technician number are required.");
+  }
+  if (!password || password.length < 6) {
+    throw new HttpsError("invalid-argument", "Set a password of at least 6 characters.");
+  }
+
+  const lookupRef = db.collection("technicianLookup").doc(techNumber);
+  const lookupSnap = await lookupRef.get();
+  if (lookupSnap.exists) {
+    throw new HttpsError("already-exists", "That technician number is already in use.");
+  }
+
+  // Seat-limit check. This has to live here, not in a Firestore rule: a rule
+  // can restrict a single write but can't reliably count how many
+  // technicians a company already has before allowing the next one.
+  const companySnap = await db.collection("companies").doc(companyId).get();
+  const seatLimit = companySnap.exists ? companySnap.data().seatLimit : undefined;
+  if (seatLimit !== null && seatLimit !== undefined) {
+    const countSnap = await db
+      .collection("technicians")
+      .where("companyId", "==", companyId)
+      .count()
+      .get();
+    if (countSnap.data().count >= seatLimit) {
+      throw new HttpsError(
+        "resource-exhausted",
+        `Seat limit reached (${seatLimit}). Upgrade the plan or deactivate a technician first.`
+      );
+    }
+  }
+
+  const email = `tech${techNumber}@${TECH_EMAIL_DOMAIN}`;
+  let userRecord;
+  try {
+    userRecord = await admin.auth().createUser({ email, password, displayName: name });
+  } catch (e) {
+    throw new HttpsError("already-exists", e.message || "Could not create the account.");
+  }
+
+  const batch = db.batch();
+  batch.set(db.collection("technicians").doc(userRecord.uid), {
+    name,
+    techNumber,
+    email,
+    role,
+    saqcc,
+    phone,
+    active: true,
+    canCalibrate,
+    companyId,
+    ...(traineeRegisteredDate ? { traineeRegisteredDate } : {}),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  batch.set(lookupRef, { email });
+  await batch.commit();
+
+  return { uid: userRecord.uid };
+});
+
+/* ---------- Company `lastActivityAt` ----------
+   Bumped whenever any user in a company writes to one of these tenant-scoped
+   collections, so /admin's "active this month" figure reflects real usage.
+   `companies` itself is superadmin/Cloud-Function-only (see firestore.rules),
+   so this can't be a client write — it has to be a trigger. One handler
+   registered per collection; each is a cheap no-op unless the written
+   document carries a companyId. */
+const ACTIVITY_COLLECTIONS = [
+  "sites", "equipment", "logbookEntries", "calibrations",
+  "monthlyChecks", "serviceEvents", "traineeAssignments",
+  "technicians", "emailLog", "traineeCompetencies",
+];
+ACTIVITY_COLLECTIONS.forEach((collectionId) => {
+  exports[`bumpActivity_${collectionId}`] = onDocumentWritten(
+    `${collectionId}/{docId}`,
+    async (event) => {
+      const after = event.data && event.data.after;
+      const before = event.data && event.data.before;
+      const doc =
+        (after && after.exists && after.data()) ||
+        (before && before.exists && before.data());
+      const companyId = doc && doc.companyId;
+      if (!companyId) return;
+      await admin
+        .firestore()
+        .collection("companies")
+        .doc(companyId)
+        .set({ lastActivityAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    }
+  );
+});

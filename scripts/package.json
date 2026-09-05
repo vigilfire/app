@@ -1,0 +1,8 @@
+{
+  "name": "vigil-fire-scripts",
+  "private": true,
+  "description": "One-off local admin scripts — never deployed, run by hand from a developer machine with a service-account key.",
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}

@@ -9,3 +9,9 @@ firebase-debug*.log
 firestore-debug*.log
 ui-debug*.log
 *.local
+
+# Local admin scripts — never deployed, and a service-account key must never
+# be committed (it's a live, unrevoked Firebase Admin SDK credential).
+scripts/node_modules/
+scripts/*serviceAccount*.json
+scripts/*.key.json

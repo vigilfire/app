@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Vigil Fire — Admin</title>
+
+<!-- Internal operator dashboard. Deliberately separate from index.html (the
+     customer-facing app) — this is not linked from it and isn't part of the
+     product. Access is gated by the `superadmin` custom claim, enforced both
+     here (UI) and in firestore.rules (the real gate). See SETUP.md. -->
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+
+<style>
+  :root{
+    --ink:#17191C; --ink-soft:#3F454C; --paper:#EEF1F4; --paper-dim:#E1E5EA;
+    --surface:#FFFFFF; --header:#1A1D21; --red:#C8102E; --red-dark:#8F0B21;
+    --amber:#A85D00; --amber-bg:#FAEBCF; --green:#1C7A46; --green-bg:#E0EFE7;
+    --grey:#63696F; --gray-bg:#E7E9EB; --line:#D5D9DE; --line-strong:#BFC5CC; --radius:10px;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--paper); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; line-height:1.5;}
+  h1,h2,h3{margin:0 0 4px; font-weight:700; letter-spacing:-0.01em;}
+  a{color:inherit;}
+  header.top{position:sticky; top:0; z-index:10; background:var(--header); color:#fff; padding:12px 20px;
+    display:flex; align-items:center; justify-content:space-between; border-bottom:3px solid var(--red);}
+  header.top .t1{font-weight:700; font-size:0.95rem; letter-spacing:0.05em; text-transform:uppercase;}
+  header.top .t2{font-size:0.68rem; color:#9AA0A6; margin-top:1px;}
+  header.top button{background:none; border:1px solid rgba(255,255,255,0.28); color:#fff; border-radius:6px;
+    padding:6px 11px; font-size:0.72rem; font-weight:600; cursor:pointer;}
+  main{max-width:1000px; margin:0 auto; padding:20px;}
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-bottom:16px;}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:7px; background:var(--red); color:#fff;
+    border:none; border-radius:8px; padding:10px 16px; font-size:0.9rem; font-weight:650; cursor:pointer;}
+  .btn:active{background:var(--red-dark);}
+  .btn.secondary{background:var(--surface); color:var(--ink); border:1px solid var(--line-strong);}
+  .btn.secondary:active{background:var(--paper-dim);}
+  label{display:block; font-size:0.72rem; font-weight:700; color:var(--grey); margin:12px 0 5px; text-transform:uppercase; letter-spacing:0.06em;}
+  label:first-child{margin-top:0;}
+  input, select, textarea{width:100%; padding:10px 12px; font-size:0.95rem; border:1px solid var(--line-strong);
+    border-radius:7px; background:var(--paper); color:var(--ink); font-family:inherit;}
+  textarea{resize:vertical; min-height:70px;}
+  input:focus, select:focus, textarea:focus{outline:none; border-color:var(--red);}
+  .hint{font-size:0.78rem; color:var(--grey); margin-top:6px; line-height:1.45;}
+  .row{display:flex; gap:12px;} .row > *{flex:1;}
+  .stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:16px;}
+  .stat{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px;}
+  .stat .n{font-size:1.6rem; font-weight:700;}
+  .stat .l{font-size:0.72rem; color:var(--grey); text-transform:uppercase; letter-spacing:0.05em; margin-top:2px;}
+  table{width:100%; border-collapse:collapse; font-size:0.88rem;}
+  th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--line);}
+  th{font-size:0.68rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--grey);}
+  tr.row-link{cursor:pointer;}
+  tr.row-link:hover{background:var(--paper-dim);}
+  .badge{display:inline-block; font-size:0.7rem; font-weight:700; padding:3px 9px; border-radius:12px; text-transform:uppercase; letter-spacing:0.03em;}
+  .badge.plan-starter{background:var(--gray-bg); color:var(--ink-soft);}
+  .badge.plan-growth{background:#DCEBFA; color:#1A5A96;}
+  .badge.plan-business{background:#EBE1FA; color:#5A2D9C;}
+  .badge.status-active{background:var(--green-bg); color:var(--green);}
+  .badge.status-trialing{background:var(--amber-bg); color:var(--amber);}
+  .badge.status-past_due{background:#FBE1E4; color:var(--red-dark);}
+  .badge.status-canceled{background:var(--gray-bg); color:var(--grey);}
+  .backbar{display:flex; align-items:center; gap:10px; margin-bottom:16px;}
+  .backbar button{background:var(--surface); border:1px solid var(--line-strong); border-radius:7px; width:34px; height:34px; cursor:pointer;}
+  .section-title{display:flex; align-items:center; justify-content:space-between; margin:20px 0 10px;}
+  .section-title h2{font-size:0.95rem; text-transform:uppercase; letter-spacing:0.04em;}
+  .empty{text-align:center; padding:30px; color:var(--grey); font-size:0.88rem;}
+  .kv{display:flex; justify-content:space-between; gap:12px; padding:7px 0; border-bottom:1px solid var(--line); font-size:0.9rem;}
+  .kv:last-child{border-bottom:none;}
+  .kv .k{color:var(--grey); font-weight:700; text-transform:uppercase; font-size:0.66rem; letter-spacing:0.05em;}
+  .kv .v{text-align:right;}
+  .modal-backdrop{position:fixed; inset:0; background:rgba(23,25,28,0.5); display:flex; align-items:center;
+    justify-content:center; z-index:30; padding:20px;}
+  .modal{background:var(--surface); border-radius:var(--radius); padding:20px; width:100%; max-width:420px; max-height:90vh; overflow:auto;}
+  #toast{position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--ink); color:#fff;
+    padding:11px 18px; border-radius:8px; font-size:0.85rem; font-weight:600; opacity:0; pointer-events:none;
+    transition:opacity 0.2s ease, transform 0.2s ease; z-index:50; box-shadow:0 6px 24px rgba(0,0,0,0.25);}
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  #loginScreen, #accessDenied{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; background:var(--header);}
+  #loginScreen .card, #accessDenied .card{width:100%; max-width:360px;}
+  #loginScreen h1, #accessDenied h1{text-align:center; font-size:1.05rem; text-transform:uppercase; letter-spacing:0.06em;}
+  #loginError{color:var(--red-dark); font-size:0.82rem; margin-top:10px; display:none;}
+  [hidden]{display:none !important;}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="card">
+    <h1>Vigil Fire — Admin</h1>
+    <label>Email</label>
+    <input id="loginEmail" type="email" placeholder="you@example.com">
+    <label>Password</label>
+    <input id="loginPassword" type="password" placeholder="••••••••">
+    <button class="btn" style="width:100%; margin-top:16px;" onclick="doLogin()">Sign in</button>
+    <div id="loginError"></div>
+  </div>
+</div>
+
+<div id="accessDenied" hidden>
+  <div class="card">
+    <h1>Not authorised</h1>
+    <p class="hint" style="text-align:center;">This account is signed in but doesn't hold the internal admin claim.</p>
+    <button class="btn" style="width:100%;" onclick="tryGrantSuperadmin()">Grant myself admin access</button>
+    <button class="btn secondary" style="width:100%; margin-top:10px;" onclick="doLogout()">Sign out</button>
+    <div class="hint" id="grantHint" style="text-align:center;"></div>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header class="top">
+    <div><div class="t1">Vigil Fire</div><div class="t2">Internal admin</div></div>
+    <button onclick="doLogout()">Log out</button>
+  </header>
+  <main>
+    <!-- ===== Companies list ===== -->
+    <section id="view-list">
+      <div class="stats">
+        <div class="stat"><div class="n" id="statTotal">—</div><div class="l">Total companies</div></div>
+        <div class="stat"><div class="n" id="statActive">—</div><div class="l">Active this month</div></div>
+        <div class="stat"><div class="n" id="statMrr">—</div><div class="l">MRR</div></div>
+      </div>
+      <div class="section-title"><h2>Companies</h2><button class="btn" onclick="openAddCompany()">+ Add company</button></div>
+      <div class="card" style="padding:0; overflow-x:auto;">
+        <table>
+          <thead><tr><th>Name</th><th>Plan</th><th>Seats</th><th>Status</th></tr></thead>
+          <tbody id="companiesBody"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===== Company detail ===== -->
+    <section id="view-detail" hidden>
+      <div class="backbar"><button onclick="location.hash='#/'">←</button><h2 id="detailName">Company</h2></div>
+      <div class="card">
+        <div class="kv"><div class="k">Created</div><div class="v" id="detailCreated">—</div></div>
+        <div class="kv"><div class="k">Seats</div><div class="v" id="detailSeats">—</div></div>
+        <div class="row" style="margin-top:12px;">
+          <div>
+            <label style="margin-top:0;">Plan</label>
+            <select id="detailPlanSelect" onchange="onDetailPlanChange()">
+              <option value="starter">Starter</option>
+              <option value="growth">Growth</option>
+              <option value="business">Business</option>
+            </select>
+          </div>
+          <div>
+            <label style="margin-top:0;">Status</label>
+            <select id="detailStatusSelect" onchange="onDetailStatusChange()">
+              <option value="trialing">Trialing</option>
+              <option value="active">Active</option>
+              <option value="past_due">Past due</option>
+              <option value="canceled">Canceled</option>
+            </select>
+          </div>
+        </div>
+        <label>Notes <span style="text-transform:none; font-weight:500;">(admin-only, saves when you click away)</span></label>
+        <textarea id="detailNotes" onblur="onDetailNotesBlur()" placeholder="Internal notes about this account…"></textarea>
+      </div>
+
+      <div class="section-title"><h2>Technicians</h2></div>
+      <div class="card" style="padding:0; overflow-x:auto;">
+        <table><thead><tr><th>Name</th><th>Role</th><th>Last login</th></tr></thead><tbody id="detailTechBody"></tbody></table>
+      </div>
+
+      <div class="section-title"><h2>Sites</h2></div>
+      <div class="card" style="padding:0; overflow-x:auto;">
+        <table><thead><tr><th>Site</th><th>Equipment</th></tr></thead><tbody id="detailSitesBody"></tbody></table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="addCompanyModal" class="modal-backdrop" hidden>
+  <div class="modal">
+    <h2>Add company</h2>
+    <label style="margin-top:0;">Company name</label>
+    <input id="acName" placeholder="e.g. Riverstone Fire Services">
+    <label>Admin name</label>
+    <input id="acAdminName" placeholder="e.g. Jane Dlamini">
+    <label>Admin email</label>
+    <input id="acAdminEmail" type="email" placeholder="jane@example.co.za">
+    <label>Starting plan</label>
+    <select id="acPlan">
+      <option value="starter">Starter</option>
+      <option value="growth">Growth</option>
+      <option value="business">Business</option>
+    </select>
+    <div class="hint">Creates the company, the first admin account, and emails them a link to set their password.</div>
+    <div class="row" style="margin-top:16px;">
+      <button class="btn secondary" onclick="closeAddCompany()">Cancel</button>
+      <button class="btn" id="acSubmitBtn" onclick="submitAddCompany()">Create</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* =========================================================
+   Firebase config — same public web config as index.html
+   (this is a public client identifier, not a secret).
+   ========================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyC5PkDAAIOXW52kvSVByDtNvP8Vi715JZE",
+  authDomain: "vigil-fire.firebaseapp.com",
+  projectId: "vigil-fire",
+  storageBucket: "vigil-fire.firebasestorage.app",
+  messagingSenderId: "517524823537",
+  appId: "1:517524823537:web:8260e892ddf1bc7d20b850",
+  measurementId: "G-P4GXNXNLSY"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// Keep in sync with functions/planConstants.js — no shared build step exists
+// between this static page and the Cloud Functions source, so both copies
+// must be updated together when a price or seat default changes.
+const PLAN_SEAT_LIMITS = { starter: 3, growth: 10, business: null };
+const PLAN_MONTHLY_PRICE = { starter: 499, growth: 1299, business: 2999 };
+const PLAN_LABEL = { starter: 'Starter', growth: 'Growth', business: 'Business' };
+const STATUS_LABEL = { trialing: 'Trialing', active: 'Active', past_due: 'Past due', canceled: 'Canceled' };
+
+function escapeHtml(s){
+  if(s===undefined || s===null || s==='') return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+let toastTimer;
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 2500);
+}
+function fmtDate(ts){
+  if(!ts) return '—';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
+}
+
+/* ---------- Auth + the superadmin claim ---------- */
+let companiesCache = [];
+let unsubCompanies = null;
+
+function doLogin(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
+  if(!email || !password){ errEl.textContent = 'Enter an email and password.'; errEl.style.display='block'; return; }
+  auth.signInWithEmailAndPassword(email, password).catch(e=>{
+    errEl.textContent = e.message; errEl.style.display = 'block';
+  });
+}
+function doLogout(){ auth.signOut(); }
+
+async function tryGrantSuperadmin(){
+  const hint = document.getElementById('grantHint');
+  hint.textContent = 'Requesting…';
+  try{
+    const call = firebase.functions().httpsCallable('grantSuperadmin');
+    await call();
+    await auth.currentUser.getIdToken(true); // force-refresh so the new claim is on the token
+    await routeAfterAuth();
+  }catch(e){
+    hint.textContent = e.message || 'Could not grant access.';
+  }
+}
+
+auth.onAuthStateChanged(async (user)=>{
+  if(unsubCompanies){ unsubCompanies(); unsubCompanies = null; }
+  document.getElementById('loginScreen').style.display = user ? 'none' : 'flex';
+  document.getElementById('accessDenied').hidden = true;
+  document.getElementById('app').hidden = true;
+  if(!user) return;
+  await routeAfterAuth();
+});
+
+async function routeAfterAuth(){
+  const user = auth.currentUser;
+  if(!user) return;
+  const idTokenResult = await user.getIdTokenResult();
+  if(idTokenResult.claims.role !== 'superadmin'){
+    document.getElementById('accessDenied').hidden = false;
+    document.getElementById('app').hidden = true;
+    return;
+  }
+  document.getElementById('accessDenied').hidden = true;
+  document.getElementById('app').hidden = false;
+  startCompaniesListener();
+  onHashChange();
+}
+
+/* ---------- Hash router: #/  and  #/companies/:id ---------- */
+window.addEventListener('hashchange', onHashChange);
+function onHashChange(){
+  if(document.getElementById('app').hidden) return;
+  const hash = location.hash.replace(/^#/, '');
+  const m = hash.match(/^\/companies\/([^/]+)$/);
+  if(m){
+    document.getElementById('view-list').hidden = true;
+    document.getElementById('view-detail').hidden = false;
+    openCompanyDetail(m[1]);
+  } else {
+    document.getElementById('view-detail').hidden = true;
+    document.getElementById('view-list').hidden = false;
+  }
+}
+
+/* ---------- Companies list ---------- */
+function startCompaniesListener(){
+  if(unsubCompanies) return;
+  unsubCompanies = db.collection('companies').onSnapshot(async snap=>{
+    companiesCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    await paintCompaniesList();
+  }, err=>{ toast('Could not load companies: ' + err.message); });
+}
+
+async function seatCountFor(companyId){
+  try{
+    const countSnap = await db.collection('technicians').where('companyId','==',companyId).count().get();
+    return countSnap.data().count;
+  }catch(e){ return null; }
+}
+
+async function paintCompaniesList(){
+  const now = Date.now();
+  const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+  let activeThisMonth = 0;
+  // MRR counts only companies currently being billed — trialing and
+  // canceled accounts contribute nothing.
+  let mrr = 0;
+  companiesCache.forEach(c=>{
+    const last = c.lastActivityAt && (c.lastActivityAt.toDate ? c.lastActivityAt.toDate().getTime() : new Date(c.lastActivityAt).getTime());
+    if(last && (now - last) <= THIRTY_DAYS) activeThisMonth++;
+    if(c.status === 'active' || c.status === 'past_due') mrr += PLAN_MONTHLY_PRICE[c.plan] || 0;
+  });
+  document.getElementById('statTotal').textContent = companiesCache.length;
+  document.getElementById('statActive').textContent = activeThisMonth;
+  document.getElementById('statMrr').textContent = mrr ? ('R ' + mrr.toLocaleString()) : '—';
+
+  const body = document.getElementById('companiesBody');
+  if(companiesCache.length === 0){
+    body.innerHTML = `<tr><td colspan="4" class="empty">No companies yet.</td></tr>`;
+    return;
+  }
+  const seatCounts = await Promise.all(companiesCache.map(c=>seatCountFor(c.id)));
+  body.innerHTML = companiesCache.map((c,i)=>{
+    const limit = (c.seatLimit===null || c.seatLimit===undefined) ? '∞' : c.seatLimit;
+    const used = seatCounts[i] === null ? '?' : seatCounts[i];
+    return `<tr class="row-link" onclick="location.hash='#/companies/${c.id}'">
+      <td>${escapeHtml(c.name)}</td>
+      <td><span class="badge plan-${c.plan}">${PLAN_LABEL[c.plan]||c.plan}</span></td>
+      <td>${used} / ${limit}</td>
+      <td><span class="badge status-${c.status}">${STATUS_LABEL[c.status]||c.status}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ---------- Add company ---------- */
+function openAddCompany(){
+  ['acName','acAdminName','acAdminEmail'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('acPlan').value = 'starter';
+  document.getElementById('addCompanyModal').hidden = false;
+}
+function closeAddCompany(){ document.getElementById('addCompanyModal').hidden = true; }
+async function submitAddCompany(){
+  const name = document.getElementById('acName').value.trim();
+  const adminName = document.getElementById('acAdminName').value.trim();
+  const adminEmail = document.getElementById('acAdminEmail').value.trim();
+  const plan = document.getElementById('acPlan').value;
+  if(!name || !adminName || !adminEmail){ toast('Fill in all fields'); return; }
+  const btn = document.getElementById('acSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Creating…';
+  try{
+    const call = firebase.functions().httpsCallable('createCompany');
+    const result = await call({ name, adminName, adminEmail, plan });
+    if(result.data.emailWarning){
+      toast('Company created, but the invite email failed: ' + result.data.emailWarning);
+    } else {
+      toast('Company created — invite email sent');
+    }
+    closeAddCompany();
+  }catch(e){
+    toast('Error: ' + e.message);
+  }finally{
+    btn.disabled = false; btn.textContent = 'Create';
+  }
+}
+
+/* ---------- Company detail ---------- */
+let detailCompanyId = null;
+async function openCompanyDetail(companyId){
+  detailCompanyId = companyId;
+  document.getElementById('detailName').textContent = 'Loading…';
+  let company;
+  try{
+    const snap = await db.collection('companies').doc(companyId).get();
+    if(!snap.exists){ toast('Company not found'); location.hash = '#/'; return; }
+    company = snap.data();
+  }catch(e){ toast('Error: ' + e.message); return; }
+
+  document.getElementById('detailName').textContent = company.name || '(unnamed)';
+  document.getElementById('detailCreated').textContent = fmtDate(company.createdAt);
+  document.getElementById('detailPlanSelect').value = company.plan || 'starter';
+  document.getElementById('detailStatusSelect').value = company.status || 'trialing';
+  document.getElementById('detailNotes').value = company.notes || '';
+
+  const used = await seatCountFor(companyId);
+  const limit = (company.seatLimit===null || company.seatLimit===undefined) ? '∞' : company.seatLimit;
+  document.getElementById('detailSeats').textContent = `${used===null?'?':used} / ${limit}`;
+
+  await paintDetailTechnicians(companyId);
+  await paintDetailSites(companyId);
+}
+
+async function onDetailPlanChange(){
+  if(!detailCompanyId) return;
+  const plan = document.getElementById('detailPlanSelect').value;
+  try{
+    await db.collection('companies').doc(detailCompanyId).update({ plan });
+    toast('Plan updated');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+async function onDetailStatusChange(){
+  if(!detailCompanyId) return;
+  const status = document.getElementById('detailStatusSelect').value;
+  try{
+    await db.collection('companies').doc(detailCompanyId).update({ status });
+    toast('Status updated');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+async function onDetailNotesBlur(){
+  if(!detailCompanyId) return;
+  const notes = document.getElementById('detailNotes').value;
+  try{
+    await db.collection('companies').doc(detailCompanyId).update({ notes });
+  }catch(e){ toast('Error saving notes: ' + e.message); }
+}
+
+async function paintDetailTechnicians(companyId){
+  const body = document.getElementById('detailTechBody');
+  body.innerHTML = `<tr><td colspan="3" class="empty">Loading…</td></tr>`;
+  try{
+    const snap = await db.collection('technicians').where('companyId','==',companyId).get();
+    const techs = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    if(techs.length === 0){ body.innerHTML = `<tr><td colspan="3" class="empty">No technicians yet.</td></tr>`; return; }
+    // `lastLogin` isn't tracked by the app today — shown as "—" until it is.
+    body.innerHTML = techs.map(t=>`<tr>
+      <td>${escapeHtml(t.name)}${t.active===false?' <span class="hint">(deactivated)</span>':''}</td>
+      <td>${escapeHtml(t.role||'')}</td>
+      <td>${t.lastLoginAt ? fmtDate(t.lastLoginAt) : '—'}</td>
+    </tr>`).join('');
+  }catch(e){ body.innerHTML = `<tr><td colspan="3" class="empty">${escapeHtml(e.message)}</td></tr>`; }
+}
+
+async function paintDetailSites(companyId){
+  const body = document.getElementById('detailSitesBody');
+  body.innerHTML = `<tr><td colspan="2" class="empty">Loading…</td></tr>`;
+  try{
+    const snap = await db.collection('sites').where('companyId','==',companyId).get();
+    const sites = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    if(sites.length === 0){ body.innerHTML = `<tr><td colspan="2" class="empty">No sites yet.</td></tr>`; return; }
+    const counts = await Promise.all(sites.map(async s=>{
+      try{
+        const c = await db.collection('equipment').where('siteId','==',s.id).count().get();
+        return c.data().count;
+      }catch(e){ return null; }
+    }));
+    body.innerHTML = sites.map((s,i)=>`<tr><td>${escapeHtml(s.name)}</td><td>${counts[i]===null?'?':counts[i]}</td></tr>`).join('');
+  }catch(e){ body.innerHTML = `<tr><td colspan="2" class="empty">${escapeHtml(e.message)}</td></tr>`; }
+}
+</script>
+</body>
+</html>

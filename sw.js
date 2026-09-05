@@ -15,7 +15,7 @@
    Bump CACHE (e.g. -v2) whenever index.html or sw.js changes so clients pick
    up the new version. */
 
-const CACHE = 'vigil-fire-v2';
+const CACHE = 'vigil-fire-v3';
 
 const LOCAL_SHELL = [
   './index.html',
@@ -54,7 +54,12 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
 
   // App navigations: try the network, fall back to the cached shell offline.
+  // admin.html (the internal, superadmin-only tool) is excluded on purpose —
+  // it lives in the same directory but has no offline story of its own, so a
+  // failed load there should show the browser's normal offline error, not
+  // silently serve the customer-facing app instead.
   if (req.mode === 'navigate') {
+    if (new URL(req.url).pathname.endsWith('/admin.html')) return;
     event.respondWith(fetch(req).catch(() => caches.match('./index.html')));
     return;
   }

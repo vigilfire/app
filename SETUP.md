@@ -56,6 +56,7 @@ The app has no public sign-up screen on purpose — only an admin can create log
    | name | string | Your name |
    | email | string | The email you used above |
    | role | string | `admin` |
+   | companyId | string | `default` (any short string — it just needs to be the same value on every document you create for this company; see "Internal admin section" below if you don't need multi-tenancy at all) |
 7. Click **Save**
 
 ## 7. Open the app
@@ -85,7 +86,7 @@ You're now the administrator. From here, use the **Techs** tab to create technic
 - The **Due** tab (bottom bar, everyone) lists equipment across your sites that is overdue or falls due within 30 days — never inspected, service or pressure-test date approaching, or flagged non-compliant / needs attention. Tap an item to jump straight to it.
 - On a site with six or more items, the equipment list gains a search box and filter chips (Overdue / Not inspected / Failed).
 - **Service run** (button on the site detail) opens the inspection form for every item in turn — save moves you straight to the next one, with Skip and End run always available — so a technician can walk a site without returning to the list between items.
-- Admins have a **Company profile** tab (bottom bar): logo upload plus company name, registration no., address, phone and email. These are the letterhead on generated certificates and the printable site register, and they head the CSV export. Stored in the `settings/company` document — the rules file grants admins write access to `settings`. The logo is held inline in that document (resized to 400px wide on upload), so no Storage rules change is needed; keep logos simple so the document stays well under Firestore's 1 MiB limit.
+- Admins have a **Company profile** tab (bottom bar): logo upload plus company name, registration no., address, phone and email. These are the letterhead on generated certificates and the printable site register, and they head the CSV export. Stored in `settings/{companyId}` — one document per tenant, keyed by the signed-in admin's own company; the rules file grants an admin write access only to their own company's document. The logo is held inline in that document (resized to 400px wide on upload), so no Storage rules change is needed; keep logos simple so the document stays well under Firestore's 1 MiB limit.
 - Once a site is complete, an admin can **Generate certificate** — a printable SANS 1475 service certificate. Set up the Company profile first for the letterhead.
 - **Printable register** (button on any site, admin or assigned technician) produces a branded, printable list of every item at the site with its latest inspection — a companion to the certificate that can be left on site.
 - **Service type** (site form, admin only): tag a site as *Minor service*, *Annual service* or *Installation only*. It shows as a pill on the site for the technician and prints on the register and certificate. It is a label only — it changes no dates the app calculates, and it stays set until an admin changes it.
@@ -96,6 +97,35 @@ You're now the administrator. From here, use the **Techs** tab to create technic
 - **Trainee logbook export**: from a trainee's detail screen, admin can **Print logbook** — a letterheaded document with the full daily log and the competency checklist, for the trainee's SAQCC Portfolio of Evidence. It's print-only for now (not emailable like the site register/certificate) — extending the email Cloud Function to non-site documents is a small follow-up, deliberately not bundled into this change to avoid touching the working email feature unnecessarily.
 - **Qualifying a trainee**: from their detail screen, **Qualify — end training** flips their role to technician and drops the "TR" from their login number (you're prompted for the new number) — same account, same history. Add their proper SAQCC registration number afterwards from the Technicians tab.
 - This all needs `firestore.rules` re-published — it adds `traineeAssignments`, `logbookEntries` and `traineeCompetencies`, and widens the existing `technicians` rule so any signed-in user can see the roster of registered technicians (needed for the witness/supervisor pickers; `technicianLookup` was already world-readable, so this is a narrower exposure, not a new one). See the note above.
+
+## Internal admin section & multi-tenancy (optional, superadmin only)
+
+Vigil Fire can host **more than one company** in the same Firebase project — each with its own sites, technicians and letterhead, fully isolated from every other company by `firestore.rules`. A separate, unlisted page (`admin.html`) lets one operator account manage every company: set its plan, seat limit and status, and add new companies. This is entirely optional — if you're self-hosting for a single company, you can ignore all of this and just give every document the same `companyId` (see step 6 above).
+
+**How isolation works:** every tenant-scoped document (`technicians`, `sites`, `equipment`, `logbookEntries`, `traineeAssignments`, `traineeCompetencies`, `calibrations`, `monthlyChecks`, `serviceEvents`, `emailLog`, `settings`) carries a `companyId` field, and `firestore.rules` requires an admin's own `companyId` to match a document's before granting access. A separate `companies/{companyId}` collection holds the plan/seat/status/notes an operator manages, gated by a `superadmin` custom claim that only `admin.html` ever checks or grants — ordinary company admins, technicians and trainees never see or need it.
+
+**Deploying it, one time:**
+
+1. Deploy the updated rules and functions (adds `grantSuperadmin`, `createCompany`, `createTechnician`, and the `bumpActivity_*` triggers that keep each company's `lastActivityAt` current):
+   ```
+   firebase deploy --only functions,firestore:rules
+   ```
+2. If this project already has data from before the multi-tenant change, backfill it once (safe to re-run):
+   ```
+   cd scripts
+   npm install
+   node migrate-to-multitenant.js /path/to/serviceAccountKey.json
+   ```
+   Get the service-account key from Firebase Console → **Project settings → Service accounts → Generate new private key**. Never commit it — `.gitignore` already excludes anything named like a key in `scripts/`.
+3. Firebase Console → **Authentication → Users → Add user** — create (or reuse) the one account that should ever reach the admin section. Its email must match `SUPERADMIN_EMAIL` (defaults to the hardcoded value in `functions/index.js` unless you set `SUPERADMIN_EMAIL` in `functions/.env` and redeploy functions).
+4. Open `admin.html` (same host as `index.html`, e.g. `https://vigilfire.github.io/app/admin.html`), sign in with that account, and click **Grant myself admin access**. This calls `grantSuperadmin`, which checks the email allowlist server-side and sets the custom claim — it's the only way the claim is ever set; no client write can grant it.
+5. From the companies list, **+ Add company** creates a new tenant: a `companies/{id}` document plus its first admin account, which receives an email (via Resend — see the section below) with a link to set their password and sign in at the normal app URL.
+
+**Notes:**
+- `admin.html` is not linked from anywhere in `index.html` and isn't listed in `manifest.json` — it deploys as a plain static file alongside the app. That's convenience, not the security boundary; the actual gate is the `superadmin` claim plus `firestore.rules`, so it's fine that the URL is guessable.
+- Seat limits are enforced in the `createTechnician` Cloud Function (a Firestore rule can't reliably count a collection before allowing a write), so technician/trainee creation in `index.html` now goes through that callable instead of writing the `technicians` document directly.
+- Plan prices and default seat limits live in `functions/planConstants.js` **and** a duplicate copy inline in `admin.html` — there's no shared build step between the two, so update both when a price changes.
+- Technician numbers are still one flat, globally-unique namespace across every company (the sign-in form has no company selector) — that's an existing constraint carried over unchanged, not something new here.
 
 ## Emailing the register & certificate (optional)
 
@@ -109,10 +139,11 @@ Vigil Fire has **two** deploy targets. Phase A (service type, contact fields, em
 
 | You changed… | Goes to… | How |
 |---|---|---|
-| `index.html`, `sw.js`, `manifest.json`, icons | GitHub Pages (`https://vigilfire.github.io/app/`) | `git commit` + `git push origin main` |
+| `index.html`, `admin.html`, `sw.js`, `manifest.json`, icons | GitHub Pages (`https://vigilfire.github.io/app/`) | `git commit` + `git push origin main` |
 | `functions/` | Firebase Cloud Functions | `firebase deploy --only functions` |
 | `firestore.rules` | Firebase Firestore rules | `firebase deploy --only firestore:rules` (or paste in the console) |
 | `firebase.json`, `.firebaserc`, `firestore.indexes.json` | nothing runs them directly — they configure the `firebase` CLI | commit them so the CLI works for anyone with the repo |
+| `scripts/` | nowhere — run by hand from a developer machine, never deployed | `node scripts/migrate-to-multitenant.js …` |
 
 The service-type label and contact fields (A1) need **only** the static-site push plus re-publishing `firestore.rules`. The rest of this section is for the email feature (A2).
 

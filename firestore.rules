@@ -5,9 +5,27 @@ service cloud.firestore {
     function isSignedIn() {
       return request.auth != null;
     }
+    // The internal Vigil Fire operator account — a custom claim set only by
+    // the `grantSuperadmin` Cloud Function (email-allowlisted there), never by
+    // any client write. Used solely by the separate /admin section; ordinary
+    // app users never have this claim.
+    function isSuperadmin() {
+      return isSignedIn() && request.auth.token.role == 'superadmin';
+    }
     function isAdmin() {
       return isSignedIn() &&
         get(/databases/$(database)/documents/technicians/$(request.auth.uid)).data.role == 'admin';
+    }
+    // The signed-in user's own tenant. Every multi-tenant collection carries a
+    // `companyId` field so this is one lookup, not a join per document.
+    function myCompanyId() {
+      return get(/databases/$(database)/documents/technicians/$(request.auth.uid)).data.companyId;
+    }
+    // An admin may manage a document only within their own company — plain
+    // `isAdmin()` alone would let any company's admin reach any other
+    // company's data, since role is otherwise unscoped.
+    function isCompanyAdmin(companyId) {
+      return isAdmin() && myCompanyId() == companyId;
     }
     function isAssignedToSite(siteId) {
       return isSignedIn() &&
@@ -18,19 +36,46 @@ service cloud.firestore {
         get(/databases/$(database)/documents/technicians/$(request.auth.uid)).data.canCalibrate == true;
     }
 
+    // Internal operator dashboard (separate admin.html, superadmin-only).
+    // Nothing here is reachable by an ordinary company admin/technician/trainee.
+    match /companies/{companyId} {
+      allow read, write: if isSuperadmin();
+    }
+
     match /technicians/{uid} {
       // Anyone signed in may also see the roster of *registered technicians*
       // specifically (not other admins' or trainees' docs) — needed to list
       // possible site-assignees, and for a trainee to pick which technician
       // witnessed a logbook entry. `technicianLookup` (below) is already
       // world-readable even pre-login, so this is a narrower exposure than
-      // what already exists, not a new one.
-      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin() || resource.data.role == 'technician');
-      allow write: if isAdmin();
+      // what already exists, not a new one. All of this stays inside one
+      // company — a technician never sees another company's roster.
+      allow read: if isSignedIn() && (
+        request.auth.uid == uid
+        || isSuperadmin()
+        || (isAdmin() && myCompanyId() == resource.data.companyId)
+        || (resource.data.role == 'technician' && myCompanyId() == resource.data.companyId)
+      );
+      // Provisioning (and the seat-limit check that guards it) happens only in
+      // the `createTechnician` / `createCompany` Cloud Functions via the Admin
+      // SDK, which bypasses these rules — so no client may create or delete a
+      // technician doc directly. An admin may still edit an existing one
+      // (name, phone, canCalibrate, deactivate) within their own company.
+      allow create, delete: if false;
+      allow update: if isCompanyAdmin(resource.data.companyId);
     }
 
     match /technicianLookup/{techNumber} {
+      // Needed pre-login (no auth context yet) to resolve a technician number
+      // to an email before signing in. Technician numbers are a single flat,
+      // globally-unique namespace shared by every company (the login form has
+      // no company selector) — that's an existing constraint, not new here.
       allow read: if true;
+      // The `createTechnician` Cloud Function writes new entries via the Admin
+      // SDK (bypassing rules) as part of its seat-limit check. An admin may
+      // still repoint/remove an entry directly — e.g. `qualifyTrainee()`
+      // renumbers one when a trainee qualifies — since this mapping alone
+      // grants no access without a matching Auth password.
       allow write: if isAdmin();
     }
 
@@ -40,10 +85,11 @@ service cloud.firestore {
     // resource-data read, with no query needed. Only an admin assigns or
     // reassigns; the trainee and their current supervisor may read it.
     match /traineeAssignments/{traineeId} {
-      allow read: if isAdmin()
+      allow read: if isCompanyAdmin(resource.data.companyId)
         || (isSignedIn() && request.auth.uid == traineeId)
         || (isSignedIn() && resource.data.supervisorId == request.auth.uid);
-      allow write: if isAdmin();
+      allow create: if isCompanyAdmin(request.resource.data.companyId);
+      allow update, delete: if isCompanyAdmin(resource.data.companyId);
     }
 
     // A trainee's daily logbook entry (SAQCC Fire paper form, digitised). The
@@ -54,19 +100,21 @@ service cloud.firestore {
     // restricted to their own uid and to exactly the sign-off fields. Once
     // signed, nobody but an admin may touch it again.
     match /logbookEntries/{id} {
-      allow read: if isAdmin()
+      allow read: if isCompanyAdmin(resource.data.companyId)
         || (isSignedIn() && resource.data.traineeId == request.auth.uid)
         || (isSignedIn() && resource.data.technicianId == request.auth.uid);
 
-      allow create: if isAdmin()
+      allow create: if isCompanyAdmin(request.resource.data.companyId)
         || (
           isSignedIn()
           && request.resource.data.traineeId == request.auth.uid
           && request.resource.data.status == 'draft'
+          && request.resource.data.companyId == myCompanyId()
           && get(/databases/$(database)/documents/technicians/$(request.resource.data.technicianId)).data.role == 'technician'
+          && get(/databases/$(database)/documents/technicians/$(request.resource.data.technicianId)).data.companyId == myCompanyId()
         );
 
-      allow update: if isAdmin()
+      allow update: if isCompanyAdmin(resource.data.companyId)
         || (
           isSignedIn() && resource.data.traineeId == request.auth.uid
           && resource.data.status == 'draft' && request.resource.data.status == 'draft'
@@ -78,7 +126,7 @@ service cloud.firestore {
                .hasOnly(['technicianComments','status','signedAt','signedBy','technicianName','technicianSaqcc','updatedAt'])
         );
 
-      allow delete: if isAdmin()
+      allow delete: if isCompanyAdmin(resource.data.companyId)
         || (isSignedIn() && resource.data.traineeId == request.auth.uid && resource.data.status == 'draft');
     }
 
@@ -88,50 +136,56 @@ service cloud.firestore {
     // call (or admin's) — unlike a daily logbook entry, this isn't something
     // any witnessing technician should be able to sign off.
     match /traineeCompetencies/{traineeId} {
-      allow read: if isAdmin()
+      allow read: if isCompanyAdmin(resource.data.companyId)
         || (isSignedIn() && request.auth.uid == traineeId)
         || (isSignedIn() && get(/databases/$(database)/documents/traineeAssignments/$(traineeId)).data.supervisorId == request.auth.uid);
-      allow write: if isAdmin()
+      allow write: if isCompanyAdmin(request.resource.data.companyId)
         || (isSignedIn() && get(/databases/$(database)/documents/traineeAssignments/$(traineeId)).data.supervisorId == request.auth.uid);
     }
 
     match /sites/{siteId} {
-      allow read: if isAdmin() || (isSignedIn() && request.auth.uid in resource.data.assignedTo);
-      allow create, delete: if isAdmin();
-      // Admins may change anything. An assigned technician may only touch a
-      // restricted set of fields (site details + completion markers).
-      // `serviceType` is deliberately absent here: only an administrator sets it.
-      allow update: if isAdmin()
+      allow read: if isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && request.auth.uid in resource.data.assignedTo);
+      allow create: if isCompanyAdmin(request.resource.data.companyId);
+      allow delete: if isCompanyAdmin(resource.data.companyId);
+      // Admins may change anything within their own company. An assigned
+      // technician may only touch a restricted set of fields (site details +
+      // completion markers). `serviceType` and `companyId` are deliberately
+      // absent here: only an administrator sets them, and a site can never
+      // change tenant.
+      allow update: if isCompanyAdmin(resource.data.companyId)
         || (
           isSignedIn()
           && request.auth.uid in resource.data.assignedTo
+          && request.resource.data.companyId == resource.data.companyId
           && request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['name','address','notes','email','contactPerson','contactPhone','category','assignedTo','completed','completedAt','lastCompletedDate','lastCompletedBy'])
         );
     }
 
     // Company letterhead / registration details used on generated certificates.
-    match /settings/{doc} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+    // One doc per tenant, keyed by companyId (not the literal "company").
+    match /settings/{companyId} {
+      allow read: if isSignedIn() && myCompanyId() == companyId;
+      allow write: if isCompanyAdmin(companyId);
     }
 
     // Test-equipment calibration register (SANS 1475 Annex A). Weekly checks are
     // added by an admin or by a technician the admin has granted the
     // `canCalibrate` permission; only an admin may change or remove an entry.
     match /calibrations/{id} {
-      allow read:   if isSignedIn();
-      allow create: if isAdmin() || canCalibrate();
-      allow update, delete: if isAdmin();
+      allow read:   if isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && myCompanyId() == resource.data.companyId);
+      allow create: if isCompanyAdmin(request.resource.data.companyId)
+        || (canCalibrate() && myCompanyId() == request.resource.data.companyId);
+      allow update, delete: if isCompanyAdmin(resource.data.companyId);
     }
 
     // Monthly responsible-person inspection log (SANS 10105-1). One record per
     // site per month. Same access as the site's equipment; admin may delete.
     match /monthlyChecks/{id} {
-      allow read:          if isAdmin() || (isSignedIn() && isAssignedToSite(resource.data.siteId));
-      allow create:        if isAdmin() || (isSignedIn() && isAssignedToSite(request.resource.data.siteId));
-      allow update:        if isAdmin() || (isSignedIn() && isAssignedToSite(resource.data.siteId));
-      allow delete:        if isAdmin();
+      allow read:   if isCompanyAdmin(resource.data.companyId) || (isSignedIn() && isAssignedToSite(resource.data.siteId));
+      allow create: if isCompanyAdmin(request.resource.data.companyId) || (isSignedIn() && isAssignedToSite(request.resource.data.siteId));
+      allow update: if isCompanyAdmin(resource.data.companyId) || (isSignedIn() && isAssignedToSite(resource.data.siteId));
+      allow delete: if isCompanyAdmin(resource.data.companyId);
     }
 
     // Immutable service-history / audit trail. One snapshot is appended whenever
@@ -139,8 +193,8 @@ service cloud.firestore {
     // edit or delete an entry (corrections are made by adding a new one).
     // Purging genuinely bad data is a Firebase Console operation.
     match /serviceEvents/{id} {
-      allow read:          if isAdmin() || (isSignedIn() && isAssignedToSite(resource.data.siteId));
-      allow create:        if isAdmin() || (isSignedIn() && isAssignedToSite(request.resource.data.siteId));
+      allow read:           if isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && isAssignedToSite(resource.data.siteId));
+      allow create:         if isCompanyAdmin(request.resource.data.companyId) || (isSignedIn() && isAssignedToSite(request.resource.data.siteId));
       allow update, delete: if false;
     }
 
@@ -148,26 +202,27 @@ service cloud.firestore {
     // by the `emailSiteDocuments` Cloud Function via the Admin SDK (which
     // bypasses these rules); no client may write. Admins read it in the app.
     match /emailLog/{id} {
-      allow read:  if isAdmin();
+      allow read:  if isSuperadmin() || isCompanyAdmin(resource.data.companyId);
       allow write: if false;
     }
 
     // An "equipment" doc is the physical asset (type, serial, location) plus a
     // denormalised snapshot of its most recent inspection for list rendering.
     match /equipment/{eqId} {
-      allow read:   if isAdmin() || (isSignedIn() && isAssignedToSite(resource.data.siteId));
-      allow create: if isAdmin() || (isSignedIn() && isAssignedToSite(request.resource.data.siteId));
-      allow update: if isAdmin() || (isSignedIn() && isAssignedToSite(resource.data.siteId));
-      allow delete: if isAdmin();
+      allow read:   if isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && isAssignedToSite(resource.data.siteId));
+      allow create: if isCompanyAdmin(request.resource.data.companyId) || (isSignedIn() && isAssignedToSite(request.resource.data.siteId));
+      allow update: if isCompanyAdmin(resource.data.companyId) || (isSignedIn() && isAssignedToSite(resource.data.siteId));
+      allow delete: if isCompanyAdmin(resource.data.companyId);
 
       // Each inspection is an immutable-by-technicians history entry. It carries
-      // its own siteId (copied from the parent) so this rule needs no nested
-      // lookup of the equipment doc. Technicians assigned to the site can log
-      // new inspections; only an admin may edit or delete a saved one.
+      // its own siteId and companyId (copied from the parent) so this rule
+      // needs no nested lookup of the equipment doc. Technicians assigned to
+      // the site can log new inspections; only an admin may edit or delete a
+      // saved one.
       match /inspections/{inspId} {
-        allow read:   if isAdmin() || (isSignedIn() && isAssignedToSite(resource.data.siteId));
-        allow create: if isAdmin() || (isSignedIn() && isAssignedToSite(request.resource.data.siteId));
-        allow update, delete: if isAdmin();
+        allow read:   if isCompanyAdmin(resource.data.companyId) || (isSignedIn() && isAssignedToSite(resource.data.siteId));
+        allow create: if isCompanyAdmin(request.resource.data.companyId) || (isSignedIn() && isAssignedToSite(request.resource.data.siteId));
+        allow update, delete: if isCompanyAdmin(resource.data.companyId);
       }
     }
   }
