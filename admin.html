@@ -67,6 +67,10 @@
   .badge.status-trialing{background:var(--amber-bg); color:var(--amber);}
   .badge.status-past_due{background:#FBE1E4; color:var(--red-dark);}
   .badge.status-canceled{background:var(--gray-bg); color:var(--grey);}
+  .tabbar{display:flex; gap:8px; margin-bottom:14px;}
+  .tabbar button{background:var(--surface); border:1px solid var(--line-strong); border-radius:7px; padding:8px 14px;
+    font-size:0.82rem; font-weight:650; cursor:pointer; color:var(--ink-soft);}
+  .tabbar button.active{background:var(--ink); color:#fff; border-color:var(--ink);}
   .backbar{display:flex; align-items:center; gap:10px; margin-bottom:16px;}
   .backbar button{background:var(--surface); border:1px solid var(--line-strong); border-radius:7px; width:34px; height:34px; cursor:pointer;}
   .section-title{display:flex; align-items:center; justify-content:space-between; margin:20px 0 10px;}
@@ -128,6 +132,10 @@
         <div class="stat"><div class="n" id="statMrr">—</div><div class="l">MRR</div></div>
       </div>
       <div class="section-title"><h2>Companies</h2><button class="btn" onclick="openAddCompany()">+ Add company</button></div>
+      <div class="tabbar">
+        <button id="tabActive" class="active" onclick="setCompaniesTab('active')">Active</button>
+        <button id="tabCanceled" onclick="setCompaniesTab('canceled')">Canceled</button>
+      </div>
       <div class="card" style="padding:0; overflow-x:auto;">
         <table>
           <thead><tr><th>Name</th><th>Plan</th><th>Seats</th><th>Status</th></tr></thead>
@@ -316,6 +324,13 @@ function onHashChange(){
 }
 
 /* ---------- Companies list ---------- */
+let companiesTab = 'active';   // 'active' | 'canceled' — which subset the table shows
+function setCompaniesTab(tab){
+  companiesTab = tab;
+  document.getElementById('tabActive').classList.toggle('active', tab === 'active');
+  document.getElementById('tabCanceled').classList.toggle('active', tab === 'canceled');
+  paintCompaniesList();
+}
 function startCompaniesListener(){
   if(unsubCompanies) return;
   unsubCompanies = db.collection('companies').onSnapshot(async snap=>{
@@ -351,12 +366,13 @@ async function paintCompaniesList(){
   document.getElementById('statMrr').textContent = mrr ? ('R ' + mrr.toLocaleString()) : '—';
 
   const body = document.getElementById('companiesBody');
-  if(companiesCache.length === 0){
-    body.innerHTML = `<tr><td colspan="4" class="empty">No companies yet.</td></tr>`;
+  const visible = companiesCache.filter(c => companiesTab === 'canceled' ? c.status === 'canceled' : c.status !== 'canceled');
+  if(visible.length === 0){
+    body.innerHTML = `<tr><td colspan="4" class="empty">${companiesTab === 'canceled' ? 'No canceled companies.' : 'No companies yet.'}</td></tr>`;
     return;
   }
-  const seatCounts = await Promise.all(companiesCache.map(c=>seatCountFor(c.id)));
-  body.innerHTML = companiesCache.map((c,i)=>{
+  const seatCounts = await Promise.all(visible.map(c=>seatCountFor(c.id)));
+  body.innerHTML = visible.map((c,i)=>{
     const limit = (c.seatLimit===null || c.seatLimit===undefined) ? '∞' : c.seatLimit;
     const used = seatCounts[i] === null ? '?' : seatCounts[i];
     return `<tr class="row-link" onclick="location.hash='#/companies/${c.id}'">
