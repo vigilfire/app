@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Notice</title>
+
+<!-- Static, unauthenticated page — deliberately has no Firebase dependency at
+     all, since it needs to be readable by anyone whose personal information
+     might be recorded in Vigil Fire (a technician, a site contact person),
+     not only people who have an app login. Linked from index.html's login
+     screen. This is a first draft written to be POPIA-structured (South
+     Africa's Protection of Personal Information Act) — have it reviewed by
+     a lawyer before relying on it for real customers; nothing here is legal
+     advice. -->
+
+<style>
+  :root{
+    --ink:#17191C; --ink-soft:#3F454C; --paper:#EEF1F4; --surface:#FFFFFF;
+    --red:#C8102E; --grey:#63696F; --line:#D5D9DE; --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--paper); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; line-height:1.6;}
+  main{max-width:720px; margin:0 auto; padding:32px 20px 60px;}
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:28px 30px; margin-bottom:20px;}
+  h1{font-size:1.4rem; margin:0 0 4px;}
+  .sub{color:var(--grey); font-size:0.88rem; margin-bottom:0;}
+  h2{font-size:1.02rem; margin:0 0 8px; border-top:1px solid var(--line); padding-top:20px;}
+  section:first-of-type h2{border-top:none; padding-top:0;}
+  p{margin:0 0 12px; font-size:0.94rem;}
+  ul{margin:0 0 12px; padding-left:22px; font-size:0.94rem;}
+  li{margin:4px 0;}
+  a{color:var(--red);}
+  .backlink{display:inline-block; margin-bottom:16px; font-size:0.85rem; color:var(--grey); text-decoration:none;}
+  .hint{font-size:0.8rem; color:var(--grey);}
+  strong{font-weight:650;}
+</style>
+</head>
+<body>
+<main>
+  <a class="backlink" href="./index.html">&larr; Back to Vigil Fire</a>
+  <div class="card">
+    <h1>Privacy Notice</h1>
+    <p class="sub">How personal information is collected and used in Vigil Fire, in line with South Africa's Protection of Personal Information Act (POPIA).</p>
+  </div>
+
+  <div class="card">
+    <section>
+      <h2>Who is responsible for your information</h2>
+      <p>Vigil Fire is software used by fire equipment servicing companies to keep the compliance records SANS 1475 requires. If your details are recorded in Vigil Fire, it's because a servicing company — the one whose name is on your certificate, register, or the technician account you were given — put them there. <strong>That company is the Responsible Party</strong> under POPIA: they decide what's collected and why, and they're who you should contact first with a question about your own information.</p>
+      <p>Vigil Fire (operated by Sapphorion) provides the platform those companies use. We act as an <strong>Operator</strong> — we process information on each company's instructions, to run the software, and we don't use it for our own separate purposes (no sale of data, no marketing lists, no cross-company sharing). Each company's data is kept isolated from every other company's in the system.</p>
+    </section>
+
+    <section>
+      <h2>What's collected</h2>
+      <p>Depending on how you interact with a servicing company using Vigil Fire, this can include:</p>
+      <ul>
+        <li><strong>Technicians and trainees:</strong> name, phone number, email address, SAQCC (Fire) registration number, a login credential, and records of work performed (inspections, services, pressure tests, recharges, logbook entries, competency sign-offs).</li>
+        <li><strong>Site contacts:</strong> a contact person's name and phone number recorded against a site, so the servicing company can reach them.</li>
+        <li><strong>Equipment records:</strong> service history and, optionally, a photo of the equipment or its location — these are about the equipment, not a person, though a photo could incidentally show someone in the background.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Why it's collected</h2>
+      <p>To do and prove fire equipment servicing work: scheduling technicians, producing compliance certificates and registers, tracking SAQCC (Fire) trainee logbooks and sign-offs, and keeping the records SANS 1475 requires. This is processing necessary to carry out a contract (your employment or engagement with the servicing company, or the servicing company's contract with a site) and to meet a legal/regulatory record-keeping obligation.</p>
+    </section>
+
+    <section>
+      <h2>Who can see it</h2>
+      <p>Only people at the same servicing company — its administrators and the technicians it employs — can see that company's records. Vigil Fire's platform operator can access data only as needed to run and support the service (for example, troubleshooting a fault), never to browse it for its own sake. No company can see another company's data.</p>
+    </section>
+
+    <section>
+      <h2>How long it's kept</h2>
+      <p>Service and inspection records are kept for at least <strong>5 years, in accordance with SANS 1475 clause 5.4</strong> — a legal record-keeping duty, which is itself a valid basis under POPIA for retaining information for that period even after someone stops working for the company. Deactivating a technician's account stops it being used for anything new; their historical compliance records are kept for the retention period, then may be deleted.</p>
+    </section>
+
+    <section>
+      <h2>Security</h2>
+      <p>Access is controlled per account (technician, administrator) and strictly separated by company — one company's staff cannot read another's records, enforced at the database level, not just hidden in the app's screens. Data is transmitted and stored via Google Firebase's infrastructure.</p>
+    </section>
+
+    <section>
+      <h2>Your rights</h2>
+      <p>Under POPIA, you can ask to see the information held about you, ask for it to be corrected if it's wrong, or object to how it's used. You can also ask for it to be deleted, though a servicing company may need to keep certain records for the SANS 1475 retention period regardless, as explained above. Start by contacting the servicing company whose name is on your certificate, register, or account — they hold the records and can act on most requests directly.</p>
+      <p>If you can't reach them, or you have a question about Vigil Fire as the platform operator, contact <a href="mailto:vigilfire1@gmail.com">vigilfire1@gmail.com</a>. You also have the right to complain to South Africa's Information Regulator (<a href="https://inforegulator.org.za" target="_blank" rel="noopener">inforegulator.org.za</a>) if you believe your information has been mishandled.</p>
+    </section>
+
+    <p class="hint">This notice was last updated 2026-09-07. It's a general description of how the Vigil Fire platform handles information — a specific servicing company may have its own additional privacy practices for information it collects outside the app.</p>
+  </div>
+</main>
+</body>
+</html>

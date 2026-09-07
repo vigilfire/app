@@ -410,6 +410,16 @@ exports.createTechnician = onCall(async (request) => {
   if (!password || password.length < 6) {
     throw new HttpsError("invalid-argument", "Set a password of at least 6 characters.");
   }
+  // POPIA: the admin creating this account attests the person has been
+  // informed and consents (see the Privacy notice link next to the checkbox
+  // in index.html) — checked here too, not just in the client, since this is
+  // the actual account-creation path.
+  if (!data.consentConfirmed) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Confirm the technician has been informed and consents before creating their account."
+    );
+  }
 
   const lookupRef = db.collection("technicianLookup").doc(techNumber);
   const lookupSnap = await lookupRef.get();
@@ -461,6 +471,8 @@ exports.createTechnician = onCall(async (request) => {
     canCalibrate,
     companyId,
     ...(traineeRegisteredDate ? { traineeRegisteredDate } : {}),
+    consentConfirmedBy: uid,
+    consentConfirmedAt: admin.firestore.FieldValue.serverTimestamp(),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
   batch.set(lookupRef, { email });

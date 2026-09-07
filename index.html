@@ -66,8 +66,8 @@
   #syncPill::before{content:""; width:6px; height:6px; border-radius:50%; background:#3FBF6B; flex-shrink:0;}
   #syncPill.offline{background:var(--amber-bg); color:#7A4400;}
   #syncPill.offline::before{background:var(--amber);}
-  #logoutBtn{background:none; border:1px solid rgba(255,255,255,0.28); color:#fff; border-radius:6px; padding:6px 11px; font-size:0.72rem; font-weight:600; cursor:pointer; letter-spacing:0.02em;}
-  #logoutBtn:active{background:rgba(255,255,255,0.1);}
+  #logoutBtn, #myDataBtn{background:none; border:1px solid rgba(255,255,255,0.28); color:#fff; border-radius:6px; padding:6px 11px; font-size:0.72rem; font-weight:600; cursor:pointer; letter-spacing:0.02em;}
+  #logoutBtn:active, #myDataBtn:active{background:rgba(255,255,255,0.1);}
 
   main{padding:16px; max-width:680px; margin:0 auto;}
   .card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-bottom:14px;}
@@ -261,6 +261,7 @@
     <button class="btn" style="margin-top:18px;" onclick="doLogin()">Sign in</button>
     <div id="authError"></div>
     <div class="hint" style="text-align:center; margin-top:14px;">Accounts are created by your administrator. Contact them if you don't have a login.</div>
+    <div class="hint" style="text-align:center; margin-top:8px;"><a href="privacy.html" style="color:inherit;">Privacy notice</a></div>
   </div>
 </div>
 
@@ -276,6 +277,7 @@
     </div>
     <div class="right">
       <span id="syncPill">Online</span>
+      <button id="myDataBtn" onclick="downloadMyData()" title="Download the personal information Vigil Fire holds about you">My data</button>
       <button id="logoutBtn" onclick="doLogout()">Log out</button>
     </div>
   </header>
@@ -654,6 +656,10 @@
         <label style="margin-top:16px;">Permissions</label>
         <label class="chk" style="border-bottom:none;"><input type="checkbox" id="techCanCalibrate"><span>Calibration — allow this technician to record the workshop's weekly calibration checks (scales and pressure gauges). A "Calibration" tab appears in their app only while this is on.</span></label>
 
+        <div id="techConsentWrap" style="margin-top:16px;">
+          <label class="chk" style="border-bottom:none;"><input type="checkbox" id="techConsent"><span>I confirm this technician has been informed that their personal information (name, contact details, SAQCC number, work records) will be processed in Vigil Fire for SANS 1475 compliance record-keeping — see the <a href="privacy.html" target="_blank" style="color:inherit;">Privacy notice</a> — and consents to this.</span></label>
+        </div>
+
         <div class="row" style="margin-top:16px;">
           <button class="btn secondary" onclick="showView('view-technicians')">Cancel</button>
           <button class="btn" onclick="saveTechnician()">Save technician</button>
@@ -711,6 +717,10 @@
           <div><label>Period end <span style="text-transform:none;font-weight:500;">(6 mths)</span></label><input id="trEndDate" type="date"></div>
         </div>
         <div class="hint">The end date auto-fills to 6 months after the start — adjust it if needed. The supervisor can be changed at any time without resetting this period; a change is kept in the trainee's history.</div>
+
+        <div id="trConsentWrap" style="margin-top:16px;">
+          <label class="chk" style="border-bottom:none;"><input type="checkbox" id="trConsent"><span>I confirm this trainee has been informed that their personal information (name, contact details, logbook and competency records) will be processed in Vigil Fire for SAQCC (Fire) and SANS 1475 compliance record-keeping — see the <a href="privacy.html" target="_blank" style="color:inherit;">Privacy notice</a> — and consents to this.</span></label>
+        </div>
 
         <div class="row" style="margin-top:16px;">
           <button class="btn secondary" onclick="showView('view-trainees')">Cancel</button>
@@ -1038,6 +1048,50 @@ function doLogin(){
   });
 }
 function doLogout(){ auth.signOut(); }
+
+/* ---------- POPIA data-subject access request: "download my information" ----------
+   Self-service export of the signed-in user's own personal data — their
+   profile plus, for a trainee, their logbook/competency/assignment records;
+   for a technician, logbook entries where they're named as the witness.
+   Available to any signed-in role. */
+async function downloadMyData(){
+  if(!currentUser || !currentProfile) return;
+  toast('Preparing your data…');
+  const out = {
+    exportedAt: new Date().toISOString(),
+    profile: Object.assign({ uid: currentUser.uid }, currentProfile)
+  };
+  try{
+    if(currentRole === 'trainee'){
+      const [assignDoc, compDoc, lbSnap] = await Promise.all([
+        db.collection('traineeAssignments').doc(currentUser.uid).get(),
+        db.collection('traineeCompetencies').doc(currentUser.uid).get(),
+        db.collection('logbookEntries').where('traineeId','==',currentUser.uid).get()
+      ]);
+      out.traineeAssignment = assignDoc.exists ? assignDoc.data() : null;
+      out.traineeCompetencies = compDoc.exists ? compDoc.data() : null;
+      out.logbookEntries = lbSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    } else {
+      const lbSnap = await db.collection('logbookEntries').where('technicianId','==',currentUser.uid).get();
+      out.logbookEntriesWitnessed = lbSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    }
+  }catch(e){
+    toast('Could not load all records: ' + e.message);
+  }
+  const json = JSON.stringify(out, (k,v)=>{
+    if(v && typeof v==='object' && v.seconds!==undefined && v.nanoseconds!==undefined){
+      return new Date(v.seconds*1000).toISOString();
+    }
+    return v;
+  }, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `my-vigil-fire-data-${toLocalISO(new Date())}.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  toast('Your data has been downloaded');
+}
 
 function setupRoleUI(){
   const isAdmin = currentRole === 'admin';
@@ -2557,7 +2611,11 @@ async function saveEquipment(){
   try{
     if(currentPhotoDataUrl){
       toast('Uploading photo…');
-      const sref = storage.ref('equipment-photos/' + (editingAssetId || Date.now()) + '.jpg');
+      // Company-scoped path — Storage rules can't cheaply prove a new photo
+      // belongs to a caller's own tenant without it (the equipment doc for a
+      // brand-new item doesn't exist yet at upload time, so there's no
+      // Firestore record yet to check against).
+      const sref = storage.ref('equipment-photos/' + currentCompanyId + '/' + (editingAssetId || Date.now()) + '.jpg');
       await sref.putString(currentPhotoDataUrl, 'data_url');
       photoURL = await sref.getDownloadURL();
     }
@@ -2809,12 +2867,15 @@ function openTechForm(id){
     document.getElementById('techSaqcc').value = t.saqcc||'';
     document.getElementById('techPhone').value = t.phone||'';
     document.getElementById('techCanCalibrate').checked = !!t.canCalibrate;
+    document.getElementById('techConsentWrap').style.display = 'none';
   } else {
     actionBtn.style.display = 'none';
     ['techName','techNumber','techPassword','techSaqcc','techPhone'].forEach(fid=>document.getElementById(fid).value='');
     document.getElementById('techCanCalibrate').checked = false;
     numberField.disabled = false;
     document.getElementById('techPasswordHint').textContent = 'Share this technician number and password with the technician — they can log in immediately with it.';
+    document.getElementById('techConsentWrap').style.display = 'block';
+    document.getElementById('techConsent').checked = false;
   }
   showView('view-tech-form');
 }
@@ -2838,13 +2899,14 @@ async function saveTechnician(){
   }
 
   if(!password || password.length < 6){ toast('Set a password of at least 6 characters'); return; }
+  if(!document.getElementById('techConsent').checked){ toast('Confirm the technician has been informed and consents (POPIA) before saving'); return; }
   try{
     // Account creation, the technicianLookup entry and the seat-limit check
     // all happen server-side in this callable (Admin SDK) — a client can no
     // longer write a technicians doc directly (see firestore.rules), because
     // the seat count it's checked against can't be trusted to a security rule.
     const call = firebase.functions().httpsCallable('createTechnician');
-    await call({ name, techNumber, password, saqcc, phone, canCalibrate, role:'technician' });
+    await call({ name, techNumber, password, saqcc, phone, canCalibrate, role:'technician', consentConfirmed:true });
     toast('Technician created');
     showView('view-technicians');
   }catch(e){ toast('Error: ' + e.message); }
@@ -3015,6 +3077,7 @@ async function openTraineeForm(id){
     supSel.value = a.supervisorId || '';
     document.getElementById('trStartDate').value = a.startDate || '';
     document.getElementById('trEndDate').value = a.endDateExpected || '';
+    document.getElementById('trConsentWrap').style.display = 'none';
   } else {
     actionBtn.style.display = 'none';
     ['trName','trNumber','trPassword','trPhone'].forEach(fid=>document.getElementById(fid).value='');
@@ -3025,6 +3088,8 @@ async function openTraineeForm(id){
     supSel.value = '';
     numberField.disabled = false;
     document.getElementById('trPasswordHint').textContent = 'Share this trainee number and password with them — they can log in immediately with it.';
+    document.getElementById('trConsentWrap').style.display = 'block';
+    document.getElementById('trConsent').checked = false;
   }
   showView('view-trainee-form');
 }
@@ -3083,11 +3148,12 @@ async function saveTrainee(){
   }
 
   if(!password || password.length < 6){ toast('Set a password of at least 6 characters'); return; }
+  if(!document.getElementById('trConsent').checked){ toast('Confirm the trainee has been informed and consents (POPIA) before saving'); return; }
   try{
     // Account creation, the technicianLookup entry and the seat-limit check
     // all happen server-side in this callable (Admin SDK) — see saveTechnician().
     const call = firebase.functions().httpsCallable('createTechnician');
-    const result = await call({ name, techNumber, password, phone, role:'trainee', traineeRegisteredDate: registeredDate });
+    const result = await call({ name, techNumber, password, phone, role:'trainee', traineeRegisteredDate: registeredDate, consentConfirmed:true });
     const newUid = result.data.uid;
     await db.collection('traineeAssignments').doc(newUid).set(Object.assign({ status:'active', companyId: currentCompanyId,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: currentUser.uid }, assignmentPayload));

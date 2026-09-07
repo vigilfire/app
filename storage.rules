@@ -1,8 +1,27 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    match /equipment-photos/{allPaths=**} {
-      // Any signed-in user (admin or technician) can upload and view inspection photos.
+    // Path is equipment-photos/{companyId}/{fileName} — the companyId segment
+    // lets this rule check tenant isolation directly from the path, with no
+    // need to look up the equipment doc itself (which doesn't exist yet at
+    // upload time for a brand-new item, so there'd be nothing to check
+    // against). Mirrors the isCompanyAdmin()/myCompanyId() pattern in
+    // firestore.rules — a signed-in user may only reach their own company's
+    // photos, and the internal /admin superadmin claim reaches all of them.
+    match /equipment-photos/{companyId}/{fileName} {
+      allow read, write: if request.auth != null && (
+        request.auth.token.role == 'superadmin' ||
+        firestore.get(/databases/(default)/documents/technicians/$(request.auth.uid)).data.companyId == companyId
+      );
+    }
+
+    // Legacy path from before multi-tenancy (equipment-photos/{fileName}.jpg,
+    // no companyId segment) — kept readable/writable by any signed-in user,
+    // same exposure as before this change, purely so photos uploaded before
+    // this rule shipped don't go dark. Every new upload uses the company-
+    // scoped path above. Safe to delete this block once old files have been
+    // migrated or are no longer needed.
+    match /equipment-photos/{fileName} {
       allow read, write: if request.auth != null;
     }
   }

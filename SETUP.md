@@ -98,6 +98,13 @@ You're now the administrator. From here, use the **Techs** tab to create technic
 - **Qualifying a trainee**: from their detail screen, **Qualify — end training** flips their role to technician and drops the "TR" from their login number (you're prompted for the new number) — same account, same history. Add their proper SAQCC registration number afterwards from the Technicians tab.
 - This all needs `firestore.rules` re-published — it adds `traineeAssignments`, `logbookEntries` and `traineeCompetencies`, and widens the existing `technicians` rule so any signed-in user can see the roster of registered technicians (needed for the witness/supervisor pickers; `technicianLookup` was already world-readable, so this is a narrower exposure, not a new one). See the note above.
 
+## POPIA (privacy)
+
+- `privacy.html` is a standalone, unauthenticated privacy notice (linked from the login screen) — written to be POPIA-structured but **not legal advice**; have it reviewed before relying on it for real customers. It explains each servicing company is the Responsible Party for its own technicians/site contacts, and Vigil Fire (the platform) is an Operator only.
+- Creating a technician or trainee requires an admin to tick a consent-attestation checkbox ("I confirm this technician has been informed… and consents") — enforced both client-side and inside the `createTechnician` Cloud Function, which also stamps `consentConfirmedBy`/`consentConfirmedAt` on the new technician doc.
+- Any signed-in user has a **My data** button in the header (self-service data-subject access request) that downloads a JSON export of their own profile and related records (logbook entries; assignment and competencies for a trainee).
+- `storage.rules` is tenant-scoped (`equipment-photos/{companyId}/{fileName}`) — **this needs Firebase Storage to actually be enabled** on the project (Console → Storage → Get Started) before `firebase deploy --only storage` will work; it wasn't enabled as of this writing, meaning photo upload may not have been functional. A narrow legacy rule keeps any pre-existing flat-path photos readable so they don't go dark.
+
 ## Internal admin section & multi-tenancy (optional, superadmin only)
 
 Vigil Fire can host **more than one company** in the same Firebase project — each with its own sites, technicians and letterhead, fully isolated from every other company by `firestore.rules`. A separate, unlisted page (`admin.html`) lets one operator account manage every company: set its plan, seat limit and status, and add new companies. This is entirely optional — if you're self-hosting for a single company, you can ignore all of this and just give every document the same `companyId` (see step 6 above).
