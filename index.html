@@ -410,9 +410,9 @@
           <option value="">None</option>
           <option value="survey">Survey required</option>
           <option value="servicing">Maintenance required</option>
-          <option value="monthly">Monthly inspection (routine maintenance)</option>
+          <option value="monthly" id="monthlyCategoryOption">Monthly inspection (routine maintenance)</option>
         </select>
-        <div class="hint">A "Monthly inspection" site opens straight to the monthly responsible-person check form (SANS 10105-1). Equipment, the register and certificates are still reachable from there.</div>
+        <div class="hint" id="monthlyCategoryHint">A "Monthly inspection" site opens straight to the monthly responsible-person check form (SANS 10105-1). Equipment, the register and certificates are still reachable from there.</div>
         <label>Assign technicians</label>
         <div id="assignTechList" class="card" style="background:var(--paper); padding:10px 14px;"></div>
         <div class="row" style="margin-top:16px;">
@@ -802,7 +802,7 @@
         <button class="btn secondary" style="margin-top:6px;" onclick="openRegister(reportSiteId(), 'view-export')">Printable site register</button>
         <button class="btn secondary" style="margin-top:8px;" onclick="openPressureTestReport()">Pressure test report</button>
         <button class="btn secondary" style="margin-top:8px;" onclick="openRechargeReport()">Recharge report</button>
-        <button class="btn secondary" style="margin-top:8px;" onclick="openMonthlyLog(reportSiteId(), 'view-export')">Monthly inspection log</button>
+        <button class="btn secondary" id="monthlyLogBtn" style="margin-top:8px;" onclick="openMonthlyLog(reportSiteId(), 'view-export')">Monthly inspection log</button>
         <button class="btn secondary" style="margin-top:8px;" onclick="openEmailSite(reportSiteId(), 'view-export')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>Email register / certificate to site</button>
         <div class="hint">Choose a single site above. The site register here is the same one you generate from the site itself. The pressure test and recharge reports cover the equipment whose latest record shows that work was performed.</div>
         <label style="margin-top:16px;">Workshop reports</label>
@@ -961,6 +961,19 @@ const storage = firebase.storage();
    Deployed 2026-09-04: emailSiteDocuments (us-central1, nodejs22). */
 const EMAIL_SENDING_ENABLED = true;
 db.enablePersistence({synchronizeTabs:true}).catch(()=>{ /* multiple tabs open, or unsupported browser — sync still works, just no offline cache */ });
+
+// Temporarily switched off — flip back to true to restore. Hides every entry
+// point (site category option, the site-detail button, the Reports log
+// button) and stops a "monthly" category site auto-opening its check form.
+// Nothing underneath is deleted: data, Firestore rules, and all the
+// monthlyChecks code are untouched, so this is a one-line revert.
+const MONTHLY_INSPECTIONS_ENABLED = false;
+if(!MONTHLY_INSPECTIONS_ENABLED){
+  document.getElementById('monthlyCategoryOption').remove();
+  document.getElementById('monthlyCategoryHint').style.display = 'none';
+  document.getElementById('monthlyBtn').style.display = 'none';
+  document.getElementById('monthlyLogBtn').style.display = 'none';
+}
 
 /* ---------- Online/offline indicator ---------- */
 function updateSyncPill(){
@@ -1234,8 +1247,10 @@ function openSite(id){
   if(searchEl) searchEl.value = '';
   renderSiteDetailChrome();
   loadEquipmentForSite(id);
-  // A "Monthly inspection" site opens straight to its monthly check form.
-  if(site && site.category === 'monthly'){
+  // A "Monthly inspection" site opens straight to its monthly check form —
+  // skipped while MONTHLY_INSPECTIONS_ENABLED is false, so an existing site
+  // tagged that way still opens normally instead of jumping to a hidden view.
+  if(MONTHLY_INSPECTIONS_ENABLED && site && site.category === 'monthly'){
     openMonthlyCheck(id, 'view-sites');
   } else {
     showView('view-site-detail');
