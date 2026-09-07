@@ -45,6 +45,10 @@ function emailReplyToOverride() {
 const MAX_DOCUMENTS = 3;
 const MAX_HTML_BYTES = 2 * 1024 * 1024; // 2 MB of HTML per document
 
+function isValidEmail(s) {
+  return /^\S+@\S+\.\S+$/.test(s);
+}
+
 // Same fabricated domain the app has always used for a technician-number
 // login (there's no real inbox behind it — sign-in resolves the number to
 // this address via `technicianLookup`, never by the user typing an email).
@@ -132,7 +136,7 @@ exports.emailSiteDocuments = onCall(
     if (!siteId) {
       throw new HttpsError("invalid-argument", "Missing siteId.");
     }
-    if (!/^\S+@\S+\.\S+$/.test(to)) {
+    if (!isValidEmail(to)) {
       throw new HttpsError("invalid-argument", "Invalid recipient address.");
     }
     if (documents.length === 0) {
@@ -298,7 +302,7 @@ exports.createCompany = onCall({ secrets: [RESEND_API_KEY] }, async (request) =>
   const plan = String(data.plan || "starter").trim();
 
   if (!name) throw new HttpsError("invalid-argument", "Company name is required.");
-  if (!/^\S+@\S+\.\S+$/.test(adminEmail)) {
+  if (!isValidEmail(adminEmail)) {
     throw new HttpsError("invalid-argument", "A valid admin email is required.");
   }
   if (!adminName) throw new HttpsError("invalid-argument", "Admin name is required.");
@@ -378,21 +382,49 @@ exports.createCompany = onCall({ secrets: [RESEND_API_KEY] }, async (request) =>
   return { companyId, uid: userRecord.uid, emailWarning };
 });
 
+// Shared by createTechnician and reactivateTechnician — both need "is this
+// caller an admin, and which company are they admin of."
+async function requireCompanyAdmin(db, uid) {
+  const snap = await db.collection("technicians").doc(uid).get();
+  if (!snap.exists || snap.data().role !== "admin") {
+    throw new HttpsError("permission-denied", "Only an administrator can do this.");
+  }
+  const companyId = snap.data().companyId;
+  if (!companyId) {
+    throw new HttpsError("failed-precondition", "Your account has no company on file.");
+  }
+  return companyId;
+}
+
+// Shared seat-limit check — throws if the company has no free seat. Only
+// active technicians occupy a seat, so deactivating someone frees theirs
+// immediately; reactivating is charged against the limit exactly like
+// creating a new technician is.
+async function requireSeatAvailable(db, companyId) {
+  const companySnap = await db.collection("companies").doc(companyId).get();
+  const seatLimit = companySnap.exists ? companySnap.data().seatLimit : undefined;
+  if (seatLimit === null || seatLimit === undefined) return;
+  const countSnap = await db
+    .collection("technicians")
+    .where("companyId", "==", companyId)
+    .where("active", "==", true)
+    .count()
+    .get();
+  if (countSnap.data().count >= seatLimit) {
+    throw new HttpsError(
+      "resource-exhausted",
+      `Seat limit reached (${seatLimit}). Upgrade the plan or deactivate a technician first.`
+    );
+  }
+}
+
 exports.createTechnician = onCall(async (request) => {
   const uid = request.auth && request.auth.uid;
   if (!uid) {
     throw new HttpsError("unauthenticated", "Sign in first.");
   }
   const db = admin.firestore();
-
-  const callerSnap = await db.collection("technicians").doc(uid).get();
-  if (!callerSnap.exists || callerSnap.data().role !== "admin") {
-    throw new HttpsError("permission-denied", "Only an administrator can add technicians.");
-  }
-  const companyId = callerSnap.data().companyId;
-  if (!companyId) {
-    throw new HttpsError("failed-precondition", "Your account has no company on file.");
-  }
+  const companyId = await requireCompanyAdmin(db, uid);
 
   const data = request.data || {};
   const name = String(data.name || "").trim();
@@ -430,26 +462,7 @@ exports.createTechnician = onCall(async (request) => {
   // Seat-limit check. This has to live here, not in a Firestore rule: a rule
   // can restrict a single write but can't reliably count how many
   // technicians a company already has before allowing the next one.
-  // Only active technicians occupy a seat — deactivating someone (the app's
-  // "remove a technician" action) keeps their Firestore doc for compliance
-  // history but must free up their seat immediately, or a company could
-  // never replace someone they let go without upgrading their plan.
-  const companySnap = await db.collection("companies").doc(companyId).get();
-  const seatLimit = companySnap.exists ? companySnap.data().seatLimit : undefined;
-  if (seatLimit !== null && seatLimit !== undefined) {
-    const countSnap = await db
-      .collection("technicians")
-      .where("companyId", "==", companyId)
-      .where("active", "==", true)
-      .count()
-      .get();
-    if (countSnap.data().count >= seatLimit) {
-      throw new HttpsError(
-        "resource-exhausted",
-        `Seat limit reached (${seatLimit}). Upgrade the plan or deactivate a technician first.`
-      );
-    }
-  }
+  await requireSeatAvailable(db, companyId);
 
   const email = `tech${techNumber}@${TECH_EMAIL_DOMAIN}`;
   let userRecord;
@@ -475,10 +488,39 @@ exports.createTechnician = onCall(async (request) => {
     consentConfirmedAt: admin.firestore.FieldValue.serverTimestamp(),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
-  batch.set(lookupRef, { email });
+  batch.set(lookupRef, { email, companyId });
   await batch.commit();
 
   return { uid: userRecord.uid };
+});
+
+exports.reactivateTechnician = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "Sign in first.");
+  }
+  const db = admin.firestore();
+  const companyId = await requireCompanyAdmin(db, uid);
+
+  const targetId = String((request.data || {}).id || "").trim();
+  if (!targetId) {
+    throw new HttpsError("invalid-argument", "Missing technician id.");
+  }
+  const targetRef = db.collection("technicians").doc(targetId);
+  const targetSnap = await targetRef.get();
+  if (!targetSnap.exists || targetSnap.data().companyId !== companyId) {
+    throw new HttpsError("not-found", "Technician not found.");
+  }
+  if (targetSnap.data().active !== false) {
+    return { reactivated: false }; // already active — nothing to do
+  }
+
+  // Reactivating occupies a seat exactly like creating a new technician does
+  // — this is why firestore.rules blocks the active:false→true transition
+  // for a plain client update and routes it here instead.
+  await requireSeatAvailable(db, companyId);
+  await targetRef.update({ active: true });
+  return { reactivated: true };
 });
 
 /* ---------- Company `lastActivityAt` ----------

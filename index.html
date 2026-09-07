@@ -442,7 +442,7 @@
       <button class="btn" onclick="openEquipmentForm(null)" style="margin-bottom:10px;">+ Add equipment</button>
 
       <div id="equipFilterBar" style="display:none; margin-bottom:12px;">
-        <input id="equipSearch" placeholder="Search type, tag or location…" oninput="paintEquipment()" style="margin-bottom:8px;">
+        <input id="equipSearch" placeholder="Search type, tag or location…" oninput="paintEquipmentDebounced()" style="margin-bottom:8px;">
         <div class="pillrow" id="equipFilterChips"></div>
       </div>
 
@@ -1025,6 +1025,9 @@ auth.onAuthStateChanged(async (user)=>{
   updateSyncPill();
   showView(currentRole === 'trainee' ? 'view-my-training' : 'view-sites');
   maybeAutoBackup();
+  // Best-effort — shown on the internal admin dashboard's technician list.
+  // Never blocks sign-in on failure (e.g. while offline).
+  db.collection('technicians').doc(user.uid).update({ lastLoginAt: firebase.firestore.FieldValue.serverTimestamp() }).catch(()=>{});
 });
 
 function doLogin(){
@@ -1078,18 +1081,7 @@ async function downloadMyData(){
   }catch(e){
     toast('Could not load all records: ' + e.message);
   }
-  const json = JSON.stringify(out, (k,v)=>{
-    if(v && typeof v==='object' && v.seconds!==undefined && v.nanoseconds!==undefined){
-      return new Date(v.seconds*1000).toISOString();
-    }
-    return v;
-  }, 2);
-  const blob = new Blob([json], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `my-vigil-fire-data-${toLocalISO(new Date())}.json`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  downloadJSON(`my-vigil-fire-data-${toLocalISO(new Date())}.json`, out);
   toast('Your data has been downloaded');
 }
 
@@ -1125,7 +1117,6 @@ function setupRoleUI(){
 
 /* ---------- View routing ---------- */
 let currentSiteId = null;
-let currentEquipmentId = null;   // equipment item currently open
 let editingAssetId = null;       // equipment item being created/edited on the form
 let editingSiteId = null;
 let editingTechId = null;
@@ -1230,7 +1221,6 @@ function serviceTypeLabel(t){
 
 function openSite(id){
   currentSiteId = id;
-  currentEquipmentId = null;
   const site = sitesCache.find(s=>s.id===id);
   document.getElementById('siteDetailName').textContent = site ? site.name : '';
   document.getElementById('siteDetailAddress').textContent = site ? (site.address||'') : '';
@@ -1589,69 +1579,71 @@ async function saveBackupSettings(){
   }catch(e){ toast('Error: ' + e.message); }
 }
 
+// Shared by downloadFullBackup and downloadMyData — serialises Firestore
+// Timestamps to ISO strings and triggers a browser download of the result.
+function downloadJSON(filename, data){
+  const json = JSON.stringify(data, (k,v)=>{
+    if(v && typeof v==='object' && v.seconds!==undefined && v.nanoseconds!==undefined){
+      return new Date(v.seconds*1000).toISOString();   // Firestore Timestamp -> ISO
+    }
+    return v;
+  }, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
 async function downloadFullBackup(fromSchedule){
   toast('Gathering records…');
   const out = { app:'Vigil Fire', schemaVersion:6, exportedAt:new Date().toISOString(),
     exportedBy: currentProfile.name || currentUser.uid,
     company:{}, sites:[], technicians:[], equipment:[], serviceEvents:[], monthlyChecks:[], calibrations:[], emailLog:[],
     traineeAssignments:[], logbookEntries:[], traineeCompetencies:[] };
+  const asRows = snap => snap.docs.map(d=>({id:d.id, ...d.data()}));
   try{
-    const co = await db.collection('settings').doc(currentCompanyId).get();
-    out.company = co.exists ? co.data() : {};
-    const siteSnap = await db.collection('sites').where('companyId','==',currentCompanyId).get();
-    out.sites = siteSnap.docs.map(d=>({id:d.id, ...d.data()}));
-    const siteIds = out.sites.map(s=>s.id);
-    try{
-      const techSnap = await db.collection('technicians').where('companyId','==',currentCompanyId).get();
-      out.technicians = techSnap.docs.map(d=>({id:d.id, ...d.data()}));
-    }catch(_){}
-    try{
-      const calSnap = await db.collection('calibrations').where('companyId','==',currentCompanyId).get();
-      out.calibrations = calSnap.docs.map(d=>({id:d.id, ...d.data()}));
-    }catch(_){}
-    try{
-      const trSnap = await db.collection('traineeAssignments').where('companyId','==',currentCompanyId).get();
-      out.traineeAssignments = trSnap.docs.map(d=>({id:d.id, ...d.data()}));
-    }catch(_){}
-    try{
-      const lbSnap = await db.collection('logbookEntries').where('companyId','==',currentCompanyId).get();
-      out.logbookEntries = lbSnap.docs.map(d=>({id:d.id, ...d.data()}));
-    }catch(_){}
-    try{
-      const tcSnap = await db.collection('traineeCompetencies').where('companyId','==',currentCompanyId).get();
-      out.traineeCompetencies = tcSnap.docs.map(d=>({id:d.id, ...d.data()}));
-    }catch(_){}
-    for(const sid of siteIds){
-      // companyId is included alongside siteId on every query below — an
-      // admin who isn't personally in a site's assignedTo can only be proven
-      // to have access via the tenant check, and that check only validates a
-      // list query when companyId is one of the query's own filters.
-      const eq = await db.collection('equipment').where('siteId','==', sid).where('companyId','==',currentCompanyId).get();
-      eq.forEach(d=>out.equipment.push({id:d.id, ...d.data()}));
-      const se = await db.collection('serviceEvents').where('siteId','==', sid).where('companyId','==',currentCompanyId).get();
-      se.forEach(d=>out.serviceEvents.push({id:d.id, ...d.data()}));
-      const mc = await db.collection('monthlyChecks').where('siteId','==', sid).where('companyId','==',currentCompanyId).get();
-      mc.forEach(d=>out.monthlyChecks.push({id:d.id, ...d.data()}));
-      try{
-        const el = await db.collection('emailLog').where('siteId','==', sid).where('companyId','==',currentCompanyId).get();
-        el.forEach(d=>out.emailLog.push({id:d.id, ...d.data()}));
-      }catch(_){}
-    }
+    out.company = companySettings || {};   // already kept fresh at login / on the Company tab — no need to re-fetch
+    const [siteSnap, techSnap, calSnap, trSnap, lbSnap, tcSnap] = await Promise.all([
+      db.collection('sites').where('companyId','==',currentCompanyId).get(),
+      db.collection('technicians').where('companyId','==',currentCompanyId).get().catch(()=>({docs:[]})),
+      db.collection('calibrations').where('companyId','==',currentCompanyId).get().catch(()=>({docs:[]})),
+      db.collection('traineeAssignments').where('companyId','==',currentCompanyId).get().catch(()=>({docs:[]})),
+      db.collection('logbookEntries').where('companyId','==',currentCompanyId).get().catch(()=>({docs:[]})),
+      db.collection('traineeCompetencies').where('companyId','==',currentCompanyId).get().catch(()=>({docs:[]}))
+    ]);
+    out.sites = asRows(siteSnap);
+    out.technicians = asRows(techSnap);
+    out.calibrations = asRows(calSnap);
+    out.traineeAssignments = asRows(trSnap);
+    out.logbookEntries = asRows(lbSnap);
+    out.traineeCompetencies = asRows(tcSnap);
+
+    // companyId is included alongside siteId on every query below — an admin
+    // who isn't personally in a site's assignedTo can only be proven to have
+    // access via the tenant check, and that check only validates a list
+    // query when companyId is one of the query's own filters.
+    const perSite = await Promise.all(out.sites.map(async site => {
+      const sid = site.id;
+      const [eq, se, mc, el] = await Promise.all([
+        db.collection('equipment').where('siteId','==', sid).where('companyId','==',currentCompanyId).get(),
+        db.collection('serviceEvents').where('siteId','==', sid).where('companyId','==',currentCompanyId).get(),
+        db.collection('monthlyChecks').where('siteId','==', sid).where('companyId','==',currentCompanyId).get(),
+        db.collection('emailLog').where('siteId','==', sid).where('companyId','==',currentCompanyId).get().catch(()=>({docs:[]}))
+      ]);
+      return { eq: asRows(eq), se: asRows(se), mc: asRows(mc), el: asRows(el) };
+    }));
+    perSite.forEach(r=>{
+      out.equipment.push(...r.eq);
+      out.serviceEvents.push(...r.se);
+      out.monthlyChecks.push(...r.mc);
+      out.emailLog.push(...r.el);
+    });
   }catch(e){ toast('Backup failed: ' + e.message); return; }
 
-  const json = JSON.stringify(out, (k,v)=>{
-    if(v && typeof v==='object' && v.seconds!==undefined && v.nanoseconds!==undefined){
-      return new Date(v.seconds*1000).toISOString();   // Firestore Timestamp -> ISO
-    }
-    return v;
-  }, 2);
   const today = toLocalISO(new Date());
-  const blob = new Blob([json], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `vigil-fire-backup-${today}.json`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  downloadJSON(`vigil-fire-backup-${today}.json`, out);
   toast(`Backup downloaded — ${out.equipment.length} equipment, ${out.serviceEvents.length} history entries`);
 
   // Mark this scheduled period satisfied.
@@ -2076,6 +2068,15 @@ async function renderEmailLog(siteId){
 let equipmentCache = [];
 let equipmentFilter = 'all';   // all | overdue | uninspected | failed
 
+// Typing in the equipment search box re-filters, re-counts and re-renders
+// the whole list on every keystroke; debouncing keeps that to once per pause
+// instead of once per character.
+function debounce(fn, ms){
+  let t;
+  return function(...args){ clearTimeout(t); t = setTimeout(()=>fn.apply(this, args), ms); };
+}
+const paintEquipmentDebounced = debounce(()=>paintEquipment(), 200);
+
 function loadEquipmentForSite(siteId){
   if(unsubEquipment) unsubEquipment();
   unsubEquipment = db.collection('equipment').where('siteId','==', siteId).where('companyId','==',currentCompanyId).onSnapshot(snap=>{
@@ -2202,10 +2203,11 @@ async function renderDueDashboard(){
 
   let items = [];
   try{
+    const batches = [];
     for(let i=0; i<siteIds.length; i+=10){
-      const snap = await db.collection('equipment').where('siteId','in', siteIds.slice(i, i+10)).where('companyId','==',currentCompanyId).get();
-      snap.forEach(d=>items.push({ id:d.id, ...d.data() }));
+      batches.push(db.collection('equipment').where('siteId','in', siteIds.slice(i, i+10)).where('companyId','==',currentCompanyId).get());
     }
+    (await Promise.all(batches)).forEach(snap => snap.forEach(d=>items.push({ id:d.id, ...d.data() })));
   }catch(e){
     wrap.innerHTML = `<div class="empty">Could not load equipment: ${escapeHtml(e.message)}</div>`;
     return;
@@ -2507,7 +2509,6 @@ function onRechargeReqChange(){
 async function openEquipmentForm(id){
   populateTypeOptions();
   editingAssetId = id;
-  currentEquipmentId = id;
   currentChecklistValues = {};
   currentInspectionType = '';
   inspectionReadOnly = false;
@@ -2938,7 +2939,11 @@ async function deactivateTechnician(id){
 async function reactivateTechnician(id){
   if(!id) return;
   try{
-    await db.collection('technicians').doc(id).update({ active:true });
+    // Reactivating occupies a seat exactly like creating a technician does —
+    // firestore.rules blocks this transition for a plain client update, so
+    // the seat-limit check has to happen server-side here too.
+    const call = firebase.functions().httpsCallable('reactivateTechnician');
+    await call({ id });
     toast('Technician reactivated — reassign them to sites as needed');
     showView('view-technicians');
   }catch(e){ toast('Error: ' + e.message); }
@@ -3176,7 +3181,11 @@ async function deactivateTrainee(id){
 async function reactivateTrainee(id){
   if(!id) return;
   try{
-    await db.collection('technicians').doc(id).update({ active:true });
+    // Reactivating occupies a seat exactly like creating a trainee does —
+    // firestore.rules blocks this transition for a plain client update, so
+    // the seat-limit check has to happen server-side here too.
+    const call = firebase.functions().httpsCallable('reactivateTechnician');
+    await call({ id });
     toast('Trainee reactivated');
     showView('view-trainees');
   }catch(e){ toast('Error: ' + e.message); }
@@ -3227,7 +3236,7 @@ async function qualifyTrainee(){
     }
     const batch = db.batch();
     batch.update(db.collection('technicians').doc(id), { role:'technician', techNumber: trimmed });
-    batch.set(db.collection('technicianLookup').doc(trimmed), { email: t.email });
+    batch.set(db.collection('technicianLookup').doc(trimmed), { email: t.email, companyId: currentCompanyId });
     if(t.techNumber && t.techNumber !== trimmed){
       batch.delete(db.collection('technicianLookup').doc(t.techNumber));
     }

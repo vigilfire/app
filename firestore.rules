@@ -60,23 +60,43 @@ service cloud.firestore {
       // the `createTechnician` / `createCompany` Cloud Functions via the Admin
       // SDK, which bypasses these rules — so no client may create or delete a
       // technician doc directly. An admin may still edit an existing one
-      // (name, phone, canCalibrate, deactivate) within their own company.
+      // (name, phone, canCalibrate, deactivate) within their own company —
+      // except flipping active:false back to true, which is the same
+      // seat-limit-checked operation as creating a technician and is
+      // deliberately routed through the `reactivateTechnician` Cloud Function
+      // instead (bypasses this rule via the Admin SDK once the seat check
+      // passes), so a company can't reactivate past its plan's seat limit.
       allow create, delete: if false;
-      allow update: if isCompanyAdmin(resource.data.companyId);
+      allow update: if (
+        isCompanyAdmin(resource.data.companyId)
+        && !(resource.data.active == false && request.resource.data.active == true)
+      ) || (
+        // Self-service last-login stamp, written on sign-in (see
+        // onAuthStateChanged in index.html) — the only field a technician
+        // may ever write on their own doc.
+        isSignedIn() && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastLoginAt'])
+      );
     }
 
+    // Each entry also carries a companyId (denormalised at write time) purely
+    // so this rule can scope writes to the admin's own company — plain
+    // isAdmin() here would let any company's admin repoint or delete any
+    // other company's technician-number-to-email mapping.
     match /technicianLookup/{techNumber} {
-      // Needed pre-login (no auth context yet) to resolve a technician number
-      // to an email before signing in. Technician numbers are a single flat,
-      // globally-unique namespace shared by every company (the login form has
-      // no company selector) — that's an existing constraint, not new here.
+      // Read stays open pre-login (no auth context yet) to resolve a
+      // technician number to an email before signing in. Technician numbers
+      // are a single flat, globally-unique namespace shared by every company
+      // (the login form has no company selector) — that's an existing
+      // constraint, not new here.
       allow read: if true;
-      // The `createTechnician` Cloud Function writes new entries via the Admin
-      // SDK (bypassing rules) as part of its seat-limit check. An admin may
-      // still repoint/remove an entry directly — e.g. `qualifyTrainee()`
-      // renumbers one when a trainee qualifies — since this mapping alone
-      // grants no access without a matching Auth password.
-      allow write: if isAdmin();
+      // The `createTechnician` Cloud Function writes new entries via the
+      // Admin SDK (bypassing rules) as part of its seat-limit check. An admin
+      // may still repoint/remove an entry directly within their own company —
+      // e.g. `qualifyTrainee()` renumbers one when a trainee qualifies.
+      allow create, update: if isAdmin() && myCompanyId() == request.resource.data.companyId
+        && (resource == null || resource.data.companyId == myCompanyId());
+      allow delete: if isAdmin() && resource.data.companyId == myCompanyId();
     }
 
     // SAQCC (Fire) trainee 6-month supervised placement. One doc per trainee,
@@ -118,6 +138,13 @@ service cloud.firestore {
         || (
           isSignedIn() && resource.data.traineeId == request.auth.uid
           && resource.data.status == 'draft' && request.resource.data.status == 'draft'
+          // Re-validated exactly as on create — otherwise a trainee editing
+          // their own still-draft entry could repoint traineeId/companyId,
+          // or name a witness who isn't actually a same-company technician.
+          && request.resource.data.traineeId == resource.data.traineeId
+          && request.resource.data.companyId == resource.data.companyId
+          && get(/databases/$(database)/documents/technicians/$(request.resource.data.technicianId)).data.role == 'technician'
+          && get(/databases/$(database)/documents/technicians/$(request.resource.data.technicianId)).data.companyId == resource.data.companyId
         )
         || (
           isSignedIn() && resource.data.technicianId == request.auth.uid
@@ -149,16 +176,21 @@ service cloud.firestore {
       allow delete: if isCompanyAdmin(resource.data.companyId);
       // Admins may change anything within their own company. An assigned
       // technician may only touch a restricted set of fields (site details +
-      // completion markers). `serviceType` and `companyId` are deliberately
-      // absent here: only an administrator sets them, and a site can never
+      // completion markers) — `assignedTo` is deliberately absent here too:
+      // only an administrator decides who has access to a site, or a
+      // technician could grant an arbitrary account (any uid, any company)
+      // access to the site and its equipment by rewriting their own
+      // assignment list. `serviceType` and `companyId` are deliberately
+      // absent as well: only an administrator sets them, and a site can never
       // change tenant.
       allow update: if isCompanyAdmin(resource.data.companyId)
         || (
           isSignedIn()
           && request.auth.uid in resource.data.assignedTo
           && request.resource.data.companyId == resource.data.companyId
+          && request.resource.data.assignedTo == resource.data.assignedTo
           && request.resource.data.diff(resource.data).affectedKeys()
-               .hasOnly(['name','address','notes','email','contactPerson','contactPhone','category','assignedTo','completed','completedAt','lastCompletedDate','lastCompletedBy'])
+               .hasOnly(['name','address','notes','email','contactPerson','contactPhone','category','completed','completedAt','lastCompletedDate','lastCompletedBy'])
         );
     }
 

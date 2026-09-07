@@ -17,6 +17,10 @@
  *      firestore.rules, and admin list queries (which now must filter on
  *      companyId explicitly — Firestore rejects a whole query it can't
  *      statically prove satisfies the rule) keep returning results.
+ *   4. Cross-references `technicianLookup` docs against `technicians` by
+ *      email to backfill their companyId too (they have no companyId of
+ *      their own to check) — firestore.rules now scopes writes to that
+ *      collection by company as well.
  *
  * Safe to re-run: every write only touches documents missing a companyId, so
  * running it twice is a no-op the second time.
@@ -60,6 +64,40 @@ const COMPANY_ID_COLLECTIONS = [
   "emailLog",
   "traineeCompetencies",
 ];
+
+// technicianLookup is keyed by techNumber, not auto-ID, and has no companyId
+// of its own to backfill directly — it's cross-referenced by `email` against
+// the technicians collection instead. Needed because firestore.rules now
+// scopes technicianLookup writes to the admin's own company, and a doc
+// missing companyId can never satisfy that check.
+async function backfillTechnicianLookup() {
+  const [lookupSnap, techSnap] = await Promise.all([
+    db.collection("technicianLookup").get(),
+    db.collection("technicians").get(),
+  ]);
+  const companyIdByEmail = new Map();
+  techSnap.docs.forEach((d) => {
+    const data = d.data();
+    if (data.email) companyIdByEmail.set(data.email, data.companyId || DEFAULT_COMPANY_ID);
+  });
+  const toUpdate = lookupSnap.docs.filter((d) => !d.data().companyId);
+  if (toUpdate.length === 0) {
+    console.log(`  technicianLookup: nothing to do (${lookupSnap.size} docs, all already tagged)`);
+    return;
+  }
+  let unmatched = 0;
+  for (let i = 0; i < toUpdate.length; i += 450) {
+    const batch = db.batch();
+    toUpdate.slice(i, i + 450).forEach((d) => {
+      const companyId = companyIdByEmail.get(d.data().email) || DEFAULT_COMPANY_ID;
+      if (!companyIdByEmail.has(d.data().email)) unmatched++;
+      batch.update(d.ref, { companyId });
+    });
+    await batch.commit();
+  }
+  console.log(`  technicianLookup: tagged ${toUpdate.length} of ${lookupSnap.size} docs` +
+    (unmatched ? ` (${unmatched} had no matching technician — defaulted to "${DEFAULT_COMPANY_ID}")` : ""));
+}
 
 async function backfillCollection(collectionName) {
   const snap = await db.collection(collectionName).get();
@@ -124,6 +162,7 @@ async function main() {
   for (const collectionName of COMPANY_ID_COLLECTIONS) {
     await backfillCollection(collectionName);
   }
+  await backfillTechnicianLookup();
 
   console.log("Done. The legacy settings/company document was left in place (unused) — delete it manually once you've confirmed the app reads settings/" + DEFAULT_COMPANY_ID + " correctly.");
   process.exit(0);

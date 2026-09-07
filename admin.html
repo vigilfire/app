@@ -339,6 +339,9 @@ function startCompaniesListener(){
   }, err=>{ toast('Could not load companies: ' + err.message); });
 }
 
+function formatSeatLimit(limit){
+  return (limit===null || limit===undefined) ? '∞' : limit;
+}
 async function seatCountFor(companyId){
   // Only active technicians occupy a seat — matches the enforcement in the
   // createTechnician Cloud Function, so this dashboard number and the actual
@@ -373,7 +376,7 @@ async function paintCompaniesList(){
   }
   const seatCounts = await Promise.all(visible.map(c=>seatCountFor(c.id)));
   body.innerHTML = visible.map((c,i)=>{
-    const limit = (c.seatLimit===null || c.seatLimit===undefined) ? '∞' : c.seatLimit;
+    const limit = formatSeatLimit(c.seatLimit);
     const used = seatCounts[i] === null ? '?' : seatCounts[i];
     return `<tr class="row-link" onclick="location.hash='#/companies/${c.id}'">
       <td>${escapeHtml(c.name)}</td>
@@ -433,12 +436,13 @@ async function openCompanyDetail(companyId){
   document.getElementById('detailStatusSelect').value = company.status || 'trialing';
   document.getElementById('detailNotes').value = company.notes || '';
 
-  const used = await seatCountFor(companyId);
-  const limit = (company.seatLimit===null || company.seatLimit===undefined) ? '∞' : company.seatLimit;
+  const [used] = await Promise.all([
+    seatCountFor(companyId),
+    paintDetailTechnicians(companyId),
+    paintDetailSites(companyId)
+  ]);
+  const limit = formatSeatLimit(company.seatLimit);
   document.getElementById('detailSeats').textContent = `${used===null?'?':used} / ${limit}`;
-
-  await paintDetailTechnicians(companyId);
-  await paintDetailSites(companyId);
 }
 
 async function onDetailPlanChange(){
@@ -472,7 +476,8 @@ async function paintDetailTechnicians(companyId){
     const snap = await db.collection('technicians').where('companyId','==',companyId).get();
     const techs = snap.docs.map(d=>({id:d.id, ...d.data()}));
     if(techs.length === 0){ body.innerHTML = `<tr><td colspan="3" class="empty">No technicians yet.</td></tr>`; return; }
-    // `lastLogin` isn't tracked by the app today — shown as "—" until it is.
+    // Stamped by index.html on each sign-in — "—" just means they haven't
+    // signed in since this feature shipped.
     body.innerHTML = techs.map(t=>`<tr>
       <td>${escapeHtml(t.name)}${t.active===false?' <span class="hint">(deactivated)</span>':''}</td>
       <td>${escapeHtml(t.role||'')}</td>
@@ -490,7 +495,11 @@ async function paintDetailSites(companyId){
     if(sites.length === 0){ body.innerHTML = `<tr><td colspan="2" class="empty">No sites yet.</td></tr>`; return; }
     const counts = await Promise.all(sites.map(async s=>{
       try{
-        const c = await db.collection('equipment').where('siteId','==',s.id).count().get();
+        // Excludes condemned/removed items, matching how index.html counts
+        // "equipment in service" everywhere else (certificate, register,
+        // equipment list) — otherwise this figure silently overstates active
+        // equipment relative to every other view of the same data.
+        const c = await db.collection('equipment').where('siteId','==',s.id).where('condemned','==',false).count().get();
         return c.data().count;
       }catch(e){ return null; }
     }));
