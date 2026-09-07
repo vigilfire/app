@@ -395,11 +395,11 @@
           <div><label>Contact person</label><input id="siteContactInput" placeholder="Name on site"></div>
           <div><label>Contact phone</label><input id="siteContactPhoneInput" placeholder="082 123 4567"></div>
         </div>
-        <label>Service type</label>
+        <label>Maintenance type</label>
         <select id="siteServiceTypeInput">
           <option value="">Not specified</option>
-          <option value="minor">Minor service</option>
-          <option value="annual">Annual service</option>
+          <option value="minor">Minor maintenance</option>
+          <option value="annual">Annual maintenance</option>
           <option value="installation">Installation only</option>
         </select>
         <div class="hint">Shown to the technician on the site as a reminder of what this visit covers, and printed on the register and certificate. It does not change any dates the app calculates.</div>
@@ -407,7 +407,7 @@
         <select id="siteCategoryInput">
           <option value="">None</option>
           <option value="survey">Survey required</option>
-          <option value="servicing">Servicing required</option>
+          <option value="servicing">Maintenance required</option>
           <option value="monthly">Monthly inspection (routine maintenance)</option>
         </select>
         <div class="hint">A "Monthly inspection" site opens straight to the monthly responsible-person check form (SANS 10105-1). Equipment, the register and certificates are still reachable from there.</div>
@@ -467,20 +467,20 @@
         <input id="eqMfgDate" type="date">
 
         <div class="divider"></div>
-        <label style="margin-top:0;">Service &amp; inspection</label>
+        <label style="margin-top:0;">Maintenance &amp; inspection</label>
         <div class="row">
-          <div><label>Service month</label><input id="eqServiceDate" type="month" onchange="onServiceDateChange()"></div>
+          <div><label>Maintenance month</label><input id="eqServiceDate" type="month" onchange="onServiceDateChange()"></div>
           <div><label>Inspection month</label><input id="eqInspDate" type="month"></div>
         </div>
-        <div><label>Next service due</label><input id="eqNextDue" type="month"></div>
-        <div class="hint">Dates are recorded as month and year. Next service auto-fills to 1 year after the service month (annual servicing per SANS 1475).</div>
+        <div><label>Next maintenance due</label><input id="eqNextDue" type="month"></div>
+        <div class="hint">Dates are recorded as month and year. Next maintenance auto-fills to 1 year after the maintenance month (annual maintenance per SANS 1475).</div>
 
         <div id="massSection">
           <div class="divider"></div>
           <label style="margin-top:0;">Mass &amp; weight check</label>
-          <label>Actual mass at this service (kg)</label>
+          <label>Actual mass at this maintenance (kg)</label>
           <input id="eqServiceMass" inputmode="decimal" placeholder="e.g. 14.2" oninput="updateCo2Content()">
-          <div class="hint">Recorded on the service label (SANS 1475 clause 6.1). Weigh the extinguisher per the manufacturer's instructions.</div>
+          <div class="hint">Recorded on the maintenance label (SANS 1475 clause 6.1). Weigh the extinguisher per the manufacturer's instructions.</div>
           <div id="co2WeightWrap" style="display:none;">
             <div class="row">
               <div><label>Empty cylinder / tare mass (kg)</label><input id="eqTareMass" inputmode="decimal" placeholder="stamped on the cylinder" oninput="updateCo2Content()"></div>
@@ -500,7 +500,7 @@
           <div><label>Last pressure test</label><input id="eqPressureTestDate" type="month" onchange="onPressureTestDateChange()"></div>
           <div><label>Pressure test due <span id="ptHint" style="text-transform:none;font-weight:500;"></span></label><input id="eqPressureTestDue" type="month"></div>
         </div>
-        <div class="hint" id="ptSectionHint">"Pressure test due" auto-fills to 5 years after the last test for powder, foam and water extinguishers, or 10 years for CO₂. Hydrants, sirens and blankets get no auto-filled date. The last-test month carries over between services — change it only in the year a test is actually done.</div>
+        <div class="hint" id="ptSectionHint">"Pressure test due" auto-fills to 5 years after the last test for powder, foam and water extinguishers, or 10 years for CO₂. Hydrants, sirens and blankets get no auto-filled date. The last-test month carries over between maintenance visits — change it only in the year a test is actually done.</div>
         <div id="hoseReplaceWrap" style="display:none;">
           <div class="row">
             <div><label>Hose last replaced</label><input id="eqHoseReplacedDate" type="month" onchange="onHoseReplacedDateChange()"></div>
@@ -508,7 +508,7 @@
           </div>
           <div class="hint">The hose-reel hose is replaced every 5 years (SANS 543 / manufacturer), independent of the annual flow-and-pressure test.</div>
         </div>
-        <label>Pressure (hydrostatic) test performed this service?</label>
+        <label>Pressure (hydrostatic) test performed at this maintenance?</label>
         <select id="eqPtPerformed" onchange="onPtPerformedChange()">
           <option value="no">No</option>
           <option value="yes">Yes — record the test below</option>
@@ -516,7 +516,7 @@
         <div id="ptDetailWrap" style="display:none;">
           <label>Previous pressure test month</label>
           <input id="eqPtPrevDate" type="month">
-          <div class="hint">Set "Last pressure test" above to this service's test month — that becomes the new date on record; this field keeps the one it replaced.</div>
+          <div class="hint">Set "Last pressure test" above to this maintenance visit's test month — that becomes the new date on record; this field keeps the one it replaced.</div>
           <div class="row">
             <div><label>Test pressure (kPa)</label><input id="eqPtPressure" inputmode="numeric" placeholder="e.g. 2500"></div>
             <div><label>Result</label><select id="eqPtResult"><option value="pass">Passed</option><option value="fail">Failed / condemned</option></select></div>
@@ -607,7 +607,7 @@
     <!-- ===== MONTHLY RESPONSIBLE-PERSON INSPECTION (SANS 10105-1) ===== -->
     <section id="view-monthly" class="view">
       <div class="backbar"><button onclick="showView(monthlyBackView)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="monthlyTitle">Monthly inspection</h2></div>
-      <p class="hint" style="margin:0 0 12px;">SANS 10105-1: the responsible person visually checks each unit every month — correct location, unobstructed and visible, safety pin and tamper seal intact, pressure indicator in range, no visible damage or corrosion, service label current. Record the walk-through here; use the printable log for a signed record on site.</p>
+      <p class="hint" style="margin:0 0 12px;">SANS 10105-1: the responsible person visually checks each unit every month — correct location, unobstructed and visible, safety pin and tamper seal intact, pressure indicator in range, no visible damage or corrosion, maintenance label current. Record the walk-through here; use the printable log for a signed record on site.</p>
       <div class="card">
         <div class="row">
           <div><label style="margin-top:0;">Month</label><input id="monthlyMonth" type="month"></div>
@@ -744,7 +744,7 @@
 
         <div class="divider"></div>
         <label style="margin-top:0;">Authorised signatory</label>
-        <p class="hint" style="margin:0 0 10px;">Appears on every generated Certificate of Service and Site Register as the company's sign-off — the person accountable for the work, not necessarily the technician who performed it.</p>
+        <p class="hint" style="margin:0 0 10px;">Appears on every generated Certificate of Maintenance and Site Register as the company's sign-off — the person accountable for the work, not necessarily the technician who performed it.</p>
         <div class="logo-box">
           <img id="coSignaturePreview" alt="" style="display:none;">
           <div style="flex:1;">
@@ -761,7 +761,7 @@
 
       <div class="card">
         <label style="margin-top:0;">Records backup</label>
-        <p class="hint" style="margin:0 0 10px;">A complete machine-readable snapshot of every site, equipment record, service-history entry, monthly check, calibration entry and trainee placement. Keep it filed with your printed registers — SANS 1475 requires records for at least 3 years.</p>
+        <p class="hint" style="margin:0 0 10px;">A complete machine-readable snapshot of every site, equipment record, maintenance-history entry, monthly check, calibration entry and trainee placement. Keep it filed with your printed registers — SANS 1475 clause 5.4 requires records to be kept for at least 5 years.</p>
         <div class="row">
           <div><label>Automatic backup</label>
             <select id="coBackupEvery">
@@ -883,7 +883,7 @@
         <div class="hint" id="emailToHint"></div>
         <label>Include</label>
         <label class="chk"><input type="checkbox" id="emailInclRegister" checked><span>Printable site register</span></label>
-        <label class="chk"><input type="checkbox" id="emailInclCert"><span>Service certificate</span></label>
+        <label class="chk"><input type="checkbox" id="emailInclCert"><span>Maintenance certificate</span></label>
         <div class="hint" id="emailCertHint"></div>
         <label>Message (optional)</label>
         <textarea id="emailMessage" placeholder="Short note to the site contact"></textarea>
@@ -1168,10 +1168,10 @@ function paintSites(){
   }).join('');
 }
 function siteCategoryLabel(c){
-  return c==='survey' ? 'Survey' : (c==='servicing' ? 'Servicing' : (c==='monthly' ? 'Monthly inspection' : ''));
+  return c==='survey' ? 'Survey' : (c==='servicing' ? 'Maintenance' : (c==='monthly' ? 'Monthly inspection' : ''));
 }
 function serviceTypeLabel(t){
-  return t==='minor' ? 'Minor service' : (t==='annual' ? 'Annual service' : (t==='installation' ? 'Installation only' : ''));
+  return t==='minor' ? 'Minor maintenance' : (t==='annual' ? 'Annual maintenance' : (t==='installation' ? 'Installation only' : ''));
 }
 
 function openSite(id){
@@ -1619,7 +1619,7 @@ async function downloadFullBackup(fromSchedule){
    Renders a printable compliance certificate for a site from each asset's
    latest-inspection snapshot. Print / Save-as-PDF via the browser. */
 // The company's authorised sign-off — set on the Company profile tab, printed
-// on every Certificate of Service and Site Register. Distinct from the
+// on every Certificate of Maintenance and Site Register. Distinct from the
 // technician attribution already on those documents: this is the person
 // accountable for the company's work, whether or not they did it personally.
 function signatoryBlockHTML(co){
@@ -1696,7 +1696,7 @@ async function openCertificate(siteId, opts){
     <div class="cert-head">
       <div class="from">
         ${co.logo ? `<img class="logo" src="${co.logo}" alt="">` : ''}
-        <h1>${escapeHtml(co.name || 'Fire Equipment Service Certificate')}</h1>
+        <h1>${escapeHtml(co.name || 'Fire Equipment Maintenance Certificate')}</h1>
         <div class="co">
           ${co.reg ? 'Reg: '+escapeHtml(co.reg)+'<br>' : ''}
           ${co.address ? escapeHtml(co.address)+'<br>' : ''}
@@ -1711,15 +1711,15 @@ async function openCertificate(siteId, opts){
       </div>
     </div>
 
-    <h2 style="margin-top:18px; font-size:1rem;">Certificate of Service — Portable Fire Equipment</h2>
+    <h2 style="margin-top:18px; font-size:1rem;">Certificate of Maintenance — Portable Fire Equipment</h2>
     <div class="meta">
-      <strong>Service month:</strong> ${escapeHtml(fullMonthLabel(serviceMonth))}<br>
-      ${stLabel ? '<strong>Service type:</strong> '+escapeHtml(stLabel)+'<br>' : ''}
+      <strong>Maintenance month:</strong> ${escapeHtml(fullMonthLabel(serviceMonth))}<br>
+      ${stLabel ? '<strong>Maintenance type:</strong> '+escapeHtml(stLabel)+'<br>' : ''}
       <strong>Date issued:</strong> ${today}<br>
       <strong>Technician(s):</strong><br>${techLine}
     </div>
 
-    <h3>Service summary</h3>
+    <h3>Maintenance summary</h3>
     <table>
       <thead><tr><th>Equipment type</th><th style="text-align:right;">Quantity</th></tr></thead>
       <tbody>
@@ -1728,11 +1728,12 @@ async function openCertificate(siteId, opts){
       </tbody>
     </table>
 
-    <div class="declaration">This service was conducted in accordance with the latest edition of SANS 1475 and other applicable South African National Standards.</div>
+    <div class="declaration">This maintenance was conducted in accordance with the latest edition of SANS 1475 and other applicable South African National Standards.</div>
+    <div class="declaration">Records to be kept for 5 years in accordance with SANS 1475 clause 5.4.</div>
 
     ${signatoryBlockHTML(co)}`;
 
-  if(opts.silent) return { inner, title:'Service certificate — '+site.name };
+  if(opts.silent) return { inner, title:'Maintenance certificate — '+site.name };
   document.getElementById('certContent').innerHTML = `<div class="cert">${inner}</div>`;
   showView('view-certificate');
 }
@@ -1789,11 +1790,11 @@ async function openRegister(siteId, backView, opts){
 
   const page1 = `<div class="regpage">
     ${letterhead}
-    <h2 style="margin-top:16px; font-size:1rem;">Fire Equipment Register — Service Summary</h2>
+    <h2 style="margin-top:16px; font-size:1rem;">Fire Equipment Register — Maintenance Summary</h2>
     <div class="meta">
       <strong>Site:</strong> ${escapeHtml(site.name)}<br>
       ${site.address ? '<strong>Address:</strong> '+escapeHtml(site.address)+'<br>' : ''}
-      ${stLabel ? '<strong>Service type:</strong> '+escapeHtml(stLabel)+'<br>' : ''}
+      ${stLabel ? '<strong>Maintenance type:</strong> '+escapeHtml(stLabel)+'<br>' : ''}
       ${site.notes ? '<strong>Site notes:</strong> '+escapeHtml(site.notes)+'<br>' : ''}
       <strong>Generated:</strong> ${today}<br>
       ${site.lastCompletedDate ? '<strong>Last signed off:</strong> '+escapeHtml(site.lastCompletedDate)+(site.lastCompletedBy?(' by '+escapeHtml(site.lastCompletedBy)):'')+'<br>' : ''}
@@ -1808,7 +1809,7 @@ async function openRegister(siteId, backView, opts){
       </tbody>
     </table>
     <div class="hint" style="margin-top:12px;">
-      Recharges completed this service: ${rechargedCount}. All recharges on this site are cleared.${removed.length?` ${removed.length} item${removed.length===1?'':'s'} removed from service — listed on the last page.`:''}
+      Recharges completed at this maintenance visit: ${rechargedCount}. All recharges on this site are cleared.${removed.length?` ${removed.length} item${removed.length===1?'':'s'} removed from service — listed on the last page.`:''}
     </div>
   </div>`;
 
@@ -1844,11 +1845,11 @@ async function openRegister(siteId, backView, opts){
   const page2 = `<div class="regpage">
     <h2 style="font-size:1rem;">Equipment Register — ${escapeHtml(site.name)}</h2>
     <div class="tablewrap"><table>
-      <thead><tr><th>Type</th><th>Serial / tag</th><th>Location</th><th>Serviced</th><th>Next service</th><th>Mass (kg)</th><th>Pressure tested</th><th>Pressure test due</th><th>Weight / hose due</th><th>Recharged</th><th>Status</th></tr></thead>
+      <thead><tr><th>Type</th><th>Serial / tag</th><th>Location</th><th>Maintained</th><th>Next maintenance</th><th>Mass (kg)</th><th>Pressure tested</th><th>Pressure test due</th><th>Weight / hose due</th><th>Recharged</th><th>Status</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
     ${removedTable}
-    <div class="hint" style="margin-top:14px;">Generated by Vigil Fire on ${today}. Reflects the current recorded state of each item.</div>
+    <div class="hint" style="margin-top:14px;">Generated by Vigil Fire on ${today}. Reflects the current recorded state of each item. Records to be kept for 5 years in accordance with SANS 1475 clause 5.4.</div>
     ${signatoryBlockHTML(co)}
   </div>`;
 
@@ -1964,7 +1965,7 @@ async function sendSiteEmail(){
     if(wantCert){
       const c = await openCertificate(siteId, {silent:true});
       if(!c || c.error) throw new Error(c && c.error ? c.error : 'Could not build the certificate');
-      documents.push({ kind:'certificate', landscape:false, filename:`service-certificate-${slugify(site.name)}.pdf`,
+      documents.push({ kind:'certificate', landscape:false, filename:`maintenance-certificate-${slugify(site.name)}.pdf`,
         html: certDocumentHTML(c.inner, c.title) });
     }
     status.textContent = 'Sending…';
@@ -2110,7 +2111,7 @@ function paintEquipment(){
             ? `<span class="pill ${e.status==='fail'?'fail':(e.status==='attention'?'due':'pass')}">${statusLabel(e.status)}</span>`
             : `<span class="pill">Not yet inspected</span>`}
           ${rechargeOut ? `<span class="pill fail">Recharge required</span>` : ''}
-          ${e.nextServiceDue ? `<span class="pill ${dueInfo.serviceOverdue?'due':''}">Service due ${escapeHtml(ym(e.nextServiceDue))}</span>` : ''}
+          ${e.nextServiceDue ? `<span class="pill ${dueInfo.serviceOverdue?'due':''}">Maintenance due ${escapeHtml(ym(e.nextServiceDue))}</span>` : ''}
           ${e.pressureTestDue ? `<span class="pill ${dueInfo.pressureOverdue?'due':''}">Pressure test ${escapeHtml(ym(e.pressureTestDue))}</span>` : ''}
           ${e.weightCheckDue ? `<span class="pill ${dueInfo.weightOverdue?'due':''}">Weight check ${escapeHtml(ym(e.weightCheckDue))}</span>` : ''}
           ${e.hoseReplacedDue ? `<span class="pill ${dueInfo.hoseOverdue?'due':''}">Hose due ${escapeHtml(ym(e.hoseReplacedDue))}</span>` : ''}
@@ -2169,7 +2170,7 @@ async function renderDueDashboard(){
       }
     };
     if(!e.inspectionDate) reasons.push({ label:'Never inspected', date:null, overdue:true });
-    consider('Service due', e.nextServiceDue);
+    consider('Maintenance due', e.nextServiceDue);
     consider('Pressure test due', e.pressureTestDue);
     consider('CO₂ weight check due', e.weightCheckDue);
     consider('Hose replacement due', e.hoseReplacedDue);
@@ -2278,12 +2279,12 @@ function setPtHint(type){
 
 /* ---------- Checklist definitions per category ---------- */
 const CHECKLISTS = {
-  default:[['gauge','Pressure gauge / indicator in operating (green) range'],['seal','Safety pin and tamper seal intact'],['damage','No visible damage, dents or corrosion to body'],['hose','Hose / nozzle free of cracks or blockage'],['sealsRenewed','O-rings, washers and hose diaphragm renewed as required'],['newSeal','New tamper seal and safety pin fitted'],['labelAffixed','Service label completed and affixed (org, reg. no., service date, next service, actual mass)'],['ptLabel','Pressure-test label present and legible'],['signage','Signage present and legible'],['access','Unobstructed, correctly mounted and signed']],
-  co2:[['weight','Weight / content check within manufacturer tolerance'],['seal','Safety pin and tamper seal intact'],['damage','No visible damage, dents or corrosion to body'],['hose','Horn / nozzle free of cracks or blockage'],['sealsRenewed','O-rings, washers and seals renewed as required'],['newSeal','New tamper seal and safety pin fitted'],['labelAffixed','Service label completed and affixed (org, reg. no., service date, next service, actual mass)'],['ptLabel','Pressure-test label present and legible'],['signage','Signage present and legible'],['access','Unobstructed, correctly mounted and signed']],
-  hosereel:[['hose','Hose free of cracks, kinks or perishing'],['nozzle','Nozzle / valve operates freely, no leaks'],['reel','Reel winds and unwinds smoothly'],['pressure','Water pressure and flow adequate on test'],['label','Service label present, legible and up to date'],['signage','Signage present and legible'],['access','Unobstructed, correctly mounted and signed']],
-  blanket:[['pouch','Pouch / container undamaged and sealed'],['pull','Pull tabs / release cords intact'],['label','Service label present, legible and up to date'],['signage','Signage present and legible'],['access','Unobstructed, correctly mounted and signed']],
-  hydrant:[['valve','Isolating / landing valve opens and closes freely, no leaks'],['couplings','Outlet couplings and blank caps present and undamaged'],['damage','No visible corrosion, damage or paint deterioration'],['flow','Water pressure and flow adequate on test'],['label','Service label present, legible and up to date'],['signage','Signage present and legible'],['access','Unobstructed, accessible and correctly marked']],
-  siren:[['sound','Sounds correctly and at adequate volume on test'],['damage','No visible damage to unit or mounting'],['mount','Securely mounted, wiring and connections intact'],['power','Powers up / indicator normal'],['label','Service label present, legible and up to date'],['signage','Signage / operating instructions present and legible'],['access','Unobstructed and accessible']]
+  default:[['gauge','Pressure gauge / indicator in operating (green) range'],['seal','Safety pin and tamper seal intact'],['damage','No visible damage, dents or corrosion to body'],['hose','Hose / nozzle free of cracks or blockage'],['sealsRenewed','O-rings, washers and hose diaphragm renewed as required'],['newSeal','New tamper seal and safety pin fitted'],['labelAffixed','Maintenance label completed and affixed (org, reg. no., maintenance date, next maintenance, actual mass)'],['ptLabel','Pressure-test label present and legible'],['signage','Signage present and legible'],['access','Unobstructed, correctly mounted and signed']],
+  co2:[['weight','Weight / content check within manufacturer tolerance'],['seal','Safety pin and tamper seal intact'],['damage','No visible damage, dents or corrosion to body'],['hose','Horn / nozzle free of cracks or blockage'],['sealsRenewed','O-rings, washers and seals renewed as required'],['newSeal','New tamper seal and safety pin fitted'],['labelAffixed','Maintenance label completed and affixed (org, reg. no., maintenance date, next maintenance, actual mass)'],['ptLabel','Pressure-test label present and legible'],['signage','Signage present and legible'],['access','Unobstructed, correctly mounted and signed']],
+  hosereel:[['hose','Hose free of cracks, kinks or perishing'],['nozzle','Nozzle / valve operates freely, no leaks'],['reel','Reel winds and unwinds smoothly'],['pressure','Water pressure and flow adequate on test'],['label','Maintenance label present, legible and up to date'],['signage','Signage present and legible'],['access','Unobstructed, correctly mounted and signed']],
+  blanket:[['pouch','Pouch / container undamaged and sealed'],['pull','Pull tabs / release cords intact'],['label','Maintenance label present, legible and up to date'],['signage','Signage present and legible'],['access','Unobstructed, correctly mounted and signed']],
+  hydrant:[['valve','Isolating / landing valve opens and closes freely, no leaks'],['couplings','Outlet couplings and blank caps present and undamaged'],['damage','No visible corrosion, damage or paint deterioration'],['flow','Water pressure and flow adequate on test'],['label','Maintenance label present, legible and up to date'],['signage','Signage present and legible'],['access','Unobstructed, accessible and correctly marked']],
+  siren:[['sound','Sounds correctly and at adequate volume on test'],['damage','No visible damage to unit or mounting'],['mount','Securely mounted, wiring and connections intact'],['power','Powers up / indicator normal'],['label','Maintenance label present, legible and up to date'],['signage','Signage / operating instructions present and legible'],['access','Unobstructed and accessible']]
 };
 function getChecklistDef(type){
   const cat = (EQUIPMENT_TYPES[type]||{}).category;
@@ -2329,7 +2330,7 @@ const RC_CHECKLIST = [
   ['pressure','Recharged to the correct working pressure for the extinguisher type'],
   ['gauge','Extinguisher pressure indicator verified against the master / working pressure gauge'],
   ['leak','Leak test performed after pressurisation — no leakage detected'],
-  ['seal','New safety pin, tamper seal and completed service label fitted']
+  ['seal','New safety pin, tamper seal and completed maintenance label fitted']
 ];
 function renderCheckboxList(wrapId, def, values){
   document.getElementById(wrapId).innerHTML = def.map(([k,label])=>`
@@ -3685,7 +3686,7 @@ function refreshExport(){
 let reportBackView = 'view-export';
 function letterheadHTML(co){
   return `${co.logo ? `<img class="logo" src="${co.logo}" alt="">` : ''}
-    <h1>${escapeHtml(co.name || 'Fire equipment servicing')}</h1>
+    <h1>${escapeHtml(co.name || 'Fire equipment maintenance')}</h1>
     <div class="co">
       ${co.reg ? 'Reg: '+escapeHtml(co.reg)+'<br>' : ''}
       ${co.address ? escapeHtml(co.address)+'<br>' : ''}
@@ -3741,7 +3742,7 @@ async function openPressureTestReport(){
     <div class="kv"><span class="k">New pressure test</span><span class="v">${escapeHtml(ym(e.pressureTestDate)||'—')}</span></div>
     <div class="kv"><span class="k">Next test due</span><span class="v">${escapeHtml(ym(e.pressureTestDue)||'—')}</span></div>
     <div class="kv"><span class="k">Test pressure</span><span class="v">${escapeHtml(e.ptTestPressure||'—')}${e.ptTestPressure?' kPa':''}</span></div>
-    ${e.serviceMass?`<div class="kv"><span class="k">Mass after service</span><span class="v">${escapeHtml(e.serviceMass)} kg</span></div>`:''}
+    ${e.serviceMass?`<div class="kv"><span class="k">Mass after maintenance</span><span class="v">${escapeHtml(e.serviceMass)} kg</span></div>`:''}
     <div class="kv"><span class="k">Result</span><span class="v">${e.ptResult==='fail'?'Failed / condemned':'Passed'}</span></div>
     <div class="kv"><span class="k">Tested by</span><span class="v">${escapeHtml(e.ptTechnicianName||'—')}${e.ptTechnicianSaqcc?(' — '+escapeHtml(e.ptTechnicianSaqcc)):''}</span></div>
     ${e.ptNotes?`<div class="kv"><span class="k">Notes</span><span class="v">${escapeHtml(e.ptNotes)}</span></div>`:''}
@@ -3897,7 +3898,7 @@ const MONTHLY_CRITERIA = [
   'Pressure indicator (where fitted) reads in the operating range',
   'No visible damage, corrosion, leakage or blocked nozzle / hose',
   'Operating instructions legible and facing outwards',
-  'Service label current — annual service not overdue'
+  'Maintenance label current — annual maintenance not overdue'
 ];
 let monthlyChecksCache = [];   // {id, siteId, month, checkedByName, results:{}, faultNotes:{}, notes}
 let monthlyEditMonth = null;
@@ -4082,7 +4083,7 @@ async function openMonthlyLog(siteId, backView){
     </div>
     <div class="rep-check"><strong>Monthly check by the responsible person — confirm for every unit:</strong>
       <ul>${MONTHLY_CRITERIA.map(c=>`<li>${escapeHtml(c)}</li>`).join('')}</ul>
-      <div class="hint">Mark ✓ where the unit passed, F where a fault was found (detail below), or initial the cell by hand. Report any fault to the servicing company.</div>
+      <div class="hint">Mark ✓ where the unit passed, F where a fault was found (detail below), or initial the cell by hand. Report any fault to the maintenance company.</div>
     </div>
     <div class="tablewrap"><table class="mlog">
       <thead><tr><th>Type</th><th>Serial / tag</th><th>Location</th>${headCells}</tr></thead>
@@ -4090,7 +4091,7 @@ async function openMonthlyLog(siteId, backView){
       <tfoot><tr><td colspan="3"><strong>Checked by / initials</strong></td>${signRow}</tr></tfoot>
     </table></div>
     ${faultLines.length ? `<h3 style="margin-top:16px;">Faults recorded</h3><ul style="font-size:0.85rem;">${faultLines.join('')}</ul>` : ''}
-    <div class="hint" style="margin-top:14px;">Generated by Vigil Fire on ${today}. Print in landscape and keep this log on site with the fire equipment; the responsible person completes it every month between annual services.</div>`,
+    <div class="hint" style="margin-top:14px;">Generated by Vigil Fire on ${today}. Print in landscape and keep this log on site with the fire equipment; the responsible person completes it every month between annual maintenance visits.</div>`,
     backView || 'view-export');
 }
 function escapeHtml(s){
