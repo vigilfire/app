@@ -15,6 +15,20 @@ service firebase.storage {
       );
     }
 
+    // Self-service profile photo + SAQCC card photo (fraud-tracking profile
+    // completion — see firestore.rules technicians.completeMyProfile). Only
+    // the technician/trainee themselves may write their own two files; the
+    // rest of their own company (and the superadmin) may read them, since an
+    // admin needs to be able to check the SAQCC card photo.
+    match /technician-photos/{companyId}/{uid}/{fileName} {
+      allow read: if request.auth != null && (
+        request.auth.token.role == 'superadmin' ||
+        firestore.get(/databases/(default)/documents/technicians/$(request.auth.uid)).data.companyId == companyId
+      );
+      allow write: if request.auth != null && request.auth.uid == uid &&
+        firestore.get(/databases/(default)/documents/technicians/$(request.auth.uid)).data.companyId == companyId;
+    }
+
     // Legacy path from before multi-tenancy (equipment-photos/{fileName}.jpg,
     // no companyId segment) — kept readable/writable by any signed-in user,
     // same exposure as before this change, purely so photos uploaded before

@@ -124,15 +124,16 @@ service cloud.firestore {
         || (isSignedIn() && resource.data.traineeId == request.auth.uid)
         || (isSignedIn() && resource.data.technicianId == request.auth.uid);
 
-      allow create: if isCompanyAdmin(request.resource.data.companyId)
-        || (
-          isSignedIn()
-          && request.resource.data.traineeId == request.auth.uid
-          && request.resource.data.status == 'draft'
-          && request.resource.data.companyId == myCompanyId()
-          && get(/databases/$(database)/documents/technicians/$(request.resource.data.technicianId)).data.role == 'technician'
-          && get(/databases/$(database)/documents/technicians/$(request.resource.data.technicianId)).data.companyId == myCompanyId()
-        );
+      // A trainee's first save (create) and a technician's sign-off both go
+      // through the `createLogbookEntry` / `signLogbookEntry` Cloud Functions
+      // instead of a direct client write — those two events are the ones the
+      // device/IP fraud-tracking fields need to be trustworthy for, which a
+      // security rule can't capture (there's no real client IP available to
+      // a rule, and the Admin SDK is the only way to stamp one reliably).
+      // Both functions also require the actor to have completed their own
+      // profile first (see `requireProfileComplete`), a check that likewise
+      // has to live server-side.
+      allow create: if isCompanyAdmin(request.resource.data.companyId);
 
       allow update: if isCompanyAdmin(resource.data.companyId)
         || (
@@ -145,12 +146,6 @@ service cloud.firestore {
           && request.resource.data.companyId == resource.data.companyId
           && get(/databases/$(database)/documents/technicians/$(request.resource.data.technicianId)).data.role == 'technician'
           && get(/databases/$(database)/documents/technicians/$(request.resource.data.technicianId)).data.companyId == resource.data.companyId
-        )
-        || (
-          isSignedIn() && resource.data.technicianId == request.auth.uid
-          && resource.data.status == 'draft' && request.resource.data.status == 'signed'
-          && request.resource.data.diff(resource.data).affectedKeys()
-               .hasOnly(['technicianComments','status','signedAt','signedBy','technicianName','technicianSaqcc','updatedAt'])
         );
 
       allow delete: if isCompanyAdmin(resource.data.companyId)

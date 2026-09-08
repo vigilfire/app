@@ -523,6 +523,199 @@ exports.reactivateTechnician = onCall(async (request) => {
   return { reactivated: true };
 });
 
+// The caller's real IP/user-agent — only trustworthy read here, server-side
+// off the raw request, never from a client-supplied field (which would be
+// trivial to fake and would defeat the point of capturing it at all).
+function getCallerIp(request) {
+  const req = request.rawRequest;
+  if (!req) return "unknown";
+  const xff = req.headers && req.headers["x-forwarded-for"];
+  if (xff) return String(xff).split(",")[0].trim();
+  return req.ip || "unknown";
+}
+function getUserAgent(request) {
+  const req = request.rawRequest;
+  return (req && req.headers && req.headers["user-agent"]) || "unknown";
+}
+
+async function requireProfileComplete(snap, actionLabel) {
+  if (!snap.exists || !snap.data().profileCompletedAt) {
+    throw new HttpsError(
+      "failed-precondition",
+      `Complete your profile (ID number, cell number, email and both photos) on this device before you can ${actionLabel}.`
+    );
+  }
+}
+
+/* ---------- Fraud-tracking profile completion ----------
+   The admin creates the account with just name/SAQCC number; the technician
+   or trainee fills in the rest (ID number, cell, email, profile photo, SAQCC
+   card photo) themselves, once, on the device they'll actually use. This
+   callable stamps the caller's real IP and a client-generated device id onto
+   their own record as a baseline — signLogbookEntry / createLogbookEntry
+   later capture the same two things again, so the training centre can
+   compare "the device that set up this account" against "the device that
+   actually signed this entry." Re-completing (e.g. a genuine new phone)
+   keeps working, but the previous device/IP is archived into deviceHistory
+   rather than silently overwritten, since a profile "moving" between devices
+   is itself something worth being able to review. */
+exports.completeMyProfile = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "Sign in first.");
+  }
+  const db = admin.firestore();
+  const selfRef = db.collection("technicians").doc(uid);
+  const selfSnap = await selfRef.get();
+  if (!selfSnap.exists) {
+    throw new HttpsError("not-found", "Profile not found.");
+  }
+
+  const data = request.data || {};
+  const idNumber = String(data.idNumber || "").trim();
+  const cellNumber = String(data.cellNumber || "").trim();
+  const contactEmail = String(data.contactEmail || "").trim();
+  const profilePhotoURL = String(data.profilePhotoURL || "").trim();
+  const saqccCardPhotoURL = String(data.saqccCardPhotoURL || "").trim();
+  const deviceId = String(data.deviceId || "").trim();
+
+  if (!idNumber || !cellNumber || !contactEmail || !profilePhotoURL || !saqccCardPhotoURL) {
+    throw new HttpsError("invalid-argument", "All fields and both photos are required.");
+  }
+  if (!isValidEmail(contactEmail)) {
+    throw new HttpsError("invalid-argument", "Enter a valid email address.");
+  }
+  if (!deviceId) {
+    throw new HttpsError("invalid-argument", "Missing device id — reload the app and try again.");
+  }
+
+  const existing = selfSnap.data();
+  const update = {
+    idNumber, cellNumber, contactEmail, profilePhotoURL, saqccCardPhotoURL,
+    trustedDeviceId: deviceId,
+    profileCompletedAt: admin.firestore.FieldValue.serverTimestamp(),
+    profileCompletedIp: getCallerIp(request),
+    profileCompletedUserAgent: getUserAgent(request),
+  };
+  if (existing.profileCompletedAt) {
+    update.deviceHistory = admin.firestore.FieldValue.arrayUnion({
+      trustedDeviceId: existing.trustedDeviceId || null,
+      profileCompletedAt: existing.profileCompletedAt,
+      profileCompletedIp: existing.profileCompletedIp || null,
+      replacedAt: Date.now(),
+    });
+  }
+  await selfRef.update(update);
+  return { completed: true };
+});
+
+/* ---------- Logbook create / sign — moved server-side for fraud tracking ----------
+   Both used to be plain client Firestore writes; they're callables now so the
+   device-id the client reports can be paired with a real, server-observed IP
+   in the same write, and so profile completion can be required before either
+   one succeeds (see requireProfileComplete). */
+exports.createLogbookEntry = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "Sign in first.");
+  }
+  const db = admin.firestore();
+  const traineeSnap = await db.collection("technicians").doc(uid).get();
+  if (!traineeSnap.exists) {
+    throw new HttpsError("not-found", "Profile not found.");
+  }
+  await requireProfileComplete(traineeSnap, "log an entry");
+  const traineeData = traineeSnap.data();
+  const companyId = traineeData.companyId;
+
+  const data = request.data || {};
+  const date = String(data.date || "").trim();
+  const trainingType = data.trainingType === "workshop" ? "workshop" : "on-the-job";
+  const siteClient = String(data.siteClient || "").trim();
+  const workPerformed = String(data.workPerformed || "").trim();
+  const technicianId = String(data.technicianId || "").trim();
+  const deviceId = String(data.deviceId || "").trim();
+
+  if (!date) throw new HttpsError("invalid-argument", "Pick a date.");
+  if (!workPerformed) throw new HttpsError("invalid-argument", "Describe the work performed.");
+  if (!technicianId) throw new HttpsError("invalid-argument", "Choose the technician who witnessed this.");
+  if (!deviceId) throw new HttpsError("invalid-argument", "Missing device id — reload the app and try again.");
+
+  const witnessSnap = await db.collection("technicians").doc(technicianId).get();
+  if (!witnessSnap.exists || witnessSnap.data().role !== "technician" || witnessSnap.data().companyId !== companyId) {
+    throw new HttpsError("invalid-argument", "Choose a registered technician from your own company.");
+  }
+  const witness = witnessSnap.data();
+
+  const ref = db.collection("logbookEntries").doc();
+  await ref.set({
+    traineeId: uid,
+    traineeName: traineeData.name || "",
+    traineeNumber: traineeData.techNumber || "",
+    date, trainingType, siteClient, workPerformed,
+    technicianId,
+    technicianName: witness.name || "",
+    technicianSaqcc: witness.saqcc || "",
+    status: "draft",
+    companyId,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdBy: uid,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdIp: getCallerIp(request),
+    createdDeviceId: deviceId,
+    createdUserAgent: getUserAgent(request),
+  });
+  return { id: ref.id };
+});
+
+exports.signLogbookEntry = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "Sign in first.");
+  }
+  const db = admin.firestore();
+  const techSnap = await db.collection("technicians").doc(uid).get();
+  if (!techSnap.exists) {
+    throw new HttpsError("not-found", "Profile not found.");
+  }
+  await requireProfileComplete(techSnap, "sign off a logbook entry");
+  const techData = techSnap.data();
+
+  const data = request.data || {};
+  const entryId = String(data.id || "").trim();
+  const comments = String(data.comments || "").trim();
+  const deviceId = String(data.deviceId || "").trim();
+  if (!entryId) throw new HttpsError("invalid-argument", "Missing entry id.");
+  if (!deviceId) throw new HttpsError("invalid-argument", "Missing device id — reload the app and try again.");
+
+  const entryRef = db.collection("logbookEntries").doc(entryId);
+  const entrySnap = await entryRef.get();
+  if (!entrySnap.exists) {
+    throw new HttpsError("not-found", "Entry not found.");
+  }
+  const entry = entrySnap.data();
+  if (entry.technicianId !== uid) {
+    throw new HttpsError("permission-denied", "You are not the named witness for this entry.");
+  }
+  if (entry.status !== "draft") {
+    throw new HttpsError("failed-precondition", "This entry has already been signed.");
+  }
+
+  await entryRef.update({
+    technicianComments: comments,
+    technicianName: techData.name || "",
+    technicianSaqcc: techData.saqcc || "",
+    status: "signed",
+    signedAt: admin.firestore.FieldValue.serverTimestamp(),
+    signedBy: uid,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    signedIp: getCallerIp(request),
+    signedDeviceId: deviceId,
+    signedUserAgent: getUserAgent(request),
+  });
+  return { signed: true };
+});
+
 /* ---------- Company `lastActivityAt` ----------
    Bumped whenever any user in a company writes to one of these tenant-scoped
    collections, so /admin's "active this month" figure reflects real usage.

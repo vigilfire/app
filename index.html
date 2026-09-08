@@ -290,7 +290,40 @@
     </span>
   </div>
 
+  <div id="profileBanner" style="display:none; background:var(--amber-bg); color:var(--amber); border-bottom:1px solid var(--amber); padding:10px 16px; font-size:0.85rem; font-weight:600; align-items:center; justify-content:space-between; gap:10px;">
+    <span>Complete your profile on this device — required before you can log or sign off entries.</span>
+    <span style="display:flex; gap:6px; flex-shrink:0;">
+      <button class="chip" onclick="showView('view-complete-profile')">Complete now</button>
+    </span>
+  </div>
+
   <main>
+
+    <!-- ===== COMPLETE YOUR PROFILE (technician/trainee, self-service) =====
+         Admin creates the account with just name + SAQCC number; the rest is
+         filled in here, by the person themselves, on the device they'll
+         actually use — that's what lets a later sign-off be tied back to a
+         real device, not just whoever's logged in. -->
+    <section id="view-complete-profile" class="view">
+      <div class="section-title"><h2>Complete your profile</h2></div>
+      <p class="hint" style="margin:0 0 12px;">Fill this in yourself, on the device you'll use day to day. Required before you can log or sign off a logbook entry.</p>
+      <div class="card">
+        <label style="margin-top:0;">ID number</label>
+        <input id="cpIdNumber" placeholder="South African ID number">
+        <label>Cell number</label>
+        <input id="cpCellNumber" placeholder="e.g. 082 123 4567">
+        <label>Email address</label>
+        <input id="cpEmail" type="email" placeholder="you@example.com">
+        <label>Profile photo</label>
+        <input id="cpProfilePhotoInput" type="file" accept="image/*" capture="user" onchange="handleProfilePhotoPicked(event)">
+        <img id="cpProfilePhotoPreview" class="photo-preview" style="display:none;">
+        <label>Photo of your SAQCC registration card</label>
+        <input id="cpSaqccPhotoInput" type="file" accept="image/*" capture="environment" onchange="handleSaqccCardPhotoPicked(event)">
+        <img id="cpSaqccPhotoPreview" class="photo-preview" style="display:none;">
+        <label class="chk" style="margin-top:14px;"><input type="checkbox" id="cpConsent"><span>I understand this information — including my ID number and photos — is stored to verify that entries I make or sign really came from me, and may be reviewed by my training centre. See the <a href="privacy.html" target="_blank" style="color:inherit;">Privacy notice</a>.</span></label>
+        <button class="btn" style="margin-top:16px;" onclick="submitCompleteProfile()">Save my profile</button>
+      </div>
+    </section>
 
     <!-- ===== MY TRAINING (trainee only) ===== -->
     <section id="view-my-training" class="view">
@@ -808,9 +841,46 @@
         <label style="margin-top:16px;">Workshop reports</label>
         <button class="btn secondary" style="margin-top:6px;" onclick="openCalibrationReport('view-export')">Calibration register</button>
         <div class="hint">Covers all test equipment, not a single site — also on the Calib. tab, where technicians with the calibration permission can print it too.</div>
+        <label style="margin-top:16px;">Trainee logbook</label>
+        <button class="btn secondary" style="margin-top:6px;" onclick="openVerification()">Sign-off verification</button>
+        <div class="hint">Compares each profile's registered device against the device used for its logbook entries and sign-offs.</div>
       </div>
       <div class="section-title"><h2>Recent emails</h2></div>
       <div id="emailLogList"><div class="empty">Choose a site above to see its email history.</div></div>
+    </section>
+
+    <!-- ===== SIGN-OFF VERIFICATION (admin) — device/IP fraud-tracking review ===== -->
+    <section id="view-verification" class="view">
+      <div class="backbar"><button onclick="showView('view-export')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2>Sign-off verification</h2></div>
+      <p class="hint" style="margin:0 0 14px;">Every profile records the device it was set up on; every logbook entry and sign-off records the device used at that moment. A mismatch isn't proof of anything by itself — people replace phones — but a pattern is worth asking about. Rows in <strong style="color:var(--red-dark);">red</strong> have a device that doesn't match the profile's registered device.</p>
+
+      <div class="section-title"><h2>Profiles</h2></div>
+      <div class="card" style="padding:0; overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse; font-size:0.82rem;">
+          <thead><tr>
+            <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--line);">Name</th>
+            <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--line);">Role</th>
+            <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--line);">Profile completed</th>
+            <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--line);">Registered device</th>
+            <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--line);">IP at completion</th>
+          </tr></thead>
+          <tbody id="verificationProfilesBody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="section-title"><h2>Logbook entries</h2></div>
+      <div class="card" style="padding:0; overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse; font-size:0.82rem;">
+          <thead><tr>
+            <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--line);">Date</th>
+            <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--line);">Trainee</th>
+            <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--line);">Logged device</th>
+            <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--line);">Witness</th>
+            <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--line);">Signed device</th>
+          </tr></thead>
+          <tbody id="verificationEntriesBody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
     </section>
 
     <!-- ===== CALIBRATION REGISTER (weekly checks of test equipment) — own tab ===== -->
@@ -975,6 +1045,42 @@ if(!MONTHLY_INSPECTIONS_ENABLED){
   document.getElementById('monthlyLogBtn').style.display = 'none';
 }
 
+/* ---------- Device id (fraud-tracking baseline) ----------
+   A random id generated once and kept in this browser's local storage —
+   not a security credential, just a marker of "this device." Sent alongside
+   completeMyProfile / createLogbookEntry / signLogbookEntry so the training
+   centre can later compare "the device this profile was set up on" against
+   "the device that actually logged/signed an entry." Clearing site data (or
+   a genuine new phone) resets it, which is itself worth noticing. */
+function getOrCreateDeviceId(){
+  let id;
+  try{ id = localStorage.getItem('vfDeviceId'); }catch(e){}
+  if(!id){
+    id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('dev-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+    try{ localStorage.setItem('vfDeviceId', id); }catch(e){}
+  }
+  return id;
+}
+
+// Shared by every "pick a photo, resize it, get a JPEG data URL" flow.
+function resizeImageToDataUrl(file, maxW, quality, callback){
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const img = new Image();
+    img.onload = function(){
+      const scale = Math.min(1, maxW / img.width);
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      callback(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 /* ---------- Online/offline indicator ---------- */
 function updateSyncPill(){
   const pill = document.getElementById('syncPill');
@@ -1036,12 +1142,23 @@ auth.onAuthStateChanged(async (user)=>{
   document.getElementById('authError').style.display='none';
   setupRoleUI();
   updateSyncPill();
+  updateProfileBanner();
   showView(currentRole === 'trainee' ? 'view-my-training' : 'view-sites');
   maybeAutoBackup();
   // Best-effort — shown on the internal admin dashboard's technician list.
   // Never blocks sign-in on failure (e.g. while offline).
   db.collection('technicians').doc(user.uid).update({ lastLoginAt: firebase.firestore.FieldValue.serverTimestamp() }).catch(()=>{});
 });
+
+// Nudges a technician/trainee who hasn't completed their fraud-tracking
+// profile yet (see view-complete-profile) — doesn't apply to admins, who
+// never log or sign off a logbook entry themselves.
+function updateProfileBanner(){
+  const banner = document.getElementById('profileBanner');
+  if(!banner) return;
+  const needsIt = (currentRole === 'technician' || currentRole === 'trainee') && currentProfile && !currentProfile.profileCompletedAt;
+  banner.style.display = needsIt ? 'flex' : 'none';
+}
 
 function doLogin(){
   const identifier = document.getElementById('loginIdentifier').value.trim();
@@ -1096,6 +1213,50 @@ async function downloadMyData(){
   }
   downloadJSON(`my-vigil-fire-data-${toLocalISO(new Date())}.json`, out);
   toast('Your data has been downloaded');
+}
+
+/* ---------- Complete your profile (self-service, fraud-tracking baseline) ---------- */
+let cpProfilePhotoDataUrl = null;
+let cpSaqccPhotoDataUrl = null;
+function handleProfilePhotoPicked(evt){
+  resizeImageToDataUrl(evt.target.files[0], 500, 0.75, dataUrl=>{
+    cpProfilePhotoDataUrl = dataUrl;
+    const preview = document.getElementById('cpProfilePhotoPreview');
+    preview.src = dataUrl; preview.style.display = 'block';
+  });
+}
+function handleSaqccCardPhotoPicked(evt){
+  resizeImageToDataUrl(evt.target.files[0], 1000, 0.75, dataUrl=>{
+    cpSaqccPhotoDataUrl = dataUrl;
+    const preview = document.getElementById('cpSaqccPhotoPreview');
+    preview.src = dataUrl; preview.style.display = 'block';
+  });
+}
+async function submitCompleteProfile(){
+  const idNumber = document.getElementById('cpIdNumber').value.trim();
+  const cellNumber = document.getElementById('cpCellNumber').value.trim();
+  const contactEmail = document.getElementById('cpEmail').value.trim();
+  if(!idNumber || !cellNumber || !contactEmail){ toast('Fill in your ID number, cell number and email'); return; }
+  if(!cpProfilePhotoDataUrl || !cpSaqccPhotoDataUrl){ toast('Add both photos'); return; }
+  if(!document.getElementById('cpConsent').checked){ toast('Confirm you understand how this information is used'); return; }
+  toast('Saving your profile…');
+  try{
+    const profileRef = storage.ref(`technician-photos/${currentCompanyId}/${currentUser.uid}/profile.jpg`);
+    await profileRef.putString(cpProfilePhotoDataUrl, 'data_url');
+    const profilePhotoURL = await profileRef.getDownloadURL();
+
+    const cardRef = storage.ref(`technician-photos/${currentCompanyId}/${currentUser.uid}/saqcc-card.jpg`);
+    await cardRef.putString(cpSaqccPhotoDataUrl, 'data_url');
+    const saqccCardPhotoURL = await cardRef.getDownloadURL();
+
+    const call = firebase.functions().httpsCallable('completeMyProfile');
+    await call({ idNumber, cellNumber, contactEmail, profilePhotoURL, saqccCardPhotoURL, deviceId: getOrCreateDeviceId() });
+
+    currentProfile.profileCompletedAt = true; // unlocks the client-side gates immediately, without waiting on a re-fetch
+    updateProfileBanner();
+    toast('Profile completed');
+    showView(currentRole === 'trainee' ? 'view-my-training' : 'view-signoffs');
+  }catch(e){ toast('Error: ' + e.message); }
 }
 
 function setupRoleUI(){
@@ -1153,7 +1314,7 @@ function showView(id){
   document.getElementById('navMyTrainees').classList.toggle('active', ['view-my-trainees','view-my-trainee-detail'].includes(id));
   document.getElementById('navCompany').classList.toggle('active', id==='view-company');
   const calReport = id==='view-report' && reportBackView==='view-calibration';
-  document.getElementById('navExport').classList.toggle('active', id==='view-export' || registerFromExport || id==='view-email' || (id==='view-report' && !calReport && !sitesReport));
+  document.getElementById('navExport').classList.toggle('active', id==='view-export' || registerFromExport || id==='view-email' || id==='view-verification' || (id==='view-report' && !calReport && !sitesReport));
   document.getElementById('navCalibration').classList.toggle('active', id==='view-calibration' || calReport);
   if(id==='view-sites') renderSites();
   if(id==='view-due') renderDueDashboard();
@@ -3617,6 +3778,11 @@ function setLbTrainingType(t){
 }
 
 async function openLogbookEntryForm(id){
+  if(!id && !currentProfile.profileCompletedAt){
+    toast('Complete your profile before logging an entry');
+    showView('view-complete-profile');
+    return;
+  }
   editingLogbookEntryId = id || null;
   const e = id ? myLogbookEntries.find(x=>x.id===id) : null;
   if(id && !e){ toast('Entry not found'); return; }
@@ -3666,27 +3832,23 @@ async function saveLogbookEntry(){
   if(!date){ toast('Pick a date'); return; }
   if(!workPerformed){ toast('Describe the work performed'); return; }
   if(!technicianId){ toast('Choose the technician who witnessed this'); return; }
-  const witness = techsCache.find(t=>t.id===technicianId);
-  const payload = {
-    traineeId: currentUser.uid,
-    traineeName: currentProfile.name || '',
-    traineeNumber: currentProfile.techNumber || '',
-    date, trainingType: lbTrainingType, siteClient, workPerformed,
-    technicianId,
-    technicianName: witness ? witness.name : '',
-    technicianSaqcc: witness ? (witness.saqcc||'') : '',
-    status: 'draft',
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-  };
   try{
     if(editingLogbookEntryId){
-      await db.collection('logbookEntries').doc(editingLogbookEntryId).update(payload);
+      const witness = techsCache.find(t=>t.id===technicianId);
+      await db.collection('logbookEntries').doc(editingLogbookEntryId).update({
+        date, trainingType: lbTrainingType, siteClient, workPerformed,
+        technicianId,
+        technicianName: witness ? witness.name : '',
+        technicianSaqcc: witness ? (witness.saqcc||'') : '',
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
       toast('Entry updated');
     } else {
-      payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-      payload.createdBy = currentUser.uid;
-      payload.companyId = currentCompanyId;
-      await db.collection('logbookEntries').add(payload);
+      // Goes through a Cloud Function, not a direct write — it needs a real,
+      // server-observed IP alongside the device id, and it's the fraud-
+      // tracking profile-completion gate's enforcement point for a trainee.
+      const call = firebase.functions().httpsCallable('createLogbookEntry');
+      await call({ date, trainingType: lbTrainingType, siteClient, workPerformed, technicianId, deviceId: getOrCreateDeviceId() });
       toast('Entry saved');
     }
     showView('view-my-training');
@@ -3731,6 +3893,11 @@ async function renderSignoffs(){
 
 let editingSignoffId = null;
 function openSignoffForm(id){
+  if(!currentProfile.profileCompletedAt){
+    toast('Complete your profile before signing off an entry');
+    showView('view-complete-profile');
+    return;
+  }
   editingSignoffId = id;
   const e = mySignoffs.find(x=>x.id===id);
   if(!e){ toast('Entry not found'); return; }
@@ -3749,18 +3916,69 @@ async function signLogbookEntry(){
   if(!confirm('Sign this entry? You are confirming you were personally present and witnessed this work. Once signed it cannot be edited.')) return;
   const comments = document.getElementById('signoffComments').value.trim();
   try{
-    await db.collection('logbookEntries').doc(editingSignoffId).update({
-      technicianComments: comments,
-      technicianName: currentProfile.name || '',
-      technicianSaqcc: currentProfile.saqcc || '',
-      status: 'signed',
-      signedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      signedBy: currentUser.uid,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    // Goes through a Cloud Function, not a direct write — same reason as
+    // createLogbookEntry: a real server-observed IP, and the profile-
+    // completion gate's enforcement point for the signing technician.
+    const call = firebase.functions().httpsCallable('signLogbookEntry');
+    await call({ id: editingSignoffId, comments, deviceId: getOrCreateDeviceId() });
     toast('Entry signed');
     showView('view-signoffs');
   }catch(e){ toast('Error: ' + e.message); }
+}
+
+/* ---------- Sign-off verification (admin) ----------
+   Lists every profile's registered device/IP next to the device/IP recorded
+   on each logbook entry's creation and sign-off. A mismatch is highlighted
+   for a human to look at — it isn't proof of anything by itself (people
+   replace phones), so it's deliberately not surfaced as a blocking warning
+   anywhere else in the app. */
+async function openVerification(){
+  const body1 = document.getElementById('verificationProfilesBody');
+  const body2 = document.getElementById('verificationEntriesBody');
+  body1.innerHTML = `<tr><td colspan="5" class="empty">Loading…</td></tr>`;
+  body2.innerHTML = `<tr><td colspan="5" class="empty">Loading…</td></tr>`;
+  showView('view-verification');
+  const td = 'style="padding:8px 10px; border-bottom:1px solid var(--line);"';
+  const tdMono = (flag) => `style="padding:8px 10px; border-bottom:1px solid var(--line); font-family:monospace; font-size:0.76rem;${flag?' color:var(--red-dark); font-weight:700;':''}"`;
+  try{
+    const [techSnap, lbSnap] = await Promise.all([
+      db.collection('technicians').where('companyId','==',currentCompanyId).get(),
+      db.collection('logbookEntries').where('companyId','==',currentCompanyId).get()
+    ]);
+    const people = techSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    const peopleById = {};
+    people.forEach(p=>{ peopleById[p.id] = p; });
+    const fmtTs = ts => (ts && ts.toDate) ? toLocalISO(ts.toDate()) : '';
+
+    body1.innerHTML = people.length===0 ? `<tr><td colspan="5" class="empty">No profiles yet.</td></tr>` :
+      people.map(p=>`<tr>
+        <td ${td}>${escapeHtml(p.name||'')}</td>
+        <td ${td}>${escapeHtml(p.role||'')}</td>
+        <td ${td}>${p.profileCompletedAt ? escapeHtml(fmtTs(p.profileCompletedAt)) : '<span style="color:var(--red-dark);">Not completed</span>'}</td>
+        <td ${tdMono(false)}>${p.trustedDeviceId ? escapeHtml(p.trustedDeviceId.slice(0,8)) : '—'}</td>
+        <td ${td}>${escapeHtml(p.profileCompletedIp||'—')}</td>
+      </tr>`).join('');
+
+    const entries = lbSnap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,150);
+    body2.innerHTML = entries.length===0 ? `<tr><td colspan="5" class="empty">No entries yet.</td></tr>` :
+      entries.map(e=>{
+        const trainee = peopleById[e.traineeId];
+        const witness = peopleById[e.technicianId];
+        const createdMismatch = !!(trainee && trainee.trustedDeviceId && e.createdDeviceId && trainee.trustedDeviceId !== e.createdDeviceId);
+        const signedMismatch = !!(witness && witness.trustedDeviceId && e.signedDeviceId && witness.trustedDeviceId !== e.signedDeviceId);
+        const rowStyle = (createdMismatch || signedMismatch) ? ' style="background:#FBE1E4;"' : '';
+        return `<tr${rowStyle}>
+          <td ${td}>${escapeHtml(e.date||'')}</td>
+          <td ${td}>${escapeHtml(e.traineeName||'')}</td>
+          <td ${tdMono(createdMismatch)}>${e.createdDeviceId ? escapeHtml(e.createdDeviceId.slice(0,8)) : '—'}</td>
+          <td ${td}>${escapeHtml(e.technicianName||'')}</td>
+          <td ${tdMono(signedMismatch)}>${e.signedDeviceId ? escapeHtml(e.signedDeviceId.slice(0,8)) : (e.status==='signed' ? '—' : 'Not yet signed')}</td>
+        </tr>`;
+      }).join('');
+  }catch(e){
+    body1.innerHTML = `<tr><td colspan="5" class="empty">${escapeHtml(e.message)}</td></tr>`;
+    body2.innerHTML = '';
+  }
 }
 
 /* ---------- Reports tab ---------- */

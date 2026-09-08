@@ -105,6 +105,15 @@ You're now the administrator. From here, use the **Techs** tab to create technic
 - Any signed-in user has a **My data** button in the header (self-service data-subject access request) that downloads a JSON export of their own profile and related records (logbook entries; assignment and competencies for a trainee).
 - `storage.rules` is tenant-scoped (`equipment-photos/{companyId}/{fileName}`) — **this needs Firebase Storage to actually be enabled** on the project (Console → Storage → Get Started) before `firebase deploy --only storage` will work; it wasn't enabled as of this writing, meaning photo upload may not have been functional. A narrow legacy rule keeps any pre-existing flat-path photos readable so they don't go dark.
 
+## Sign-off fraud tracking (device/IP)
+
+An admin still creates a technician/trainee account with just name + SAQCC number. The person then has to **complete their own profile** (ID number, cell, email, profile photo, SAQCC card photo) themselves, on the device they'll actually use — a banner nudges them, and it's *required* before they can log (trainee) or sign off (technician) a logbook entry. Completing it stamps a device id (generated client-side, stored in that browser's local storage) and the caller's real IP (read server-side off the request, never client-reported) onto their record; `createLogbookEntry` and `signLogbookEntry` capture the same two things again at that moment. None of this blocks anyone or shows a warning in the normal app flow — it's purely a record for a human to review.
+
+- **Where to review it**: admin → Reports → "Sign-off verification" (`view-verification`). Rows are highlighted where a logbook entry's device doesn't match the signer's/logger's registered device. Not proof of anything by itself — people replace phones — just something worth asking about if a pattern shows up.
+- **New Cloud Functions**: `completeMyProfile`, `createLogbookEntry`, `signLogbookEntry` — logbook creation and sign-off no longer happen as direct client Firestore writes (see the comment in `firestore.rules` above the `logbookEntries` match block).
+- **New Storage path**: `technician-photos/{companyId}/{uid}/` (profile photo + SAQCC card photo), rules in `storage.rules`.
+- **Re-completing a profile** (e.g. a genuine new phone) is allowed and just archives the previous device/IP into a `deviceHistory` array on the technician doc rather than silently overwriting it.
+
 ## Internal admin section & multi-tenancy (optional, superadmin only)
 
 Vigil Fire can host **more than one company** in the same Firebase project — each with its own sites, technicians and letterhead, fully isolated from every other company by `firestore.rules`. A separate, unlisted page (`admin.html`) lets one operator account manage every company: set its plan, seat limit and status, and add new companies. This is entirely optional — if you're self-hosting for a single company, you can ignore all of this and just give every document the same `companyId` (see step 6 above).
