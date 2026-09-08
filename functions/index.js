@@ -571,16 +571,32 @@ exports.completeMyProfile = onCall(async (request) => {
     throw new HttpsError("not-found", "Profile not found.");
   }
 
+  const existing = selfSnap.data();
+  const isTrainee = existing.role === "trainee";
+
   const data = request.data || {};
   const idNumber = String(data.idNumber || "").trim();
   const cellNumber = String(data.cellNumber || "").trim();
   const contactEmail = String(data.contactEmail || "").trim();
   const profilePhotoURL = String(data.profilePhotoURL || "").trim();
   const saqccCardPhotoURL = String(data.saqccCardPhotoURL || "").trim();
+  const trainingCertificateDate = String(data.trainingCertificateDate || "").trim();
+  const trainingCertificatePhotoURL = String(data.trainingCertificatePhotoURL || "").trim();
   const deviceId = String(data.deviceId || "").trim();
 
-  if (!idNumber || !cellNumber || !contactEmail || !profilePhotoURL || !saqccCardPhotoURL) {
-    throw new HttpsError("invalid-argument", "All fields and both photos are required.");
+  if (!idNumber || !cellNumber || !contactEmail || !profilePhotoURL) {
+    throw new HttpsError("invalid-argument", "ID number, cell number, email and a profile photo are required.");
+  }
+  // A trainee doesn't have a SAQCC card yet — they give the date on and a
+  // photo of their training certificate instead, since that's what starts
+  // the 6–24 month SAQCC completion window (a technician's card has no such
+  // window attached, so it doesn't need a date).
+  if (isTrainee) {
+    if (!trainingCertificateDate || !trainingCertificatePhotoURL) {
+      throw new HttpsError("invalid-argument", "Your training certificate date and photo are required.");
+    }
+  } else if (!saqccCardPhotoURL) {
+    throw new HttpsError("invalid-argument", "A photo of your SAQCC registration card is required.");
   }
   if (!isValidEmail(contactEmail)) {
     throw new HttpsError("invalid-argument", "Enter a valid email address.");
@@ -589,13 +605,15 @@ exports.completeMyProfile = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "Missing device id — reload the app and try again.");
   }
 
-  const existing = selfSnap.data();
   const update = {
-    idNumber, cellNumber, contactEmail, profilePhotoURL, saqccCardPhotoURL,
+    idNumber, cellNumber, contactEmail, profilePhotoURL,
     trustedDeviceId: deviceId,
     profileCompletedAt: admin.firestore.FieldValue.serverTimestamp(),
     profileCompletedIp: getCallerIp(request),
     profileCompletedUserAgent: getUserAgent(request),
+    ...(isTrainee
+      ? { trainingCertificateDate, trainingCertificatePhotoURL }
+      : { saqccCardPhotoURL }),
   };
   if (existing.profileCompletedAt) {
     update.deviceHistory = admin.firestore.FieldValue.arrayUnion({

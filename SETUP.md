@@ -113,6 +113,7 @@ An admin still creates a technician/trainee account with just name + SAQCC numbe
 - **New Cloud Functions**: `completeMyProfile`, `createLogbookEntry`, `signLogbookEntry` — logbook creation and sign-off no longer happen as direct client Firestore writes (see the comment in `firestore.rules` above the `logbookEntries` match block).
 - **New Storage path**: `technician-photos/{companyId}/{uid}/` (profile photo + SAQCC card photo), rules in `storage.rules`.
 - **Re-completing a profile** (e.g. a genuine new phone) is allowed and just archives the previous device/IP into a `deviceHistory` array on the technician doc rather than silently overwriting it.
+- **Trainees get a different second document.** A trainee doesn't have a SAQCC card yet, so instead of that photo they give the date on and a photo of their training certificate (`trainingCertificateDate` / `trainingCertificatePhotoURL`). That date is the anchor for the SAQCC training-completion window (6–24 months) — separate from `traineeRegisteredDate` (when the admin registered them for their TR number) and separate from the current-supervisor period on `traineeAssignments`. All three dates show on "My training" and the admin's trainee detail screen.
 
 ## Internal admin section & multi-tenancy (optional, superadmin only)
 

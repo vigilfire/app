@@ -293,7 +293,7 @@
   <div id="profileBanner" style="display:none; background:var(--amber-bg); color:var(--amber); border-bottom:1px solid var(--amber); padding:10px 16px; font-size:0.85rem; font-weight:600; align-items:center; justify-content:space-between; gap:10px;">
     <span>Complete your profile on this device — required before you can log or sign off entries.</span>
     <span style="display:flex; gap:6px; flex-shrink:0;">
-      <button class="chip" onclick="showView('view-complete-profile')">Complete now</button>
+      <button class="chip" onclick="openCompleteProfile()">Complete now</button>
     </span>
   </div>
 
@@ -317,9 +317,19 @@
         <label>Profile photo</label>
         <input id="cpProfilePhotoInput" type="file" accept="image/*" capture="user" onchange="handleProfilePhotoPicked(event)">
         <img id="cpProfilePhotoPreview" class="photo-preview" style="display:none;">
-        <label>Photo of your SAQCC registration card</label>
-        <input id="cpSaqccPhotoInput" type="file" accept="image/*" capture="environment" onchange="handleSaqccCardPhotoPicked(event)">
-        <img id="cpSaqccPhotoPreview" class="photo-preview" style="display:none;">
+        <div id="cpSaqccCardBlock">
+          <label>Photo of your SAQCC registration card</label>
+          <input id="cpSaqccPhotoInput" type="file" accept="image/*" capture="environment" onchange="handleSaqccCardPhotoPicked(event)">
+          <img id="cpSaqccPhotoPreview" class="photo-preview" style="display:none;">
+        </div>
+        <div id="cpCertBlock" style="display:none;">
+          <label>Date on your training certificate</label>
+          <input id="cpCertDate" type="date">
+          <label>Photo of your training certificate</label>
+          <input id="cpCertPhotoInput" type="file" accept="image/*" capture="environment" onchange="handleCertPhotoPicked(event)">
+          <img id="cpCertPhotoPreview" class="photo-preview" style="display:none;">
+          <div class="hint">Training must be completed within 6–24 months of this date, per the SAQCC (Fire) trainee logbook rules. This is separate from the date you registered as a trainee.</div>
+        </div>
         <label class="chk" style="margin-top:14px;"><input type="checkbox" id="cpConsent"><span>I understand this information — including my ID number and photos — is stored to verify that entries I make or sign really came from me, and may be reviewed by my training centre. See the <a href="privacy.html" target="_blank" style="color:inherit;">Privacy notice</a>.</span></label>
         <button class="btn" style="margin-top:16px;" onclick="submitCompleteProfile()">Save my profile</button>
       </div>
@@ -672,6 +682,7 @@
     <!-- ===== TECHNICIANS (admin only) ===== -->
     <section id="view-technicians" class="view">
       <div class="section-title"><h2>Technicians</h2></div>
+      <div class="pillrow" id="techFilterChips" style="margin-bottom:12px;"></div>
       <div id="techList"></div>
       <button class="btn" onclick="openTechForm()">+ Add technician</button>
     </section>
@@ -707,6 +718,7 @@
     <section id="view-trainees" class="view">
       <div class="section-title"><h2>Trainees</h2></div>
       <p class="hint" style="margin:0 0 12px;">SAQCC (Fire) registered trainees complete 6 months of supervised field training under a registered technician before qualifying.</p>
+      <div class="pillrow" id="traineeFilterChips" style="margin-bottom:12px;"></div>
       <div id="traineeList"></div>
       <button class="btn" onclick="openTraineeForm()">+ Add trainee</button>
     </section>
@@ -1215,9 +1227,20 @@ async function downloadMyData(){
   toast('Your data has been downloaded');
 }
 
-/* ---------- Complete your profile (self-service, fraud-tracking baseline) ---------- */
+/* ---------- Complete your profile (self-service, fraud-tracking baseline) ----------
+   A technician uploads their SAQCC card; a trainee doesn't have one yet, so
+   they instead give the date on and a photo of their training certificate —
+   the anchor for the 6–24 month SAQCC training-completion window (separate
+   from traineeRegisteredDate, which is just when they got their TR number). */
+function openCompleteProfile(){
+  const isTrainee = currentRole === 'trainee';
+  document.getElementById('cpSaqccCardBlock').style.display = isTrainee ? 'none' : 'block';
+  document.getElementById('cpCertBlock').style.display = isTrainee ? 'block' : 'none';
+  showView('view-complete-profile');
+}
 let cpProfilePhotoDataUrl = null;
 let cpSaqccPhotoDataUrl = null;
+let cpCertPhotoDataUrl = null;
 function handleProfilePhotoPicked(evt){
   resizeImageToDataUrl(evt.target.files[0], 500, 0.75, dataUrl=>{
     cpProfilePhotoDataUrl = dataUrl;
@@ -1232,12 +1255,25 @@ function handleSaqccCardPhotoPicked(evt){
     preview.src = dataUrl; preview.style.display = 'block';
   });
 }
+function handleCertPhotoPicked(evt){
+  resizeImageToDataUrl(evt.target.files[0], 1000, 0.75, dataUrl=>{
+    cpCertPhotoDataUrl = dataUrl;
+    const preview = document.getElementById('cpCertPhotoPreview');
+    preview.src = dataUrl; preview.style.display = 'block';
+  });
+}
 async function submitCompleteProfile(){
+  const isTrainee = currentRole === 'trainee';
   const idNumber = document.getElementById('cpIdNumber').value.trim();
   const cellNumber = document.getElementById('cpCellNumber').value.trim();
   const contactEmail = document.getElementById('cpEmail').value.trim();
+  const certDate = document.getElementById('cpCertDate').value;
   if(!idNumber || !cellNumber || !contactEmail){ toast('Fill in your ID number, cell number and email'); return; }
-  if(!cpProfilePhotoDataUrl || !cpSaqccPhotoDataUrl){ toast('Add both photos'); return; }
+  if(!cpProfilePhotoDataUrl){ toast('Add your profile photo'); return; }
+  if(isTrainee){
+    if(!certDate){ toast('Enter the date on your training certificate'); return; }
+    if(!cpCertPhotoDataUrl){ toast('Add a photo of your training certificate'); return; }
+  } else if(!cpSaqccPhotoDataUrl){ toast('Add a photo of your SAQCC registration card'); return; }
   if(!document.getElementById('cpConsent').checked){ toast('Confirm you understand how this information is used'); return; }
   toast('Saving your profile…');
   try{
@@ -1245,14 +1281,23 @@ async function submitCompleteProfile(){
     await profileRef.putString(cpProfilePhotoDataUrl, 'data_url');
     const profilePhotoURL = await profileRef.getDownloadURL();
 
-    const cardRef = storage.ref(`technician-photos/${currentCompanyId}/${currentUser.uid}/saqcc-card.jpg`);
-    await cardRef.putString(cpSaqccPhotoDataUrl, 'data_url');
-    const saqccCardPhotoURL = await cardRef.getDownloadURL();
+    const payload = { idNumber, cellNumber, contactEmail, profilePhotoURL, deviceId: getOrCreateDeviceId() };
+    if(isTrainee){
+      const certRef = storage.ref(`technician-photos/${currentCompanyId}/${currentUser.uid}/training-cert.jpg`);
+      await certRef.putString(cpCertPhotoDataUrl, 'data_url');
+      payload.trainingCertificateDate = certDate;
+      payload.trainingCertificatePhotoURL = await certRef.getDownloadURL();
+    } else {
+      const cardRef = storage.ref(`technician-photos/${currentCompanyId}/${currentUser.uid}/saqcc-card.jpg`);
+      await cardRef.putString(cpSaqccPhotoDataUrl, 'data_url');
+      payload.saqccCardPhotoURL = await cardRef.getDownloadURL();
+    }
 
     const call = firebase.functions().httpsCallable('completeMyProfile');
-    await call({ idNumber, cellNumber, contactEmail, profilePhotoURL, saqccCardPhotoURL, deviceId: getOrCreateDeviceId() });
+    await call(payload);
 
     currentProfile.profileCompletedAt = true; // unlocks the client-side gates immediately, without waiting on a re-fetch
+    if(isTrainee) currentProfile.trainingCertificateDate = certDate;
     updateProfileBanner();
     toast('Profile completed');
     showView(currentRole === 'trainee' ? 'view-my-training' : 'view-signoffs');
@@ -1455,10 +1500,11 @@ async function openSiteForm(id){
     document.getElementById('siteCategoryInput').value='';
   }
   const listEl = document.getElementById('assignTechList');
-  if(techsCache.length===0){
-    listEl.innerHTML = `<div class="hint">No technicians yet — add one from the Techs tab first.</div>`;
+  const activeTechs = techsCache.filter(t=>t.active!==false);
+  if(activeTechs.length===0){
+    listEl.innerHTML = `<div class="hint">No active technicians yet — add one from the Techs tab first.</div>`;
   } else {
-    listEl.innerHTML = techsCache.map(t=>`
+    listEl.innerHTML = activeTechs.map(t=>`
       <label class="tech-check" style="margin:0; text-transform:none; font-weight:400; color:var(--ink);">
         <input type="checkbox" value="${t.id}" ${assigned.includes(t.id)?'checked':''} style="width:auto;">
         ${escapeHtml(t.name)} <span class="hint" style="margin:0;">(${escapeHtml(t.email||'')})</span>
@@ -2995,14 +3041,23 @@ function renderTechnicians(){
     paintTechnicians();
   }, err=>{ toast('Could not load technicians: ' + err.message); });
 }
+let techFilter = 'active';   // active | deactivated — which subset the list shows; all data stays intact either way
+function setTechFilter(k){ techFilter = k; paintTechnicians(); }
 function paintTechnicians(){
   const wrap = document.getElementById('techList');
-  if(techsCache.length===0){
-    wrap.innerHTML = `<div class="empty"><div class="big">${ICON.user}</div>No technicians yet.</div>`;
+  const deactivatedCount = techsCache.filter(t=>t.active===false).length;
+  const activeCount = techsCache.length - deactivatedCount;
+  document.getElementById('techFilterChips').innerHTML = [
+    ['active', `Active (${activeCount})`],
+    ['deactivated', `Deactivated (${deactivatedCount})`]
+  ].map(([k,label])=>`<button class="chip ${techFilter===k?'active':''}" onclick="setTechFilter('${k}')">${escapeHtml(label)}</button>`).join('');
+
+  const shown = techsCache.filter(t=> techFilter==='deactivated' ? t.active===false : t.active!==false);
+  if(shown.length===0){
+    wrap.innerHTML = `<div class="empty"><div class="big">${ICON.user}</div>No ${techFilter==='deactivated'?'deactivated':''} technicians${techFilter==='deactivated'?'':' yet'}.</div>`;
     return;
   }
-  const ordered = techsCache.slice().sort((a,b)=>(a.active===false)-(b.active===false));
-  wrap.innerHTML = ordered.map(t=>{
+  wrap.innerHTML = shown.map(t=>{
     const inactive = t.active === false;
     const assignedCount = sitesCache.filter(s=>(s.assignedTo||[]).includes(t.id)).length;
     const right = inactive
@@ -3166,14 +3221,41 @@ function traineeStatusInfo(a){
   return { label:`${daysLeft} day${daysLeft===1?'':'s'} left`, cls:'due' };
 }
 
+// The SAQCC completion window: 6–24 months from the training certificate
+// date (not the trainee-registration date, and not tied to any particular
+// supervisor). {minDate, maxDate, label, cls} or null if no certificate date
+// is on file yet.
+function certificateWindowInfo(certDate){
+  if(!certDate) return null;
+  const minDate = addMonthsToDate(certDate, 6);
+  const maxDate = addMonthsToDate(certDate, 24);
+  const daysToMax = Math.round((new Date(maxDate+'T00:00:00') - new Date(toLocalISO(new Date())+'T00:00:00')) / 86400000);
+  if(daysToMax < 0){
+    return { minDate, maxDate, label:`${Math.abs(daysToMax)} day${Math.abs(daysToMax)===1?'':'s'} past the 24-month deadline`, cls:'fail' };
+  }
+  const beforeMin = new Date(toLocalISO(new Date())+'T00:00:00') < new Date(minDate+'T00:00:00');
+  return { minDate, maxDate,
+    label: beforeMin ? `Earliest completion ${minDate}` : `${daysToMax} day${daysToMax===1?'':'s'} left`,
+    cls: 'due' };
+}
+
+let traineeFilter = 'active';   // active | deactivated — which subset the list shows; all data stays intact either way
+function setTraineeFilter(k){ traineeFilter = k; paintTrainees(); }
 function paintTrainees(){
   const wrap = document.getElementById('traineeList');
-  if(traineesCache.length===0){
-    wrap.innerHTML = `<div class="empty"><div class="big">${ICON.user}</div>No trainees yet.</div>`;
+  const deactivatedCount = traineesCache.filter(t=>t.active===false).length;
+  const activeCount = traineesCache.length - deactivatedCount;
+  document.getElementById('traineeFilterChips').innerHTML = [
+    ['active', `Active (${activeCount})`],
+    ['deactivated', `Deactivated (${deactivatedCount})`]
+  ].map(([k,label])=>`<button class="chip ${traineeFilter===k?'active':''}" onclick="setTraineeFilter('${k}')">${escapeHtml(label)}</button>`).join('');
+
+  const shown = traineesCache.filter(t=> traineeFilter==='deactivated' ? t.active===false : t.active!==false);
+  if(shown.length===0){
+    wrap.innerHTML = `<div class="empty"><div class="big">${ICON.user}</div>No ${traineeFilter==='deactivated'?'deactivated':''} trainees${traineeFilter==='deactivated'?'':' yet'}.</div>`;
     return;
   }
-  const ordered = traineesCache.slice().sort((a,b)=>(a.active===false)-(b.active===false));
-  wrap.innerHTML = ordered.map(t=>{
+  wrap.innerHTML = shown.map(t=>{
     const inactive = t.active === false;
     const a = traineeAssignmentsCache[t.id];
     const st = traineeStatusInfo(a);
@@ -3212,10 +3294,13 @@ async function renderTraineeDetail(){
     a = doc.exists ? doc.data() : null;
   }catch(e){}
   const st = traineeStatusInfo(a);
+  const certWin = certificateWindowInfo(t.trainingCertificateDate);
   statusCard.innerHTML = `
-    <div class="kv"><div class="k">Registered</div><div class="v">${escapeHtml(t.traineeRegisteredDate||'—')}</div></div>
+    <div class="kv"><div class="k">Registered as trainee</div><div class="v">${escapeHtml(t.traineeRegisteredDate||'—')}</div></div>
+    <div class="kv"><div class="k">Certificate date</div><div class="v">${escapeHtml(t.trainingCertificateDate||'— (not completed their profile yet)')}</div></div>
+    ${certWin ? `<div class="kv"><div class="k">Completion window</div><div class="v">${escapeHtml(certWin.minDate)} – ${escapeHtml(certWin.maxDate)} <span class="pill ${certWin.cls}" style="margin-left:4px;">${escapeHtml(certWin.label)}</span></div></div>` : ''}
     <div class="kv"><div class="k">Supervisor</div><div class="v">${a ? escapeHtml(a.supervisorName||'—')+(a.supervisorSaqcc?(' · '+escapeHtml(a.supervisorSaqcc)):'') : '—'}</div></div>
-    <div class="kv"><div class="k">Period</div><div class="v">${a ? escapeHtml(a.startDate||'—')+' – '+escapeHtml(a.endDateExpected||'—') : '—'}</div></div>
+    <div class="kv"><div class="k">Supervision period</div><div class="v">${a ? escapeHtml(a.startDate||'—')+' – '+escapeHtml(a.endDateExpected||'—') : '—'}</div></div>
     <div class="kv"><div class="k">Status</div><div class="v"><span class="pill ${st.cls}">${escapeHtml(st.label)}</span></div></div>`;
 
   document.getElementById('qualifyTraineeBtn').style.display =
@@ -3717,16 +3802,21 @@ async function renderMyTraining(){
   try{
     await loadCompanySettings();
     const doc = await db.collection('traineeAssignments').doc(currentUser.uid).get();
+    const certWin = certificateWindowInfo(currentProfile.trainingCertificateDate);
+    const datesHTML = `
+        <div class="kv"><div class="k">Registered as trainee</div><div class="v">${escapeHtml(currentProfile.traineeRegisteredDate||'—')}</div></div>
+        <div class="kv"><div class="k">Certificate date</div><div class="v">${escapeHtml(currentProfile.trainingCertificateDate||'— (complete your profile)')}</div></div>
+        ${certWin ? `<div class="kv"><div class="k">Completion window</div><div class="v">${escapeHtml(certWin.minDate)} – ${escapeHtml(certWin.maxDate)} <span class="pill ${certWin.cls}" style="margin-left:4px;">${escapeHtml(certWin.label)}</span></div></div>` : ''}`;
     if(!doc.exists){
-      card.innerHTML = `<div class="empty">No supervisor assigned yet. Contact your administrator.</div>`;
+      card.innerHTML = datesHTML + `<div class="empty">No supervisor assigned yet. Contact your administrator.</div>`;
     } else {
       const a = doc.data();
       const st = traineeStatusInfo(a);
-      card.innerHTML = `
+      card.innerHTML = datesHTML + `
         <div class="kv"><div class="k">Company</div><div class="v">${escapeHtml(companySettings.name||'—')}</div></div>
         <div class="kv"><div class="k">Supervisor</div><div class="v">${escapeHtml(a.supervisorName||'—')}${a.supervisorSaqcc?(' · '+escapeHtml(a.supervisorSaqcc)):''}</div></div>
-        <div class="kv"><div class="k">Period start</div><div class="v">${escapeHtml(a.startDate||'—')}</div></div>
-        <div class="kv"><div class="k">Period end</div><div class="v">${escapeHtml(a.endDateExpected||'—')}</div></div>
+        <div class="kv"><div class="k">Supervision period start</div><div class="v">${escapeHtml(a.startDate||'—')}</div></div>
+        <div class="kv"><div class="k">Supervision period end</div><div class="v">${escapeHtml(a.endDateExpected||'—')}</div></div>
         <div class="kv"><div class="k">Status</div><div class="v"><span class="pill ${st.cls}">${escapeHtml(st.label)}</span></div></div>`;
     }
   }catch(e){
@@ -3780,7 +3870,7 @@ function setLbTrainingType(t){
 async function openLogbookEntryForm(id){
   if(!id && !currentProfile.profileCompletedAt){
     toast('Complete your profile before logging an entry');
-    showView('view-complete-profile');
+    openCompleteProfile();
     return;
   }
   editingLogbookEntryId = id || null;
@@ -3895,7 +3985,7 @@ let editingSignoffId = null;
 function openSignoffForm(id){
   if(!currentProfile.profileCompletedAt){
     toast('Complete your profile before signing off an entry');
-    showView('view-complete-profile');
+    openCompleteProfile();
     return;
   }
   editingSignoffId = id;
