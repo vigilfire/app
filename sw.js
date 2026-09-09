@@ -1,4 +1,10 @@
-/* Service worker for Vigil Fire (SANS 1475 fire equipment register).
+/* Vigil Fire — service worker.
+   © 2026 Sapphorion (sapphorion@gmail.com). All rights reserved.
+   This source is proprietary. Unauthorized copying, distribution, or use of
+   this file, in whole or in part, is prohibited without express permission.
+   Build/provenance stamp: SAPPH-VF-1bcbdcf759acb7e78bbb
+
+   Service worker for Vigil Fire (SANS 1475 fire equipment register).
 
    Purpose: let a technician open the app on-site with no signal. Firestore's
    own offline persistence caches the *data*, but without this worker the

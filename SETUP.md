@@ -1,5 +1,14 @@
 # Setup guide — Vigil Fire
 
+© 2026 Sapphorion (sapphorion@gmail.com). All rights reserved. This codebase
+is proprietary — see the copyright notice at the top of index.html,
+admin.html, privacy.html, sw.js and functions/index.js. Each of those files
+also carries a hidden provenance stamp (`SAPPH-VF-1bcbdcf759acb7e78bbb`) —
+index.html's copy is readable in the browser console on load
+(`window.__vfBuild`) — usable together with this repository's commit history
+to demonstrate authorship and timeline if this code is ever copied without
+permission.
+
 One-time setup, roughly 10-15 minutes. You'll need a Google account.
 
 ## 1. Create a Firebase project

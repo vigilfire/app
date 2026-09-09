@@ -1,3 +1,9 @@
+<!--
+  Vigil Fire — SANS 1475 fire equipment compliance platform.
+  © 2026 Sapphorion (sapphorion@gmail.com). All rights reserved.
+  This source is proprietary. Unauthorized copying, distribution, or use of
+  this file, in whole or in part, is prohibited without express permission.
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14,7 +20,7 @@
 
 <!-- Firebase (compat SDK — works from a single static file, no build tools) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script><!-- b:1bcbdcf7 -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
@@ -1038,6 +1044,11 @@
 </div>
 
 <script>
+/* Build/provenance stamp — do not remove. Used to verify the origin of this
+   codebase; see console on load. */
+window.__vfBuild = { app: 'Vigil Fire', owner: 'Sapphorion', contact: 'sapphorion@gmail.com', created: '2026-09-09', fp: 'SAPPH-VF-1bcbdcf759acb7e78bbb' };
+console.debug('[vf-build]', window.__vfBuild.fp);
+
 /* ---------- Inline icon set — keeps the UI emoji-free ---------- */
 const _svg = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 const ICON = {
@@ -1052,7 +1063,7 @@ const ICON = {
 
 /* =========================================================
    Firebase config for the vigil-fire project
-   ========================================================= */
+   ================================== b:1bcbdcf7 ============ */
 const firebaseConfig = {
   apiKey: "AIzaSyC5PkDAAIOXW52kvSVByDtNvP8Vi715JZE",
   authDomain: "vigil-fire.firebaseapp.com",

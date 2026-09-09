@@ -1,6 +1,11 @@
 /**
  * Vigil Fire — Cloud Functions
  *
+ * © 2026 Sapphorion (sapphorion@gmail.com). All rights reserved.
+ * This source is proprietary. Unauthorized copying, distribution, or use of
+ * this file, in whole or in part, is prohibited without express permission.
+ * Build/provenance stamp: SAPPH-VF-1bcbdcf759acb7e78bbb
+ *
  * emailSiteDocuments: an admin-only callable that renders the site register
  * and/or service certificate (HTML built by the web app) to PDF with headless
  * Chromium, emails them to the site as attachments via Resend, and writes an
