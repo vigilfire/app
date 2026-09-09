@@ -291,7 +291,7 @@
   </div>
 
   <div id="profileBanner" style="display:none; background:var(--amber-bg); color:var(--amber); border-bottom:1px solid var(--amber); padding:10px 16px; font-size:0.85rem; font-weight:600; align-items:center; justify-content:space-between; gap:10px;">
-    <span>Complete your profile on this device — required before you can log or sign off entries.</span>
+    <span>Complete your profile on this device — required before you can log or sign off entries, or save a monthly check.</span>
     <span style="display:flex; gap:6px; flex-shrink:0;">
       <button class="chip" onclick="openCompleteProfile()">Complete now</button>
     </span>
@@ -306,7 +306,7 @@
          real device, not just whoever's logged in. -->
     <section id="view-complete-profile" class="view">
       <div class="section-title"><h2>Complete your profile</h2></div>
-      <p class="hint" style="margin:0 0 12px;">Fill this in yourself, on the device you'll use day to day. Required before you can log or sign off a logbook entry.</p>
+      <p class="hint" style="margin:0 0 12px;">Fill this in yourself, on the device you'll use day to day. Required before you can log or sign off a logbook entry, or save a monthly check.</p>
       <div class="card">
         <label style="margin-top:0;">ID number</label>
         <input id="cpIdNumber" placeholder="South African ID number">
@@ -330,9 +330,25 @@
           <img id="cpCertPhotoPreview" class="photo-preview" style="display:none;">
           <div class="hint">Training must be completed within 6–24 months of this date, per the SAQCC (Fire) trainee logbook rules. This is separate from the date you registered as a trainee.</div>
         </div>
+        <div id="cpAppointmentBlock" style="display:none;">
+          <label>Photo of your appointment letter</label>
+          <input id="cpAppointmentPhotoInput" type="file" accept="image/*" capture="environment" onchange="handleAppointmentPhotoPicked(event)">
+          <img id="cpAppointmentPhotoPreview" class="photo-preview" style="display:none;">
+          <div class="hint">The letter from your employer/HR appointing you as the responsible person for monthly site-control checks (SANS 10105-1).</div>
+        </div>
         <label class="chk" style="margin-top:14px;"><input type="checkbox" id="cpConsent"><span>I understand this information — including my ID number and photos — is stored to verify that entries I make or sign really came from me, and may be reviewed by my training centre. See the <a href="privacy.html" target="_blank" style="color:inherit;">Privacy notice</a>.</span></label>
         <button class="btn" style="margin-top:16px;" onclick="submitCompleteProfile()">Save my profile</button>
       </div>
+    </section>
+
+    <!-- ===== COMPETENT PERSON — SANS 10105-1 monthly site-control checks
+         only ===== (competent role only) — the only screen this role ever
+         sees; opens straight into the monthly check form for a site, never
+         the maintenance-oriented site detail screen. -->
+    <section id="view-competent-sites" class="view">
+      <div class="section-title"><h2>My sites</h2></div>
+      <p class="hint" style="margin:0 0 12px;">Sites you're assigned to for the monthly SANS 10105-1 site-control check.</p>
+      <div id="competentSitesList"><div class="empty">Loading…</div></div>
     </section>
 
     <!-- ===== MY TRAINING (trainee only) ===== -->
@@ -453,11 +469,15 @@
           <option value="">None</option>
           <option value="survey">Survey required</option>
           <option value="servicing">Maintenance required</option>
-          <option value="monthly" id="monthlyCategoryOption">Monthly inspection (routine maintenance)</option>
+          <option value="monthly" id="monthlyCategoryOption">Monthly inspection required</option>
         </select>
-        <div class="hint" id="monthlyCategoryHint">A "Monthly inspection" site opens straight to the monthly responsible-person check form (SANS 10105-1). Equipment, the register and certificates are still reachable from there.</div>
+        <div class="hint" id="monthlyCategoryHint">Informational only — tag a site this way if it needs a monthly SANS 10105-1 site-control check. Who actually performs it is set below, under "Assign competent persons", separately from who's assigned for maintenance.</div>
         <label>Assign technicians</label>
+        <div class="hint" style="margin-top:0;">For maintenance and equipment servicing only.</div>
         <div id="assignTechList" class="card" style="background:var(--paper); padding:10px 14px;"></div>
+        <label>Assign competent persons</label>
+        <div class="hint" style="margin-top:0;">For the monthly SANS 10105-1 site-control check only — kept completely separate from maintenance access. A Competent Person assigned here never sees this site's equipment or maintenance screens.</div>
+        <div id="assignCompetentList" class="card" style="background:var(--paper); padding:10px 14px;"></div>
         <div class="row" style="margin-top:16px;">
           <button class="btn secondary" onclick="showView('view-sites')">Cancel</button>
           <button class="btn" onclick="saveSite()">Save site</button>
@@ -669,7 +689,7 @@
         <button class="btn secondary" style="width:auto; padding:8px 14px;" onclick="openMonthlyLog(currentSiteId, 'view-monthly')">Printable log</button>
       </div>
       <div id="monthlyRecent"><div class="empty">Loading…</div></div>
-      <button class="btn ghost" style="margin-top:14px;" onclick="showView('view-site-detail')">Site equipment, register &amp; certificate →</button>
+      <button class="btn ghost" id="monthlyToMaintenanceBtn" style="margin-top:14px;" onclick="showView('view-site-detail')">Site equipment, register &amp; certificate →</button>
     </section>
 
     <!-- ===== DUE & OVERDUE DASHBOARD (shared) ===== -->
@@ -679,26 +699,39 @@
       <div id="dueList"><div class="empty">Loading…</div></div>
     </section>
 
-    <!-- ===== TECHNICIANS (admin only) ===== -->
+    <!-- ===== TECHNICIANS (admin only) — also manages Competent Persons (SANS
+         10105-1 monthly checks), kept as its own role with no maintenance
+         access, but sharing this same admin screen and account system ===== -->
     <section id="view-technicians" class="view">
       <div class="section-title"><h2>Technicians</h2></div>
+      <div class="pillrow" id="staffRoleChips" style="margin-bottom:8px;"></div>
       <div class="pillrow" id="techFilterChips" style="margin-bottom:12px;"></div>
       <div id="techList"></div>
-      <button class="btn" onclick="openTechForm()">+ Add technician</button>
+      <button class="btn" onclick="openTechForm()">+ Add</button>
     </section>
 
     <section id="view-tech-form" class="view">
       <div class="backbar"><button onclick="showView('view-technicians')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="techFormTitle">New technician</h2></div>
       <div class="card">
+        <label style="margin-top:0;">Role</label>
+        <select id="techRole" onchange="onTechRoleChange()">
+          <option value="technician">Technician — SANS 1475 maintenance &amp; servicing</option>
+          <option value="competent">Competent Person — SANS 10105-1 monthly site-control checks only</option>
+        </select>
+        <div class="hint" id="techRoleHint">A Competent Person has no access to equipment, maintenance or the register/certificate — only the monthly check for whichever sites they're assigned to, kept completely separate from technician access.</div>
         <label>Full name</label><input id="techName" placeholder="e.g. Thabo Nkosi">
         <label>Technician number</label><input id="techNumber" type="text" placeholder="e.g. 12345">
         <label>Temporary password</label><input id="techPassword" type="text" placeholder="Set an initial password">
         <div class="hint" id="techPasswordHint">Share this technician number and password with the technician — they can log in immediately with it. There's no in-app way to change it yet, so use a real password you're comfortable sharing.</div>
-        <label>SAQCC registration no. (optional)</label><input id="techSaqcc" placeholder="e.g. SAQCC/F/12345">
+        <div id="techSaqccWrap">
+          <label>SAQCC registration no. (optional)</label><input id="techSaqcc" placeholder="e.g. SAQCC/F/12345">
+        </div>
         <label>Phone (optional)</label><input id="techPhone" placeholder="e.g. 082 123 4567">
 
-        <label style="margin-top:16px;">Permissions</label>
-        <label class="chk" style="border-bottom:none;"><input type="checkbox" id="techCanCalibrate"><span>Calibration — allow this technician to record the workshop's weekly calibration checks (scales and pressure gauges). A "Calibration" tab appears in their app only while this is on.</span></label>
+        <div id="techPermissionsWrap">
+          <label style="margin-top:16px;">Permissions</label>
+          <label class="chk" style="border-bottom:none;"><input type="checkbox" id="techCanCalibrate"><span>Calibration — allow this technician to record the workshop's weekly calibration checks (scales and pressure gauges). A "Calibration" tab appears in their app only while this is on.</span></label>
+        </div>
 
         <div id="techConsentWrap" style="margin-top:16px;">
           <label class="chk" style="border-bottom:none;"><input type="checkbox" id="techConsent"><span>I confirm this technician has been informed that their personal information (name, contact details, SAQCC number, work records) will be processed in Vigil Fire for SANS 1475 compliance record-keeping — see the <a href="privacy.html" target="_blank" style="color:inherit;">Privacy notice</a> — and consents to this.</span></label>
@@ -1044,19 +1077,6 @@ const storage = firebase.storage();
 const EMAIL_SENDING_ENABLED = true;
 db.enablePersistence({synchronizeTabs:true}).catch(()=>{ /* multiple tabs open, or unsupported browser — sync still works, just no offline cache */ });
 
-// Temporarily switched off — flip back to true to restore. Hides every entry
-// point (site category option, the site-detail button, the Reports log
-// button) and stops a "monthly" category site auto-opening its check form.
-// Nothing underneath is deleted: data, Firestore rules, and all the
-// monthlyChecks code are untouched, so this is a one-line revert.
-const MONTHLY_INSPECTIONS_ENABLED = false;
-if(!MONTHLY_INSPECTIONS_ENABLED){
-  document.getElementById('monthlyCategoryOption').remove();
-  document.getElementById('monthlyCategoryHint').style.display = 'none';
-  document.getElementById('monthlyBtn').style.display = 'none';
-  document.getElementById('monthlyLogBtn').style.display = 'none';
-}
-
 /* ---------- Device id (fraud-tracking baseline) ----------
    A random id generated once and kept in this browser's local storage —
    not a security credential, just a marker of "this device." Sent alongside
@@ -1155,7 +1175,7 @@ auth.onAuthStateChanged(async (user)=>{
   setupRoleUI();
   updateSyncPill();
   updateProfileBanner();
-  showView(currentRole === 'trainee' ? 'view-my-training' : 'view-sites');
+  showView(currentRole === 'trainee' ? 'view-my-training' : (currentRole === 'competent' ? 'view-competent-sites' : 'view-sites'));
   maybeAutoBackup();
   // Best-effort — shown on the internal admin dashboard's technician list.
   // Never blocks sign-in on failure (e.g. while offline).
@@ -1168,7 +1188,7 @@ auth.onAuthStateChanged(async (user)=>{
 function updateProfileBanner(){
   const banner = document.getElementById('profileBanner');
   if(!banner) return;
-  const needsIt = (currentRole === 'technician' || currentRole === 'trainee') && currentProfile && !currentProfile.profileCompletedAt;
+  const needsIt = (currentRole === 'technician' || currentRole === 'trainee' || currentRole === 'competent') && currentProfile && !currentProfile.profileCompletedAt;
   banner.style.display = needsIt ? 'flex' : 'none';
 }
 
@@ -1228,19 +1248,22 @@ async function downloadMyData(){
 }
 
 /* ---------- Complete your profile (self-service, fraud-tracking baseline) ----------
-   A technician uploads their SAQCC card; a trainee doesn't have one yet, so
+   A technician uploads their SAQCC card. A trainee doesn't have one yet, so
    they instead give the date on and a photo of their training certificate —
    the anchor for the 6–24 month SAQCC training-completion window (separate
-   from traineeRegisteredDate, which is just when they got their TR number). */
+   from traineeRegisteredDate, which is just when they got their TR number).
+   A Competent Person uploads their HR appointment letter instead — the
+   document that actually makes them the SANS 10105-1 responsible person. */
 function openCompleteProfile(){
-  const isTrainee = currentRole === 'trainee';
-  document.getElementById('cpSaqccCardBlock').style.display = isTrainee ? 'none' : 'block';
-  document.getElementById('cpCertBlock').style.display = isTrainee ? 'block' : 'none';
+  document.getElementById('cpSaqccCardBlock').style.display = currentRole==='technician' ? 'block' : 'none';
+  document.getElementById('cpCertBlock').style.display = currentRole==='trainee' ? 'block' : 'none';
+  document.getElementById('cpAppointmentBlock').style.display = currentRole==='competent' ? 'block' : 'none';
   showView('view-complete-profile');
 }
 let cpProfilePhotoDataUrl = null;
 let cpSaqccPhotoDataUrl = null;
 let cpCertPhotoDataUrl = null;
+let cpAppointmentPhotoDataUrl = null;
 function handleProfilePhotoPicked(evt){
   resizeImageToDataUrl(evt.target.files[0], 500, 0.75, dataUrl=>{
     cpProfilePhotoDataUrl = dataUrl;
@@ -1262,17 +1285,25 @@ function handleCertPhotoPicked(evt){
     preview.src = dataUrl; preview.style.display = 'block';
   });
 }
+function handleAppointmentPhotoPicked(evt){
+  resizeImageToDataUrl(evt.target.files[0], 1000, 0.75, dataUrl=>{
+    cpAppointmentPhotoDataUrl = dataUrl;
+    const preview = document.getElementById('cpAppointmentPhotoPreview');
+    preview.src = dataUrl; preview.style.display = 'block';
+  });
+}
 async function submitCompleteProfile(){
-  const isTrainee = currentRole === 'trainee';
   const idNumber = document.getElementById('cpIdNumber').value.trim();
   const cellNumber = document.getElementById('cpCellNumber').value.trim();
   const contactEmail = document.getElementById('cpEmail').value.trim();
   const certDate = document.getElementById('cpCertDate').value;
   if(!idNumber || !cellNumber || !contactEmail){ toast('Fill in your ID number, cell number and email'); return; }
   if(!cpProfilePhotoDataUrl){ toast('Add your profile photo'); return; }
-  if(isTrainee){
+  if(currentRole==='trainee'){
     if(!certDate){ toast('Enter the date on your training certificate'); return; }
     if(!cpCertPhotoDataUrl){ toast('Add a photo of your training certificate'); return; }
+  } else if(currentRole==='competent'){
+    if(!cpAppointmentPhotoDataUrl){ toast('Add a photo of your appointment letter'); return; }
   } else if(!cpSaqccPhotoDataUrl){ toast('Add a photo of your SAQCC registration card'); return; }
   if(!document.getElementById('cpConsent').checked){ toast('Confirm you understand how this information is used'); return; }
   toast('Saving your profile…');
@@ -1282,11 +1313,15 @@ async function submitCompleteProfile(){
     const profilePhotoURL = await profileRef.getDownloadURL();
 
     const payload = { idNumber, cellNumber, contactEmail, profilePhotoURL, deviceId: getOrCreateDeviceId() };
-    if(isTrainee){
+    if(currentRole==='trainee'){
       const certRef = storage.ref(`technician-photos/${currentCompanyId}/${currentUser.uid}/training-cert.jpg`);
       await certRef.putString(cpCertPhotoDataUrl, 'data_url');
       payload.trainingCertificateDate = certDate;
       payload.trainingCertificatePhotoURL = await certRef.getDownloadURL();
+    } else if(currentRole==='competent'){
+      const apptRef = storage.ref(`technician-photos/${currentCompanyId}/${currentUser.uid}/appointment-letter.jpg`);
+      await apptRef.putString(cpAppointmentPhotoDataUrl, 'data_url');
+      payload.appointmentLetterPhotoURL = await apptRef.getDownloadURL();
     } else {
       const cardRef = storage.ref(`technician-photos/${currentCompanyId}/${currentUser.uid}/saqcc-card.jpg`);
       await cardRef.putString(cpSaqccPhotoDataUrl, 'data_url');
@@ -1297,21 +1332,30 @@ async function submitCompleteProfile(){
     await call(payload);
 
     currentProfile.profileCompletedAt = true; // unlocks the client-side gates immediately, without waiting on a re-fetch
-    if(isTrainee) currentProfile.trainingCertificateDate = certDate;
+    if(currentRole==='trainee') currentProfile.trainingCertificateDate = certDate;
     updateProfileBanner();
     toast('Profile completed');
-    showView(currentRole === 'trainee' ? 'view-my-training' : 'view-signoffs');
+    showView(currentRole === 'trainee' ? 'view-my-training' : (currentRole === 'competent' ? 'view-competent-sites' : 'view-signoffs'));
   }catch(e){ toast('Error: ' + e.message); }
 }
 
 function setupRoleUI(){
   const isAdmin = currentRole === 'admin';
   const isTrainee = currentRole === 'trainee';
+  const isCompetent = currentRole === 'competent';
   const bottomNav = document.getElementById('bottomNav');
   if(isTrainee){
     // A trainee has exactly one screen in the app today (My training) — no
     // bottom nav to route between others yet.
     document.getElementById('headerSub').textContent = 'Trainee · ' + (currentProfile.name||'');
+    if(bottomNav) bottomNav.style.display = 'none';
+    return;
+  }
+  if(isCompetent){
+    // A Competent Person has exactly one screen: their own assigned
+    // monthly-check sites. No maintenance/equipment access exists anywhere
+    // in their app at all — this is the "completely separate" boundary.
+    document.getElementById('headerSub').textContent = 'Competent Person · ' + (currentProfile.name||'');
     if(bottomNav) bottomNav.style.display = 'none';
     return;
   }
@@ -1370,18 +1414,20 @@ function showView(id){
   if(id==='view-trainees') renderTrainees();
   if(id==='view-trainee-detail') renderTraineeDetail();
   if(id==='view-my-training') renderMyTraining();
+  if(id==='view-competent-sites') renderCompetentSites();
   if(id==='view-signoffs') renderSignoffs();
   if(id==='view-my-trainees') renderMyTrainees();
   if(id==='view-my-trainee-detail') renderMyTraineeDetail();
 }
 
 /* ---------- Firestore listener bookkeeping ---------- */
-let unsubSites = null, unsubEquipment = null, unsubInspections = null, unsubTechs = null, unsubCal = null, unsubTrainees = null;
+let unsubSites = null, unsubEquipment = null, unsubInspections = null, unsubTechs = null, unsubCompetent = null, unsubCal = null, unsubTrainees = null;
 function detachAllListeners(){
   if(unsubSites){ unsubSites(); unsubSites=null; }
   if(unsubEquipment){ unsubEquipment(); unsubEquipment=null; }
   if(unsubInspections){ unsubInspections(); unsubInspections=null; }
   if(unsubTechs){ unsubTechs(); unsubTechs=null; }
+  if(unsubCompetent){ unsubCompetent(); unsubCompetent=null; }
   if(unsubCal){ unsubCal(); unsubCal=null; }
   if(unsubTrainees){ unsubTrainees(); unsubTrainees=null; }
 }
@@ -1445,22 +1491,15 @@ function openSite(id){
   document.getElementById('siteDetailAddress').textContent = site ? (site.address||'') : '';
   document.getElementById('registerBtn').style.display = currentRole==='admin' ? '' : 'none';
   document.getElementById('registerBlockNote').style.display = 'none';
-  // On a monthly-inspection site, make the monthly check the primary action.
-  const mBtn = document.getElementById('monthlyBtn');
-  mBtn.classList.toggle('secondary', !(site && site.category === 'monthly'));
+  // Monthly checks are a Competent Person's job now, not a maintenance
+  // technician's — this button stays for admin oversight/fallback only.
+  document.getElementById('monthlyBtn').style.display = currentRole==='admin' ? '' : 'none';
   equipmentFilter = 'all';
   const searchEl = document.getElementById('equipSearch');
   if(searchEl) searchEl.value = '';
   renderSiteDetailChrome();
   loadEquipmentForSite(id);
-  // A "Monthly inspection" site opens straight to its monthly check form —
-  // skipped while MONTHLY_INSPECTIONS_ENABLED is false, so an existing site
-  // tagged that way still opens normally instead of jumping to a hidden view.
-  if(MONTHLY_INSPECTIONS_ENABLED && site && site.category === 'monthly'){
-    openMonthlyCheck(id, 'view-sites');
-  } else {
-    showView('view-site-detail');
-  }
+  showView('view-site-detail');
 }
 
 async function loadTechsCache(){
@@ -1472,12 +1511,19 @@ async function loadTechsCache(){
   techsCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
 }
 
+let competentCache = [];
+async function loadCompetentCache(){
+  const snap = await db.collection('technicians').where('role','==','competent').where('companyId','==',currentCompanyId).get();
+  competentCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+}
+
 async function openSiteForm(id){
   editingSiteId = id;
-  await loadTechsCache();
+  await Promise.all([loadTechsCache(), loadCompetentCache()]);
   document.getElementById('siteFormTitle').textContent = id ? 'Edit site' : 'New site';
   document.getElementById('deleteSiteBtn').style.display = id ? 'block' : 'none';
   let assigned = [];
+  let assignedCompetent = [];
   if(id){
     const site = sitesCache.find(s=>s.id===id);
     document.getElementById('siteNameInput').value = site.name||'';
@@ -1489,6 +1535,7 @@ async function openSiteForm(id){
     document.getElementById('siteServiceTypeInput').value = site.serviceType||'';
     document.getElementById('siteCategoryInput').value = site.category||'';
     assigned = site.assignedTo || [];
+    assignedCompetent = site.assignedCompetentPersons || [];
   } else {
     document.getElementById('siteNameInput').value='';
     document.getElementById('siteAddressInput').value='';
@@ -1510,6 +1557,17 @@ async function openSiteForm(id){
         ${escapeHtml(t.name)} <span class="hint" style="margin:0;">(${escapeHtml(t.email||'')})</span>
       </label>`).join('');
   }
+  const competentListEl = document.getElementById('assignCompetentList');
+  const activeCompetent = competentCache.filter(t=>t.active!==false);
+  if(activeCompetent.length===0){
+    competentListEl.innerHTML = `<div class="hint">No active competent persons yet — add one from the Techs tab first.</div>`;
+  } else {
+    competentListEl.innerHTML = activeCompetent.map(t=>`
+      <label class="tech-check" style="margin:0; text-transform:none; font-weight:400; color:var(--ink);">
+        <input type="checkbox" value="${t.id}" ${assignedCompetent.includes(t.id)?'checked':''} style="width:auto;">
+        ${escapeHtml(t.name)} <span class="hint" style="margin:0;">(${escapeHtml(t.email||'')})</span>
+      </label>`).join('');
+  }
   showView('view-site-form');
 }
 
@@ -1517,6 +1575,7 @@ async function saveSite(){
   const name = document.getElementById('siteNameInput').value.trim();
   if(!name){ toast('Enter a site name'); return; }
   const checked = Array.from(document.querySelectorAll('#assignTechList input[type=checkbox]:checked')).map(el=>el.value);
+  const checkedCompetent = Array.from(document.querySelectorAll('#assignCompetentList input[type=checkbox]:checked')).map(el=>el.value);
   const payload = {
     name,
     address: document.getElementById('siteAddressInput').value.trim(),
@@ -1526,7 +1585,8 @@ async function saveSite(){
     contactPhone: document.getElementById('siteContactPhoneInput').value.trim(),
     serviceType: document.getElementById('siteServiceTypeInput').value || '',
     category: document.getElementById('siteCategoryInput').value || '',
-    assignedTo: checked
+    assignedTo: checked,
+    assignedCompetentPersons: checkedCompetent
   };
   try{
     if(editingSiteId){
@@ -3040,38 +3100,60 @@ function renderTechnicians(){
     techsCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
     paintTechnicians();
   }, err=>{ toast('Could not load technicians: ' + err.message); });
+  if(unsubCompetent) unsubCompetent();
+  unsubCompetent = db.collection('technicians').where('role','==','competent').where('companyId','==',currentCompanyId).onSnapshot(snap=>{
+    competentCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    paintTechnicians();
+  }, err=>{ toast('Could not load competent persons: ' + err.message); });
 }
+let staffRoleFilter = 'technician';   // technician | competent — which role's list is shown
 let techFilter = 'active';   // active | deactivated — which subset the list shows; all data stays intact either way
+function setStaffRoleFilter(k){ staffRoleFilter = k; paintTechnicians(); }
 function setTechFilter(k){ techFilter = k; paintTechnicians(); }
 function paintTechnicians(){
   const wrap = document.getElementById('techList');
-  const deactivatedCount = techsCache.filter(t=>t.active===false).length;
-  const activeCount = techsCache.length - deactivatedCount;
+  const source = staffRoleFilter==='competent' ? competentCache : techsCache;
+  document.getElementById('staffRoleChips').innerHTML = [
+    ['technician', `Technicians (${techsCache.length})`],
+    ['competent', `Competent persons (${competentCache.length})`]
+  ].map(([k,label])=>`<button class="chip ${staffRoleFilter===k?'active':''}" onclick="setStaffRoleFilter('${k}')">${escapeHtml(label)}</button>`).join('');
+
+  const deactivatedCount = source.filter(t=>t.active===false).length;
+  const activeCount = source.length - deactivatedCount;
   document.getElementById('techFilterChips').innerHTML = [
     ['active', `Active (${activeCount})`],
     ['deactivated', `Deactivated (${deactivatedCount})`]
   ].map(([k,label])=>`<button class="chip ${techFilter===k?'active':''}" onclick="setTechFilter('${k}')">${escapeHtml(label)}</button>`).join('');
 
-  const shown = techsCache.filter(t=> techFilter==='deactivated' ? t.active===false : t.active!==false);
+  const shown = source.filter(t=> techFilter==='deactivated' ? t.active===false : t.active!==false);
+  const noun = staffRoleFilter==='competent' ? 'competent persons' : 'technicians';
   if(shown.length===0){
-    wrap.innerHTML = `<div class="empty"><div class="big">${ICON.user}</div>No ${techFilter==='deactivated'?'deactivated':''} technicians${techFilter==='deactivated'?'':' yet'}.</div>`;
+    wrap.innerHTML = `<div class="empty"><div class="big">${ICON.user}</div>No ${techFilter==='deactivated'?'deactivated ':''}${noun}${techFilter==='deactivated'?'':' yet'}.</div>`;
     return;
   }
   wrap.innerHTML = shown.map(t=>{
     const inactive = t.active === false;
-    const assignedCount = sitesCache.filter(s=>(s.assignedTo||[]).includes(t.id)).length;
+    const assignedCount = staffRoleFilter==='competent'
+      ? sitesCache.filter(s=>(s.assignedCompetentPersons||[]).includes(t.id)).length
+      : sitesCache.filter(s=>(s.assignedTo||[]).includes(t.id)).length;
     const right = inactive
       ? `<span class="pill" style="margin:0;">Deactivated</span>`
       : `<div class="hint" style="margin:0;">${assignedCount} site${assignedCount===1?'':'s'}</div>`;
     return `<div class="card tech-card" onclick="openTechForm('${t.id}')" style="cursor:pointer;${inactive?'opacity:0.55;':''}">
       <div>
         <div class="name">${escapeHtml(t.name)}</div>
-        <div class="meta">Tech no. ${escapeHtml(t.techNumber||'')}${t.saqcc?(' · '+escapeHtml(t.saqcc)):''}</div>
+        <div class="meta">${staffRoleFilter==='competent'?'No.':'Tech no.'} ${escapeHtml(t.techNumber||'')}${t.saqcc?(' · '+escapeHtml(t.saqcc)):''}</div>
         ${(!inactive && t.canCalibrate) ? `<div style="margin-top:6px;"><span class="pill">Calibration</span></div>` : ''}
       </div>
       ${right}
     </div>`;
   }).join('');
+}
+
+function onTechRoleChange(){
+  const isCompetent = document.getElementById('techRole').value === 'competent';
+  document.getElementById('techSaqccWrap').style.display = isCompetent ? 'none' : 'block';
+  document.getElementById('techPermissionsWrap').style.display = isCompetent ? 'none' : 'block';
 }
 
 function openTechForm(id){
@@ -3080,17 +3162,21 @@ function openTechForm(id){
   const actionBtn = document.getElementById('deactivateTechBtn');
   const numberField = document.getElementById('techNumber');
   const passField = document.getElementById('techPassword');
+  const roleField = document.getElementById('techRole');
   if(id){
-    const t = techsCache.find(x=>x.id===id);
-    if(!t){ toast('Technician not found'); return; }
+    const t = techsCache.find(x=>x.id===id) || competentCache.find(x=>x.id===id);
+    if(!t){ toast('Not found'); return; }
+    document.getElementById('techFormTitle').textContent = t.role==='competent' ? 'Edit competent person' : 'Edit technician';
     actionBtn.style.display = 'block';
     if(t.active === false){
-      actionBtn.textContent = 'Reactivate this technician';
+      actionBtn.textContent = 'Reactivate';
       actionBtn.onclick = ()=>reactivateTechnician(id);
     } else {
-      actionBtn.textContent = 'Deactivate this technician';
+      actionBtn.textContent = 'Deactivate';
       actionBtn.onclick = ()=>deactivateTechnician(id);
     }
+    roleField.value = t.role || 'technician';
+    roleField.disabled = true;
     document.getElementById('techName').value = t.name||'';
     numberField.value = t.techNumber||'';
     numberField.disabled = true;
@@ -3101,14 +3187,18 @@ function openTechForm(id){
     document.getElementById('techCanCalibrate').checked = !!t.canCalibrate;
     document.getElementById('techConsentWrap').style.display = 'none';
   } else {
+    document.getElementById('techFormTitle').textContent = staffRoleFilter==='competent' ? 'New competent person' : 'New technician';
     actionBtn.style.display = 'none';
+    roleField.value = staffRoleFilter;
+    roleField.disabled = false;
     ['techName','techNumber','techPassword','techSaqcc','techPhone'].forEach(fid=>document.getElementById(fid).value='');
     document.getElementById('techCanCalibrate').checked = false;
     numberField.disabled = false;
-    document.getElementById('techPasswordHint').textContent = 'Share this technician number and password with the technician — they can log in immediately with it.';
+    document.getElementById('techPasswordHint').textContent = 'Share this technician number and password with them — they can log in immediately with it.';
     document.getElementById('techConsentWrap').style.display = 'block';
     document.getElementById('techConsent').checked = false;
   }
+  onTechRoleChange();
   showView('view-tech-form');
 }
 
@@ -3116,30 +3206,31 @@ async function saveTechnician(){
   const name = document.getElementById('techName').value.trim();
   const techNumber = document.getElementById('techNumber').value.trim();
   const password = document.getElementById('techPassword').value;
-  const saqcc = document.getElementById('techSaqcc').value.trim();
+  const role = document.getElementById('techRole').value === 'competent' ? 'competent' : 'technician';
+  const saqcc = role==='competent' ? '' : document.getElementById('techSaqcc').value.trim();
   const phone = document.getElementById('techPhone').value.trim();
-  const canCalibrate = document.getElementById('techCanCalibrate').checked;
+  const canCalibrate = role==='competent' ? false : document.getElementById('techCanCalibrate').checked;
   if(!name || !techNumber){ toast('Name and technician number are required'); return; }
 
   if(editingTechId){
     try{
       await db.collection('technicians').doc(editingTechId).update({ name, saqcc, phone, canCalibrate });
-      toast('Technician updated');
+      toast('Updated');
       showView('view-technicians');
     }catch(e){ toast('Error: ' + e.message); }
     return;
   }
 
   if(!password || password.length < 6){ toast('Set a password of at least 6 characters'); return; }
-  if(!document.getElementById('techConsent').checked){ toast('Confirm the technician has been informed and consents (POPIA) before saving'); return; }
+  if(!document.getElementById('techConsent').checked){ toast('Confirm they have been informed and consent (POPIA) before saving'); return; }
   try{
     // Account creation, the technicianLookup entry and the seat-limit check
     // all happen server-side in this callable (Admin SDK) — a client can no
     // longer write a technicians doc directly (see firestore.rules), because
     // the seat count it's checked against can't be trusted to a security rule.
     const call = firebase.functions().httpsCallable('createTechnician');
-    await call({ name, techNumber, password, saqcc, phone, canCalibrate, role:'technician', consentConfirmed:true });
-    toast('Technician created');
+    await call({ name, techNumber, password, saqcc, phone, canCalibrate, role, consentConfirmed:true });
+    toast(role==='competent' ? 'Competent person created' : 'Technician created');
     showView('view-technicians');
   }catch(e){ toast('Error: ' + e.message); }
 }
@@ -3151,8 +3242,8 @@ async function saveTechnician(){
    Fully deleting the Auth login still requires the Firebase Console. */
 async function deactivateTechnician(id){
   if(!id) return;
-  const t = techsCache.find(x=>x.id===id);
-  if(!confirm(`Deactivate ${t?t.name:'this technician'}? They will no longer be able to sign in and will be removed from all site assignments. Their inspection records are kept for compliance history, and you can reactivate them later.`)) return;
+  const t = techsCache.find(x=>x.id===id) || competentCache.find(x=>x.id===id);
+  if(!confirm(`Deactivate ${t?t.name:'this person'}? They will no longer be able to sign in and will be removed from all site assignments. Their records are kept for compliance history, and you can reactivate them later.`)) return;
   try{
     const batch = db.batch();
     batch.update(db.collection('technicians').doc(id), { active:false });
@@ -3160,9 +3251,12 @@ async function deactivateTechnician(id){
       if((site.assignedTo||[]).includes(id)){
         batch.update(db.collection('sites').doc(site.id), {assignedTo: site.assignedTo.filter(tid=>tid!==id)});
       }
+      if((site.assignedCompetentPersons||[]).includes(id)){
+        batch.update(db.collection('sites').doc(site.id), {assignedCompetentPersons: site.assignedCompetentPersons.filter(tid=>tid!==id)});
+      }
     });
     await batch.commit();
-    toast('Technician deactivated');
+    toast('Deactivated');
     showView('view-technicians');
   }catch(e){ toast('Error: ' + e.message); }
 }
@@ -3808,6 +3902,44 @@ async function renderMyTraineeDetail(){
 }
 
 /* ---------- My training (trainee's own read-only status screen) ---------- */
+/* ---------- Competent Person's own site list (SANS 10105-1) ----------
+   The only screen this role ever reaches. Populates the shared sitesCache
+   (openMonthlyCheck reads site names from it) with just this person's
+   assigned sites, then opens straight into the monthly check form — never
+   the maintenance-oriented site detail screen. */
+async function renderCompetentSites(){
+  const wrap = document.getElementById('competentSitesList');
+  wrap.innerHTML = `<div class="empty">Loading…</div>`;
+  try{
+    const snap = await db.collection('sites')
+      .where('assignedCompetentPersons','array-contains', currentUser.uid)
+      .where('companyId','==',currentCompanyId).get();
+    sitesCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  }catch(e){
+    wrap.innerHTML = `<div class="empty">Could not load sites: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  if(sitesCache.length===0){
+    wrap.innerHTML = `<div class="empty"><div class="big">${ICON.building}</div>No sites assigned to you yet. Check with your administrator.</div>`;
+    return;
+  }
+  wrap.innerHTML = sitesCache.map(s=>`
+    <div class="card site-card" onclick="openCompetentSite('${s.id}')">
+      <div>
+        <div class="name">${escapeHtml(s.name)}</div>
+        <div class="meta">${escapeHtml(s.address||'')}</div>
+      </div>
+    </div>`).join('');
+}
+function openCompetentSite(siteId){
+  if(!currentProfile.profileCompletedAt){
+    toast('Complete your profile before saving a monthly check');
+    openCompleteProfile();
+    return;
+  }
+  openMonthlyCheck(siteId, 'view-competent-sites');
+}
+
 async function renderMyTraining(){
   const card = document.getElementById('myTrainingCard');
   card.innerHTML = `<div class="empty">Loading…</div>`;
@@ -4330,6 +4462,9 @@ async function openMonthlyCheck(siteId, backView){
   monthlyBackView = backView || 'view-site-detail';
   const site = sitesCache.find(s=>s.id===siteId) || {};
   document.getElementById('monthlyTitle').textContent = 'Monthly inspection — ' + (site.name||'site');
+  // A Competent Person never gets a way into the maintenance-oriented site
+  // screen — that's the whole point of keeping the two completely separate.
+  document.getElementById('monthlyToMaintenanceBtn').style.display = currentRole==='competent' ? 'none' : '';
   toast('Loading…');
   // Make sure we have this site's equipment loaded
   if(!equipmentCache.length || equipmentCache[0].siteId !== siteId){
@@ -4398,20 +4533,29 @@ async function saveMonthlyCheck(){
     if(v==='ok' || v==='fault') results[k] = v;
     if(v==='fault' && monthlyFaultNotes[k] && monthlyFaultNotes[k].trim()) faultNotes[k] = monthlyFaultNotes[k].trim();
   });
-  const payload = {
-    siteId: currentSiteId,
-    companyId: currentCompanyId,
-    month,
-    checkedByName: document.getElementById('monthlyBy').value.trim(),
-    checkedBy: currentUser.uid,
-    recordedByName: currentProfile.name || '',
-    results, faultNotes,
-    notes: document.getElementById('monthlyNotes').value.trim(),
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-  };
-  const docId = currentSiteId + '_' + month;
+  const checkedByName = document.getElementById('monthlyBy').value.trim();
+  const notes = document.getElementById('monthlyNotes').value.trim();
   try{
-    await db.collection('monthlyChecks').doc(docId).set(payload, {merge:true});
+    if(currentRole === 'competent'){
+      // Goes through a Cloud Function, not a direct write — same reason as
+      // createLogbookEntry/signLogbookEntry: a real server-observed IP, and
+      // the profile-completion gate's enforcement point for this role.
+      const call = firebase.functions().httpsCallable('saveMonthlyCheck');
+      await call({ siteId: currentSiteId, month, checkedByName, results, faultNotes, notes, deviceId: getOrCreateDeviceId() });
+    } else {
+      const payload = {
+        siteId: currentSiteId,
+        companyId: currentCompanyId,
+        month,
+        checkedByName,
+        checkedBy: currentUser.uid,
+        recordedByName: currentProfile.name || '',
+        results, faultNotes, notes,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      const docId = currentSiteId + '_' + month;
+      await db.collection('monthlyChecks').doc(docId).set(payload, {merge:true});
+    }
     toast('Monthly check saved');
     await loadMonthlyChecks(currentSiteId);
     renderMonthlyRecent();

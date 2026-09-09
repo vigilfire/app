@@ -433,7 +433,8 @@ exports.createTechnician = onCall(async (request) => {
   const saqcc = String(data.saqcc || "").trim();
   const phone = String(data.phone || "").trim();
   const canCalibrate = !!data.canCalibrate;
-  const role = data.role === "trainee" ? "trainee" : "technician";
+  const VALID_TECH_ROLES = ["technician", "trainee", "competent"];
+  const role = VALID_TECH_ROLES.includes(data.role) ? data.role : "technician";
   const traineeRegisteredDate = role === "trainee" ? data.traineeRegisteredDate || null : null;
 
   if (!name || !techNumber) {
@@ -573,6 +574,7 @@ exports.completeMyProfile = onCall(async (request) => {
 
   const existing = selfSnap.data();
   const isTrainee = existing.role === "trainee";
+  const isCompetent = existing.role === "competent";
 
   const data = request.data || {};
   const idNumber = String(data.idNumber || "").trim();
@@ -582,6 +584,7 @@ exports.completeMyProfile = onCall(async (request) => {
   const saqccCardPhotoURL = String(data.saqccCardPhotoURL || "").trim();
   const trainingCertificateDate = String(data.trainingCertificateDate || "").trim();
   const trainingCertificatePhotoURL = String(data.trainingCertificatePhotoURL || "").trim();
+  const appointmentLetterPhotoURL = String(data.appointmentLetterPhotoURL || "").trim();
   const deviceId = String(data.deviceId || "").trim();
 
   if (!idNumber || !cellNumber || !contactEmail || !profilePhotoURL) {
@@ -590,10 +593,16 @@ exports.completeMyProfile = onCall(async (request) => {
   // A trainee doesn't have a SAQCC card yet — they give the date on and a
   // photo of their training certificate instead, since that's what starts
   // the 6–24 month SAQCC completion window (a technician's card has no such
-  // window attached, so it doesn't need a date).
+  // window attached, so it doesn't need a date). A Competent Person has
+  // neither — the document that actually makes them the SANS 10105-1
+  // responsible person is their employer's written appointment letter.
   if (isTrainee) {
     if (!trainingCertificateDate || !trainingCertificatePhotoURL) {
       throw new HttpsError("invalid-argument", "Your training certificate date and photo are required.");
+    }
+  } else if (isCompetent) {
+    if (!appointmentLetterPhotoURL) {
+      throw new HttpsError("invalid-argument", "A photo of your appointment letter is required.");
     }
   } else if (!saqccCardPhotoURL) {
     throw new HttpsError("invalid-argument", "A photo of your SAQCC registration card is required.");
@@ -613,6 +622,8 @@ exports.completeMyProfile = onCall(async (request) => {
     profileCompletedUserAgent: getUserAgent(request),
     ...(isTrainee
       ? { trainingCertificateDate, trainingCertificatePhotoURL }
+      : isCompetent
+      ? { appointmentLetterPhotoURL }
       : { saqccCardPhotoURL }),
   };
   if (existing.profileCompletedAt) {
@@ -732,6 +743,63 @@ exports.signLogbookEntry = onCall(async (request) => {
     signedUserAgent: getUserAgent(request),
   });
   return { signed: true };
+});
+
+/* ---------- Competent Person monthly check (SANS 10105-1) ----------
+   Same fraud-tracking shape as createLogbookEntry/signLogbookEntry: a
+   Competent Person's profile must be complete on this device, and the write
+   is stamped with the server-observed IP plus the client's device id, not
+   just accepted as a plain Firestore write — firestore.rules blocks direct
+   client writes to monthlyChecks for this role for exactly that reason. */
+exports.saveMonthlyCheck = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "Sign in first.");
+  }
+  const db = admin.firestore();
+  const selfSnap = await db.collection("technicians").doc(uid).get();
+  if (!selfSnap.exists) {
+    throw new HttpsError("not-found", "Profile not found.");
+  }
+  await requireProfileComplete(selfSnap, "save a monthly check");
+  const selfData = selfSnap.data();
+  const companyId = selfData.companyId;
+
+  const data = request.data || {};
+  const siteId = String(data.siteId || "").trim();
+  const month = String(data.month || "").trim();
+  const checkedByName = String(data.checkedByName || "").trim();
+  const notes = String(data.notes || "").trim();
+  const deviceId = String(data.deviceId || "").trim();
+  const results = (data.results && typeof data.results === "object") ? data.results : {};
+  const faultNotes = (data.faultNotes && typeof data.faultNotes === "object") ? data.faultNotes : {};
+
+  if (!siteId) throw new HttpsError("invalid-argument", "Missing site.");
+  if (!/^\d{4}-\d{2}$/.test(month)) throw new HttpsError("invalid-argument", "Pick a month.");
+  if (!deviceId) throw new HttpsError("invalid-argument", "Missing device id — reload the app and try again.");
+
+  const siteSnap = await db.collection("sites").doc(siteId).get();
+  if (!siteSnap.exists || siteSnap.data().companyId !== companyId) {
+    throw new HttpsError("not-found", "Site not found.");
+  }
+  const site = siteSnap.data();
+  const assigned = Array.isArray(site.assignedCompetentPersons) ? site.assignedCompetentPersons : [];
+  if (!assigned.includes(uid)) {
+    throw new HttpsError("permission-denied", "You are not assigned to this site.");
+  }
+
+  const docId = `${siteId}_${month}`;
+  await db.collection("monthlyChecks").doc(docId).set({
+    siteId, companyId, month, checkedByName,
+    checkedBy: uid,
+    recordedByName: selfData.name || "",
+    results, faultNotes, notes,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    savedIp: getCallerIp(request),
+    savedDeviceId: deviceId,
+    savedUserAgent: getUserAgent(request),
+  }, { merge: true });
+  return { saved: true };
 });
 
 /* ---------- Company `lastActivityAt` ----------

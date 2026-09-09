@@ -31,6 +31,13 @@ service cloud.firestore {
       return isSignedIn() &&
         request.auth.uid in get(/databases/$(database)/documents/sites/$(siteId)).data.assignedTo;
     }
+    // A Competent Person's site assignment for the SANS 10105-1 monthly
+    // check — a separate list from assignedTo (maintenance technicians) on
+    // purpose, so the two kinds of access never overlap.
+    function isAssignedAsCompetentPerson(siteId) {
+      return isSignedIn() &&
+        request.auth.uid in get(/databases/$(database)/documents/sites/$(siteId)).data.assignedCompetentPersons;
+    }
     function canCalibrate() {
       return isSignedIn() &&
         get(/databases/$(database)/documents/technicians/$(request.auth.uid)).data.canCalibrate == true;
@@ -166,7 +173,9 @@ service cloud.firestore {
     }
 
     match /sites/{siteId} {
-      allow read: if isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && request.auth.uid in resource.data.assignedTo);
+      allow read: if isSuperadmin() || isCompanyAdmin(resource.data.companyId)
+        || (isSignedIn() && request.auth.uid in resource.data.assignedTo)
+        || (isSignedIn() && request.auth.uid in resource.data.assignedCompetentPersons);
       allow create: if isCompanyAdmin(request.resource.data.companyId);
       allow delete: if isCompanyAdmin(resource.data.companyId);
       // Admins may change anything within their own company. An assigned
@@ -207,12 +216,18 @@ service cloud.firestore {
     }
 
     // Monthly responsible-person inspection log (SANS 10105-1). One record per
-    // site per month. Same access as the site's equipment; admin may delete.
+    // site per month. Read access is restricted to whichever Competent
+    // Person(s) are assigned to the site — not a maintenance technician's
+    // assignedTo list, which is a deliberately separate access boundary.
+    // Writing goes through the `saveMonthlyCheck` Cloud Function instead of a
+    // direct client write, for the same reason logbook create/sign do: a
+    // real server-observed IP alongside the device id, and the profile-
+    // completion gate has to be enforced server-side. Admin may still write
+    // directly (e.g. filling one in themselves) and may delete.
     match /monthlyChecks/{id} {
-      allow read:   if isCompanyAdmin(resource.data.companyId) || (isSignedIn() && isAssignedToSite(resource.data.siteId));
-      allow create: if isCompanyAdmin(request.resource.data.companyId) || (isSignedIn() && isAssignedToSite(request.resource.data.siteId));
-      allow update: if isCompanyAdmin(resource.data.companyId) || (isSignedIn() && isAssignedToSite(resource.data.siteId));
-      allow delete: if isCompanyAdmin(resource.data.companyId);
+      allow read:           if isCompanyAdmin(resource.data.companyId) || (isSignedIn() && isAssignedAsCompetentPerson(resource.data.siteId));
+      allow create, update: if isCompanyAdmin(request.resource.data.companyId);
+      allow delete:         if isCompanyAdmin(resource.data.companyId);
     }
 
     // Immutable service-history / audit trail. One snapshot is appended whenever
@@ -236,7 +251,11 @@ service cloud.firestore {
     // An "equipment" doc is the physical asset (type, serial, location) plus a
     // denormalised snapshot of its most recent inspection for list rendering.
     match /equipment/{eqId} {
-      allow read:   if isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && isAssignedToSite(resource.data.siteId));
+      // A Competent Person may only ever read equipment (they need to know
+      // what's on site to build the monthly checklist) — never create,
+      // update or delete it. That asymmetry is the actual "completely
+      // separate from maintenance" boundary for this collection.
+      allow read:   if isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && isAssignedToSite(resource.data.siteId)) || (isSignedIn() && isAssignedAsCompetentPerson(resource.data.siteId));
       allow create: if isCompanyAdmin(request.resource.data.companyId) || (isSignedIn() && isAssignedToSite(request.resource.data.siteId));
       allow update: if isCompanyAdmin(resource.data.companyId) || (isSignedIn() && isAssignedToSite(resource.data.siteId));
       allow delete: if isCompanyAdmin(resource.data.companyId);
