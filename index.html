@@ -736,7 +736,7 @@
 
         <div id="techPermissionsWrap">
           <label style="margin-top:16px;">Permissions</label>
-          <label class="chk" style="border-bottom:none;"><input type="checkbox" id="techCanCalibrate"><span>Calibration — allow this technician to record the workshop's weekly calibration checks (scales and pressure gauges). A "Calibration" tab appears in their app only while this is on.</span></label>
+          <label class="chk" style="border-bottom:none;"><input type="checkbox" id="techCanCalibrate"><span>Weekly verification — allow this technician to record the workshop's weekly verification checks (scales and pressure gauges). A "Verify" tab appears in their app only while this is on.</span></label>
         </div>
 
         <div id="techConsentWrap" style="margin-top:16px;">
@@ -855,7 +855,7 @@
 
       <div class="card">
         <label style="margin-top:0;">Records backup</label>
-        <p class="hint" style="margin:0 0 10px;">A complete machine-readable snapshot of every site, equipment record, maintenance-history entry, monthly check, calibration entry and trainee placement. Keep it filed with your printed registers — SANS 1475 clause 5.4 requires records to be kept for at least 5 years.</p>
+        <p class="hint" style="margin:0 0 10px;">A complete machine-readable snapshot of every site, equipment record, maintenance-history entry, monthly check, weekly verification entry and trainee placement. Keep it filed with your printed registers — SANS 1475 clause 5.4 requires records to be kept for at least 5 years.</p>
         <div class="row">
           <div><label>Automatic backup</label>
             <select id="coBackupEvery">
@@ -895,6 +895,51 @@
         <p class="hint" style="margin:0 0 10px;">One record per workshop / branch — each holds its own SABS 1475 Mark Permit. Vehicles and employees are assigned to a workshop.</p>
         <div id="branchesList"></div>
         <button class="btn" style="margin-top:12px;" onclick="openBranchForm()">+ Add workshop</button>
+      </div>
+      <div id="companyTab-calibration" style="display:none;">
+        <p class="hint" style="margin:0 0 10px;">The <strong>annual</strong> calibration of the workshop's reference instruments (master gauge, test weights) by a SANAS-accredited laboratory. This is separate from the weekly verification log on the Verify tab.</p>
+        <div class="card">
+          <label style="margin-top:0;">SANAS-accredited calibration laboratory</label>
+          <input id="calLabName" placeholder="e.g. National Metrology Institute of SA">
+          <label>SANAS accreditation no.</label><input id="calLabAccreditation" placeholder="e.g. CAL 0001">
+          <label>Contact</label><input id="calLabContact" placeholder="Phone / email / address">
+          <button class="btn secondary" style="margin-top:12px;" onclick="saveCalibrationLab()">Save laboratory details</button>
+        </div>
+        <div id="calCertList"></div>
+        <button class="btn" style="margin-top:12px;" onclick="openCalibrationCertForm()">+ Add calibration certificate</button>
+      </div>
+    </section>
+
+    <!-- ===== CALIBRATION CERTIFICATE FORM (admin) ===== -->
+    <section id="view-calibration-cert-form" class="view">
+      <div class="backbar"><button onclick="showView('view-company')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="calCertFormTitle">New calibration certificate</h2></div>
+      <div class="card">
+        <label style="margin-top:0;">Instrument type</label>
+        <select id="calCertType">
+          <option value="master">Master pressure gauge</option>
+          <option value="gauge">Working pressure gauge</option>
+          <option value="scale">Weighing scale / test weight</option>
+          <option value="other">Other reference instrument</option>
+        </select>
+        <label>Instrument</label><input id="calCertInstrument" placeholder="e.g. Master pressure gauge A">
+        <label>Serial number</label><input id="calCertSerial" placeholder="Optional">
+        <label>Calibration laboratory</label><input id="calCertLab" placeholder="SANAS-accredited lab">
+        <label>Lab SANAS accreditation no.</label><input id="calCertLabAccreditation" placeholder="e.g. CAL 0001">
+        <div class="row">
+          <div><label>Calibration date</label><input id="calCertDate" type="date"></div>
+          <div><label>Next calibration due</label><input id="calCertNextDue" type="date"></div>
+        </div>
+        <label>Certificate number</label><input id="calCertNumber" placeholder="From the calibration certificate">
+        <label>Calibration certificate (PDF or photo)</label>
+        <input id="calCertFileInput" type="file" accept="application/pdf,image/*" onchange="handleWorkshopFilePick(event,'calCert')">
+        <div class="hint">Upload the certificate page issued by the SANAS-accredited lab. Max 15 MB.</div>
+        <a id="calCertFileLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:0.85rem; font-weight:600;">View current file &#8599;</a>
+        <label>Notes</label><textarea id="calCertNotes" rows="2"></textarea>
+        <div class="row" style="margin-top:16px;">
+          <button class="btn secondary" onclick="showView('view-company')">Cancel</button>
+          <button class="btn" onclick="saveCalibrationCert()">Save</button>
+        </div>
+        <button class="btn ghost" id="calCertDeleteBtn" style="margin-top:10px; display:none;" onclick="deleteCalibrationCert()">Delete this certificate</button>
       </div>
     </section>
 
@@ -1034,8 +1079,10 @@
         <button class="btn secondary" style="margin-top:8px;" onclick="openEmailSite(reportSiteId(), 'view-export')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>Email register / certificate to site</button>
         <div class="hint">Choose a single site above. The site register here is the same one you generate from the site itself. The pressure test and recharge reports cover the equipment whose latest record shows that work was performed.</div>
         <label style="margin-top:16px;">Workshop reports</label>
-        <button class="btn secondary" style="margin-top:6px;" onclick="openCalibrationReport('view-export')">Calibration register</button>
-        <div class="hint">Covers all test equipment, not a single site — also on the Calib. tab, where technicians with the calibration permission can print it too.</div>
+        <button class="btn secondary" style="margin-top:6px;" onclick="openCalibrationReport('view-export')">Weekly verification register</button>
+        <div class="hint">Covers all test equipment, not a single site — also on the Verify tab, where technicians with the verification permission can print it too.</div>
+        <button class="btn secondary" style="margin-top:8px;" onclick="openCalibrationCertRegister()">Calibration register (SANAS)</button>
+        <div class="hint">The annual calibration of the workshop's reference instruments by a SANAS-accredited lab — entered under Company &rarr; Workshop file &rarr; Calibration.</div>
         <button class="btn secondary" style="margin-top:8px;" onclick="openCompliancePack()">Company compliance pack</button>
         <div class="hint">The Company tab's workshop file as one letterheaded document — company documents, employees, vehicles and workshops, with an expiry summary — for a SAQCC / SABS audit.</div>
         <label style="margin-top:16px;">Trainee logbook</label>
@@ -1082,8 +1129,8 @@
 
     <!-- ===== CALIBRATION REGISTER (weekly checks of test equipment) — own tab ===== -->
     <section id="view-calibration" class="view">
-      <div class="section-title"><h2>Calibration register</h2></div>
-      <p class="hint" style="margin:0 0 12px;">SANS 1475 Annex A: the workshop's production-control equipment (weighing scales, working and master pressure gauges) must be checked against reference instruments at least weekly, and recorded in writing. Log each weekly check here.</p>
+      <div class="section-title"><h2>Weekly verification</h2></div>
+      <p class="hint" style="margin:0 0 12px;">SANS 1475 Annex A: the workshop's production-control equipment (weighing scales, working and master pressure gauges) must be verified against reference instruments at least weekly, and recorded in writing. Log each weekly verification here. The annual calibration of the reference instruments by a SANAS-accredited lab is recorded separately, under Company &rarr; Workshop file &rarr; Calibration.</p>
       <div class="card">
         <label style="margin-top:0;">Record a check</label>
         <div class="row">
@@ -1115,7 +1162,7 @@
         <button class="btn" style="margin-top:16px;" onclick="saveCalibrationEntry()">Add to register</button>
       </div>
       <div class="section-title">
-        <h2>Recent checks</h2>
+        <h2>Recent verifications</h2>
         <button class="btn secondary" style="width:auto; padding:8px 14px;" onclick="openCalibrationReport()">Print register</button>
       </div>
       <div id="calList"><div class="empty">Loading…</div></div>
@@ -1179,7 +1226,7 @@
   <nav class="bottom" id="bottomNav">
     <button id="navSites" class="active" onclick="showView('view-sites')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4M10 10h4M10 14h4M10 18h4"/></svg></span><span id="navSitesLabel">Sites</span></button>
     <button id="navDue" onclick="showView('view-due')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></svg></span><span>Due</span></button>
-    <button id="navCalibration" style="display:none;" onclick="showView('view-calibration')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14l4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg></span><span>Calib.</span></button>
+    <button id="navCalibration" style="display:none;" onclick="showView('view-calibration')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14l4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg></span><span>Verify</span></button>
     <button id="navTechnicians" style="display:none;" onclick="showView('view-technicians')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><span>Techs</span></button>
     <button id="navTrainees" style="display:none;" onclick="showView('view-trainees')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span><span>Trainees</span></button>
     <button id="navSignoffs" style="display:none;" onclick="showView('view-signoffs')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg></span><span>Sign-offs</span></button>
@@ -1529,8 +1576,8 @@ function setupRoleUI(){
   document.getElementById('sitesTitle').textContent = isAdmin ? 'All sites' : 'My sites';
   document.getElementById('navCompany').style.display = isAdmin ? 'flex' : 'none';
   document.getElementById('navExport').style.display = isAdmin ? 'flex' : 'none';
-  // The calibration tab is shown to admins and to technicians the admin has
-  // granted the calibration permission.
+  // The weekly-verification tab ("Verify") is shown to admins and to
+  // technicians the admin has granted the verification permission (canCalibrate).
   document.getElementById('navCalibration').style.display =
     (isAdmin || (currentProfile && currentProfile.canCalibrate)) ? 'flex' : 'none';
 }
@@ -1558,7 +1605,7 @@ function showView(id){
   document.getElementById('navTrainees').classList.toggle('active', ['view-trainees','view-trainee-form','view-trainee-detail'].includes(id));
   document.getElementById('navSignoffs').classList.toggle('active', ['view-signoffs','view-signoff-form'].includes(id));
   document.getElementById('navMyTrainees').classList.toggle('active', ['view-my-trainees','view-my-trainee-detail'].includes(id));
-  document.getElementById('navCompany').classList.toggle('active', ['view-company','view-company-doc-form','view-vehicle-form','view-branch-form','view-employee-compliance'].includes(id));
+  document.getElementById('navCompany').classList.toggle('active', ['view-company','view-company-doc-form','view-vehicle-form','view-branch-form','view-employee-compliance','view-calibration-cert-form'].includes(id));
   const calReport = id==='view-report' && reportBackView==='view-calibration';
   document.getElementById('navExport').classList.toggle('active', id==='view-export' || registerFromExport || id==='view-email' || id==='view-verification' || (id==='view-report' && !calReport && !sitesReport));
   document.getElementById('navCalibration').classList.toggle('active', id==='view-calibration' || calReport);
@@ -1579,7 +1626,7 @@ function showView(id){
 
 /* ---------- Firestore listener bookkeeping ---------- */
 let unsubSites = null, unsubEquipment = null, unsubInspections = null, unsubTechs = null, unsubCompetent = null, unsubCal = null, unsubTrainees = null;
-let unsubBranches = null, unsubVehicles = null, unsubCompanyDocs = null, unsubAllStaff = null;
+let unsubBranches = null, unsubVehicles = null, unsubCompanyDocs = null, unsubAllStaff = null, unsubCalCerts = null;
 function detachAllListeners(){
   if(unsubSites){ unsubSites(); unsubSites=null; }
   if(unsubEquipment){ unsubEquipment(); unsubEquipment=null; }
@@ -1592,6 +1639,7 @@ function detachAllListeners(){
   if(unsubVehicles){ unsubVehicles(); unsubVehicles=null; }
   if(unsubCompanyDocs){ unsubCompanyDocs(); unsubCompanyDocs=null; }
   if(unsubAllStaff){ unsubAllStaff(); unsubAllStaff=null; }
+  if(unsubCalCerts){ unsubCalCerts(); unsubCalCerts=null; }
 }
 
 /* ---------- Sites ---------- */
@@ -1887,7 +1935,7 @@ async function loadCompanySettings(){
    filter companyId so the read rules stay provable.
    ====================================================================== */
 let companyTab = 'documents';
-let branchesCache = [], vehiclesCache = [], companyDocsCache = [], allStaffCache = [];
+let branchesCache = [], vehiclesCache = [], companyDocsCache = [], allStaffCache = [], calCertsCache = [];
 
 const COMPANY_DOC_TYPES = {
   'sabs-mark-permit': 'SABS 1475 Mark Permit',
@@ -1928,6 +1976,13 @@ function startWorkshopFileListeners(){
     allStaffCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
     paintCompanyTab();
   }, err=>{ toast('Could not load employees: ' + err.message); });
+
+  if(unsubCalCerts) unsubCalCerts();
+  unsubCalCerts = db.collection('calibrationCertificates').where('companyId','==',currentCompanyId).onSnapshot(snap=>{
+    calCertsCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    calCertsCache.sort((a,b)=>(b.calibrationDate||'').localeCompare(a.calibrationDate||''));
+    paintCompanyTab();
+  }, err=>{ toast('Could not load calibration register: ' + err.message); });
 }
 
 function setCompanyTab(k){ companyTab = k; paintCompanyTab(); }
@@ -1939,10 +1994,11 @@ function paintCompanyTab(){
     ['documents', `Company documents (${companyDocsCache.length})`],
     ['employees', `Employees (${allStaffCache.length})`],
     ['vehicles', `Vehicles (${vehiclesCache.length})`],
-    ['workshops', `Workshops (${branchesCache.length})`]
+    ['workshops', `Workshops (${branchesCache.length})`],
+    ['calibration', `Calibration (${calCertsCache.length})`]
   ];
   chips.innerHTML = tabs.map(([k,label])=>`<button class="chip ${companyTab===k?'active':''}" onclick="setCompanyTab('${k}')">${escapeHtml(label)}${k==='documents'&&expiredCount?' <span style="color:var(--red-dark);">&#9679;</span>':''}</button>`).join('');
-  ['documents','employees','vehicles','workshops'].forEach(k=>{
+  ['documents','employees','vehicles','workshops','calibration'].forEach(k=>{
     const el = document.getElementById('companyTab-'+k);
     if(el) el.style.display = (companyTab===k) ? 'block' : 'none';
   });
@@ -1951,6 +2007,7 @@ function paintCompanyTab(){
   if(companyTab==='employees') renderEmployeeCompliance();
   if(companyTab==='vehicles') renderVehicles();
   if(companyTab==='workshops') renderBranches();
+  if(companyTab==='calibration') renderCalibrationRegister();
 }
 
 /* ---- expiry engine ---- */
@@ -1987,6 +2044,7 @@ function workshopExpiryItems(){
       else if(w) push(`${s.name||'Trainee'} — SAQCC completion deadline`, w.maxDate);
     }
   });
+  calCertsCache.forEach(c=> push(`${c.instrument||'Instrument'} — calibration`, c.nextDueDate));
   return out;
 }
 function renderCompanyExpirySummary(){
@@ -2376,22 +2434,154 @@ async function saveEmployeeCompliance(){
   }catch(e){ toast('Error: ' + e.message); }
 }
 
+/* ---- Calibration register (annual, SANAS-accredited) ---- */
+function renderCalibrationRegister(){
+  const co = companySettings || {};
+  const v = (id,key)=>{ const el=document.getElementById(id); if(el && document.activeElement!==el) el.value = co[key]||''; };
+  v('calLabName','calibrationLabName');
+  v('calLabAccreditation','calibrationLabAccreditationNo');
+  v('calLabContact','calibrationLabContact');
+  const wrap = document.getElementById('calCertList');
+  if(!wrap) return;
+  if(calCertsCache.length===0){ wrap.innerHTML = `<div class="empty">No calibration certificates yet.</div>`; return; }
+  wrap.innerHTML = calCertsCache.map(c=>`<div class="card tech-card" onclick="openCalibrationCertForm('${c.id}')" style="cursor:pointer;">
+    <div>
+      <div class="name">${escapeHtml(c.instrument||'—')}</div>
+      <div class="meta">${escapeHtml(calTypeLabel(c.instrumentType))}${c.certificateNumber?(' &middot; cert '+escapeHtml(c.certificateNumber)):''}${c.labName?(' &middot; '+escapeHtml(c.labName)):''}${c.certificateFileURL?' &middot; file attached':''}</div>
+    </div>
+    ${c.nextDueDate ? expiryPill(c.nextDueDate, 'Next due') : ''}
+  </div>`).join('');
+}
+async function saveCalibrationLab(){
+  const payload = {
+    calibrationLabName: document.getElementById('calLabName').value.trim(),
+    calibrationLabAccreditationNo: document.getElementById('calLabAccreditation').value.trim(),
+    calibrationLabContact: document.getElementById('calLabContact').value.trim(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  try{
+    await db.collection('settings').doc(currentCompanyId).set(payload, {merge:true});
+    companySettings = Object.assign({}, companySettings, payload);
+    toast('Laboratory details saved');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+let editingCalCertId = null;
+function openCalibrationCertForm(id){
+  editingCalCertId = id || null;
+  workshopPendingFiles = {};
+  const c = id ? calCertsCache.find(x=>x.id===id) : null;
+  const co = companySettings || {};
+  document.getElementById('calCertFormTitle').textContent = c ? 'Edit calibration certificate' : 'New calibration certificate';
+  document.getElementById('calCertType').value = c ? (c.instrumentType||'master') : 'master';
+  document.getElementById('calCertInstrument').value = c ? (c.instrument||'') : '';
+  document.getElementById('calCertSerial').value = c ? (c.instrumentSerial||'') : '';
+  document.getElementById('calCertLab').value = c ? (c.labName||'') : (co.calibrationLabName||'');
+  document.getElementById('calCertLabAccreditation').value = c ? (c.labAccreditationNo||'') : (co.calibrationLabAccreditationNo||'');
+  document.getElementById('calCertDate').value = c ? (c.calibrationDate||'') : '';
+  document.getElementById('calCertNextDue').value = c ? (c.nextDueDate||'') : '';
+  document.getElementById('calCertNumber').value = c ? (c.certificateNumber||'') : '';
+  document.getElementById('calCertNotes').value = c ? (c.notes||'') : '';
+  document.getElementById('calCertFileInput').value = '';
+  setFileLink('calCertFileLink', c && c.certificateFileURL);
+  document.getElementById('calCertDeleteBtn').style.display = c ? 'block' : 'none';
+  showView('view-calibration-cert-form');
+}
+async function saveCalibrationCert(){
+  const instrument = document.getElementById('calCertInstrument').value.trim();
+  if(!instrument){ toast('Name the instrument'); return; }
+  const payload = {
+    companyId: currentCompanyId,
+    instrumentType: document.getElementById('calCertType').value,
+    instrument,
+    instrumentSerial: document.getElementById('calCertSerial').value.trim(),
+    labName: document.getElementById('calCertLab').value.trim(),
+    labAccreditationNo: document.getElementById('calCertLabAccreditation').value.trim(),
+    calibrationDate: document.getElementById('calCertDate').value || '',
+    nextDueDate: document.getElementById('calCertNextDue').value || '',
+    certificateNumber: document.getElementById('calCertNumber').value.trim(),
+    notes: document.getElementById('calCertNotes').value.trim(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  try{
+    const ref = editingCalCertId ? db.collection('calibrationCertificates').doc(editingCalCertId) : db.collection('calibrationCertificates').doc();
+    if(!editingCalCertId) payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    if(workshopPendingFiles.calCert){
+      toast('Uploading…');
+      payload.certificateFileURL = await uploadWorkshopFile(workshopPendingFiles.calCert, `company-files/${currentCompanyId}/calibration/${ref.id}.${fileExt(workshopPendingFiles.calCert)}`);
+    }
+    await ref.set(payload, {merge:true});
+    toast('Calibration certificate saved');
+    showView('view-company');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+async function deleteCalibrationCert(){
+  if(!editingCalCertId) return;
+  if(!confirm('Delete this calibration certificate record? The uploaded file is not removed.')) return;
+  try{
+    await db.collection('calibrationCertificates').doc(editingCalCertId).delete();
+    toast('Deleted');
+    showView('view-company');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+async function openCalibrationCertRegister(){
+  toast('Building register…');
+  await loadCompanySettings();
+  let certs = [];
+  try{
+    const snap = await db.collection('calibrationCertificates').where('companyId','==',currentCompanyId).get();
+    certs = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    certs.sort((a,b)=>(a.instrument||'').localeCompare(b.instrument||''));
+  }catch(e){ toast('Could not load: ' + e.message); return; }
+  const co = companySettings || {};
+  const today = toLocalISO(new Date());
+  const expCell = (dateStr)=>{
+    if(!dateStr) return '—';
+    const st = expiryStatus(dateStr);
+    return escapeHtml(dateStr) + (st==='expired'?' (OVERDUE)':(st==='soon'?' (due soon)':''));
+  };
+  const rows = certs.length ? certs.map(c=>`<tr>
+    <td>${escapeHtml(c.instrument||'')}</td>
+    <td>${escapeHtml(calTypeLabel(c.instrumentType))}</td>
+    <td>${escapeHtml(c.instrumentSerial||'—')}</td>
+    <td>${escapeHtml(c.labName||'—')}</td>
+    <td>${escapeHtml(c.certificateNumber||'—')}</td>
+    <td>${escapeHtml(c.calibrationDate||'—')}</td>
+    <td>${expCell(c.nextDueDate)}</td>
+    <td>${c.certificateFileURL?'Yes':'No'}</td>
+  </tr>`).join('') : `<tr><td colspan="8">No calibration certificates recorded yet.</td></tr>`;
+  showReport('Calibration register', `${letterheadHTML(co)}
+    <h2 style="margin-top:16px; font-size:1rem;">Calibration Register — Reference Instruments (SANS 1475 Annex A)</h2>
+    <div class="meta">
+      <strong>Generated:</strong> ${today}<br>
+      <strong>SANAS-accredited laboratory:</strong> ${escapeHtml(co.calibrationLabName||'—')}${co.calibrationLabAccreditationNo?(' (accreditation '+escapeHtml(co.calibrationLabAccreditationNo)+')'):''}<br>
+      ${co.calibrationLabContact ? '<strong>Contact:</strong> '+escapeHtml(co.calibrationLabContact)+'<br>' : ''}
+      <strong>Instruments:</strong> ${certs.length}
+    </div>
+    <div class="hint" style="margin:6px 0 10px;">The workshop's reference instruments are calibrated by the SANAS-accredited laboratory above; the certificate issued for each is on file. Day-to-day production equipment is verified against these instruments weekly (see the Weekly verification register).</div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Instrument</th><th>Type</th><th>Serial</th><th>Laboratory</th><th>Certificate no.</th><th>Calibrated</th><th>Next due</th><th>Certificate on file</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`, 'view-export');
+}
+
 /* ---- Company compliance pack (printable, from Reports) ---- */
 async function openCompliancePack(){
   toast('Building pack…');
   await loadCompanySettings();
-  let branches = [], vehicles = [], docs = [], staff = [];
+  let branches = [], vehicles = [], docs = [], staff = [], certs = [];
   try{
-    const [b, v, d, s] = await Promise.all([
+    const [b, v, d, s, cc] = await Promise.all([
       db.collection('branches').where('companyId','==',currentCompanyId).get(),
       db.collection('vehicles').where('companyId','==',currentCompanyId).get(),
       db.collection('companyDocuments').where('companyId','==',currentCompanyId).get(),
-      db.collection('technicians').where('companyId','==',currentCompanyId).get()
+      db.collection('technicians').where('companyId','==',currentCompanyId).get(),
+      db.collection('calibrationCertificates').where('companyId','==',currentCompanyId).get()
     ]);
     branches = b.docs.map(x=>({id:x.id, ...x.data()}));
     vehicles = v.docs.map(x=>({id:x.id, ...x.data()}));
     docs = d.docs.map(x=>({id:x.id, ...x.data()}));
     staff = s.docs.map(x=>({id:x.id, ...x.data()}));
+    certs = cc.docs.map(x=>({id:x.id, ...x.data()}));
   }catch(e){ toast('Could not load: ' + e.message); return; }
   const co = companySettings || {};
   const today = toLocalISO(new Date());
@@ -2410,6 +2600,7 @@ async function openCompliancePack(){
     const a = expiryStatus(x.saqccRegExpiry); if(a==='expired'||a==='soon') scan.push([`${x.name||'Employee'} — SAQCC registration`, x.saqccRegExpiry, a]);
     const m = expiryStatus(x.medicalCertExpiry); if(m==='expired'||m==='soon') scan.push([`${x.name||'Employee'} — medical certificate`, x.medicalCertExpiry, m]);
   });
+  certs.forEach(x=>{ const st = expiryStatus(x.nextDueDate); if(st==='expired'||st==='soon') scan.push([`${x.instrument||'Instrument'} — calibration`, x.nextDueDate, st]); });
   scan.sort((a,b)=> (a[2]===b[2] ? (a[1]||'').localeCompare(b[1]||'') : (a[2]==='expired'?-1:1)));
 
   const docsRows = docs.length ? docs.map(x=>`<tr>
@@ -2458,6 +2649,16 @@ async function openCompliancePack(){
     ${scan.map(r=>`${escapeHtml(r[0])} — ${escapeHtml(r[1]||'')}${r[2]==='expired'?' (EXPIRED)':''}`).join('<br>')}
   </div>` : `<div class="meta">No documents or registrations are expired or expiring within 60 days.</div>`;
 
+  const certRows = certs.length ? [...certs].sort((a,b)=>(a.instrument||'').localeCompare(b.instrument||'')).map(x=>`<tr>
+    <td>${escapeHtml(x.instrument||'')}</td>
+    <td>${escapeHtml(calTypeLabel(x.instrumentType))}</td>
+    <td>${escapeHtml(x.labName||'—')}</td>
+    <td>${escapeHtml(x.certificateNumber||'—')}</td>
+    <td>${escapeHtml(x.calibrationDate||'—')}</td>
+    <td>${expCell(x.nextDueDate)}</td>
+    <td>${x.certificateFileURL?'Yes':'No'}</td>
+  </tr>`).join('') : `<tr><td colspan="7">No calibration certificates recorded.</td></tr>`;
+
   showReport('Company compliance pack', `${letterheadHTML(co)}
     <h2 style="margin-top:16px; font-size:1rem;">Company Compliance Pack — SANS 1475 servicing organisation</h2>
     <div class="meta"><strong>Generated:</strong> ${today}</div>
@@ -2481,6 +2682,12 @@ async function openCompliancePack(){
     <div class="tablewrap"><table>
       <thead><tr><th>Name</th><th>Address</th><th>Mark Permit no.</th><th>Issued</th><th>Expiry</th></tr></thead>
       <tbody>${brRows}</tbody>
+    </table></div>
+    <h3 style="margin-top:18px; font-size:0.95rem;">Calibration — reference instruments (SANAS-accredited)</h3>
+    <div class="meta" style="margin-top:0;"><strong>Laboratory:</strong> ${escapeHtml(co.calibrationLabName||'—')}${co.calibrationLabAccreditationNo?(' (accreditation '+escapeHtml(co.calibrationLabAccreditationNo)+')'):''}</div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Instrument</th><th>Type</th><th>Laboratory</th><th>Certificate no.</th><th>Calibrated</th><th>Next due</th><th>Certificate on file</th></tr></thead>
+      <tbody>${certRows}</tbody>
     </table></div>`, 'view-export');
 }
 
@@ -3914,7 +4121,7 @@ function paintTechnicians(){
       <div>
         <div class="name">${escapeHtml(t.name)}</div>
         <div class="meta">${staffRoleFilter==='competent'?'No.':'Tech no.'} ${escapeHtml(t.techNumber||'')}${t.saqcc?(' · '+escapeHtml(t.saqcc)):''}</div>
-        ${(!inactive && t.canCalibrate) ? `<div style="margin-top:6px;"><span class="pill">Calibration</span></div>` : ''}
+        ${(!inactive && t.canCalibrate) ? `<div style="margin-top:6px;"><span class="pill">Verification</span></div>` : ''}
       </div>
       ${right}
     </div>`;
@@ -5106,7 +5313,11 @@ async function openRechargeReport(){
   showReport('Recharge report', head + blocks);
 }
 
-/* ---------- Calibration register (company-wide, weekly checks) ---------- */
+/* ---------- Weekly verification register (SANS 1475 Annex A) ----------
+   Weekly checks of scales / working + master gauges against reference
+   instruments. Collection stays `calibrations` for historical reasons; the
+   real (annual, external, SANAS) calibration register is
+   `calibrationCertificates`, on the Company → Workshop file tab. */
 let calibrationsCache = [];
 function calTypeLabel(t){
   return { scale:'Weighing scale', gauge:'Working pressure gauge', master:'Master pressure gauge', other:'Other test equipment' }[t] || t || '';
@@ -5121,7 +5332,7 @@ function renderCalibrationView(){
     calibrationsCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
     calibrationsCache.sort((a,b)=>(b.checkDate||'').localeCompare(a.checkDate||''));
     paintCalibrations();
-  }, err=>{ toast('Could not load calibration register: ' + err.message); });
+  }, err=>{ toast('Could not load verification register: ' + err.message); });
 }
 async function loadCalibrations(){
   try{
@@ -5147,7 +5358,7 @@ function paintCalibrations(){
 async function saveCalibrationEntry(){
   const checkDate = document.getElementById('calDate').value;
   const equipment = document.getElementById('calEquip').value.trim();
-  if(!checkDate || !equipment){ toast('Enter at least the date and the equipment checked'); return; }
+  if(!checkDate || !equipment){ toast('Enter at least the date and the equipment verified'); return; }
   const payload = {
     checkDate,
     type: document.getElementById('calType').value,
@@ -5166,19 +5377,19 @@ async function saveCalibrationEntry(){
   try{
     await db.collection('calibrations').add(payload);
     ['calEquip','calRef','calReading','calDeviation','calAction'].forEach(id=>document.getElementById(id).value='');
-    toast('Check added to the register');
+    toast('Verification added to the register');
   }catch(e){ toast('Error: ' + e.message); }
 }
 async function deleteCalibrationEntry(id){
   if(currentRole!=='admin') return;
-  if(!confirm('Delete this calibration entry?')) return;
+  if(!confirm('Delete this verification entry?')) return;
   try{ await db.collection('calibrations').doc(id).delete(); toast('Entry deleted'); }
   catch(e){ toast('Error: ' + e.message); }
 }
 async function openCalibrationReport(backView){
   toast('Building register…');
   await loadCompanySettings();
-  await loadCalibrations();
+  await loadCalibrations();   // weekly verification log (collection stays `calibrations`)
   const co = companySettings || {};
   const today = toLocalISO(new Date());
   const rows = calibrationsCache.map(c=>`<tr>
@@ -5191,11 +5402,11 @@ async function openCalibrationReport(backView){
     <td>${c.result==='fail'?'Fail':'Pass'}</td>
     <td>${escapeHtml(c.action||'')}</td>
     <td>${escapeHtml(c.technicianName||'')}</td>
-  </tr>`).join('') || `<tr><td colspan="9">No calibration checks recorded yet.</td></tr>`;
-  showReport('Calibration register', `${letterheadHTML(co)}
-    <h2 style="margin-top:16px; font-size:1rem;">Test Equipment Calibration Register (SANS 1475 Annex A)</h2>
+  </tr>`).join('') || `<tr><td colspan="9">No weekly verifications recorded yet.</td></tr>`;
+  showReport('Weekly verification register', `${letterheadHTML(co)}
+    <h2 style="margin-top:16px; font-size:1rem;">Weekly Verification Register (SANS 1475 Annex A)</h2>
     <div class="meta"><strong>Generated:</strong> ${today}<br><strong>Entries:</strong> ${calibrationsCache.length}</div>
-    <div class="hint" style="margin:6px 0 10px;">Production-control equipment (scales, working and master pressure gauges) is checked against reference instruments at least weekly; results are recorded below.</div>
+    <div class="hint" style="margin:6px 0 10px;">Production-control equipment (scales, working and master pressure gauges) is verified against reference instruments at least weekly; results are recorded below. The reference instruments themselves are calibrated annually by a SANAS-accredited laboratory (see the Calibration register).</div>
     <div class="tablewrap"><table>
       <thead><tr><th>Date</th><th>Type</th><th>Equipment</th><th>Reference used</th><th>Reading</th><th>Deviation</th><th>Result</th><th>Action</th><th>Checked by</th></tr></thead>
       <tbody>${rows}</tbody>

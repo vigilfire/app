@@ -234,10 +234,24 @@ service cloud.firestore {
       allow update: if isCompanyAdmin(resource.data.companyId);
       allow delete: if isCompanyAdmin(resource.data.companyId);
     }
+    // Annual external calibration of the workshop's reference instruments by a
+    // SANAS-accredited body — one record + certificate upload per instrument.
+    // Distinct from `calibrations` (below), which is the *weekly verification*
+    // log. Admin-managed only; the certificate files live under
+    // company-files/{companyId}/calibration/ in Storage.
+    match /calibrationCertificates/{id} {
+      allow read:   if isCompanyAdmin(resource.data.companyId);
+      allow create: if isCompanyAdmin(request.resource.data.companyId);
+      allow update: if isCompanyAdmin(resource.data.companyId);
+      allow delete: if isCompanyAdmin(resource.data.companyId);
+    }
 
-    // Test-equipment calibration register (SANS 1475 Annex A). Weekly checks are
-    // added by an admin or by a technician the admin has granted the
-    // `canCalibrate` permission; only an admin may change or remove an entry.
+    // Weekly verification log (SANS 1475 Annex A) — production-control equipment
+    // checked against reference instruments at least weekly. Collection name is
+    // `calibrations` for historical reasons; the app now calls this "Weekly
+    // verification" (the real calibration register is `calibrationCertificates`
+    // above). Entries are added by an admin or by a technician the admin has
+    // granted the `canCalibrate` permission; only an admin may change or remove one.
     match /calibrations/{id} {
       allow read:   if isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && myCompanyId() == resource.data.companyId);
       allow create: if isCompanyAdmin(request.resource.data.companyId)
