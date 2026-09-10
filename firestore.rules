@@ -205,6 +205,36 @@ service cloud.firestore {
       allow write: if isCompanyAdmin(companyId);
     }
 
+    // Workshop / auditor file (Company tab → Company Documents / Employees /
+    // Vehicles / Workshops). These three collections hold the servicing
+    // business's own compliance evidence — statutory documents, service
+    // vehicles, and branch premises/Mark-Permit records — as opposed to the
+    // client-facing site registers and certificates. Purely admin-managed
+    // within one tenant, so the plain company-admin pattern: create checks the
+    // incoming companyId, everything else checks the stored one. A `list`
+    // query on any of these must filter `where('companyId','==', <own>)` for
+    // the read rule to be provable. Employee compliance data (SAQCC/medical
+    // expiry, ID copies) lives on the existing `technicians` doc, written by
+    // the admin through the update rule above — no separate collection.
+    match /branches/{id} {
+      allow read:   if isCompanyAdmin(resource.data.companyId);
+      allow create: if isCompanyAdmin(request.resource.data.companyId);
+      allow update: if isCompanyAdmin(resource.data.companyId);
+      allow delete: if isCompanyAdmin(resource.data.companyId);
+    }
+    match /vehicles/{id} {
+      allow read:   if isCompanyAdmin(resource.data.companyId);
+      allow create: if isCompanyAdmin(request.resource.data.companyId);
+      allow update: if isCompanyAdmin(resource.data.companyId);
+      allow delete: if isCompanyAdmin(resource.data.companyId);
+    }
+    match /companyDocuments/{id} {
+      allow read:   if isCompanyAdmin(resource.data.companyId);
+      allow create: if isCompanyAdmin(request.resource.data.companyId);
+      allow update: if isCompanyAdmin(resource.data.companyId);
+      allow delete: if isCompanyAdmin(resource.data.companyId);
+    }
+
     // Test-equipment calibration register (SANS 1475 Annex A). Weekly checks are
     // added by an admin or by a technician the admin has granted the
     // `canCalibrate` permission; only an admin may change or remove an entry.

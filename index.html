@@ -873,6 +873,150 @@
         <button class="btn secondary" style="margin-top:12px;" onclick="saveBackupSettings()">Save backup schedule</button>
         <button class="btn" style="margin-top:8px;" onclick="downloadFullBackup()">Download backup now</button>
       </div>
+
+      <div class="section-title"><h2>Workshop file</h2></div>
+      <p class="hint" style="margin:0 0 12px 0;">Your business's own compliance evidence for a SAQCC / SABS audit — separate from the client-facing site registers and certificates under Reports. A printable roll-up is under Reports → "Company compliance pack".</p>
+      <div id="companyExpirySummary"></div>
+      <div class="pillrow" id="companyTabChips" style="margin-bottom:12px;"></div>
+
+      <div id="companyTab-documents">
+        <div id="companyDocsList"></div>
+        <button class="btn" style="margin-top:12px;" onclick="openCompanyDocForm()">+ Add document</button>
+      </div>
+      <div id="companyTab-employees" style="display:none;">
+        <p class="hint" style="margin:0 0 10px;">Every employee already in Technicians / Trainees, with their registration and compliance documents in one place. Tap a name to add or update.</p>
+        <div id="employeeComplianceList"></div>
+      </div>
+      <div id="companyTab-vehicles" style="display:none;">
+        <div id="vehiclesList"></div>
+        <button class="btn" style="margin-top:12px;" onclick="openVehicleForm()">+ Add vehicle</button>
+      </div>
+      <div id="companyTab-workshops" style="display:none;">
+        <p class="hint" style="margin:0 0 10px;">One record per workshop / branch — each holds its own SABS 1475 Mark Permit. Vehicles and employees are assigned to a workshop.</p>
+        <div id="branchesList"></div>
+        <button class="btn" style="margin-top:12px;" onclick="openBranchForm()">+ Add workshop</button>
+      </div>
+    </section>
+
+    <!-- ===== COMPANY DOCUMENT FORM (admin) ===== -->
+    <section id="view-company-doc-form" class="view">
+      <div class="backbar"><button onclick="showView('view-company')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="companyDocFormTitle">New document</h2></div>
+      <div class="card">
+        <label style="margin-top:0;">Document type</label>
+        <select id="docType">
+          <option value="sabs-mark-permit">SABS 1475 Mark Permit</option>
+          <option value="saqcc-company-registration">SAQCC company registration</option>
+          <option value="cipc-registration">CIPC company registration</option>
+          <option value="tax-clearance">Tax clearance / letter of good standing</option>
+          <option value="public-liability-insurance">Public liability insurance</option>
+          <option value="coida-good-standing">COIDA letter of good standing</option>
+          <option value="bbbee-certificate">B-BBEE certificate</option>
+          <option value="other">Other</option>
+        </select>
+        <label>Title / description</label><input id="docTitle" placeholder="e.g. SABS Mark Permit 2026">
+        <label>Reference number</label><input id="docRef" placeholder="Optional">
+        <div class="row">
+          <div><label>Issue date</label><input id="docIssueDate" type="date"></div>
+          <div><label>Expiry date</label><input id="docExpiryDate" type="date"></div>
+        </div>
+        <label>Document file (PDF or photo)</label>
+        <input id="docFileInput" type="file" accept="application/pdf,image/*" onchange="handleWorkshopFilePick(event,'doc')">
+        <div class="hint" id="docFileHint">Max 15 MB.</div>
+        <a id="docFileLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:0.85rem; font-weight:600;">View current file &#8599;</a>
+        <label>Notes</label><textarea id="docNotes" rows="2"></textarea>
+        <div class="row" style="margin-top:16px;">
+          <button class="btn secondary" onclick="showView('view-company')">Cancel</button>
+          <button class="btn" onclick="saveCompanyDoc()">Save</button>
+        </div>
+        <button class="btn ghost" id="docDeleteBtn" style="margin-top:10px; display:none;" onclick="deleteCompanyDoc()">Delete this document</button>
+      </div>
+    </section>
+
+    <!-- ===== VEHICLE FORM (admin) ===== -->
+    <section id="view-vehicle-form" class="view">
+      <div class="backbar"><button onclick="showView('view-company')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="vehicleFormTitle">New vehicle</h2></div>
+      <div class="card">
+        <label style="margin-top:0;">Registration number</label><input id="vehReg" placeholder="e.g. CA 123-456">
+        <label>Description</label><input id="vehDescription" placeholder="e.g. 2019 Toyota Hilux — white">
+        <label>Workshop / branch</label><select id="vehBranch"></select>
+        <label>Assigned technician</label><select id="vehTechnician"></select>
+        <div class="row">
+          <div><label>Licence disk expiry</label><input id="vehLicenceExpiry" type="date"></div>
+          <div><label>Last roadworthy</label><input id="vehRoadworthy" type="date"></div>
+        </div>
+        <label>SABS mobile-workshop approval ref (if approved)</label><input id="vehApprovalRef" placeholder="Optional">
+        <label>Mobile-workshop approval expiry</label><input id="vehApprovalExpiry" type="date">
+        <div class="row">
+          <div><label>Carried extinguisher — serial</label><input id="vehExtSerial" placeholder="Optional"></div>
+          <div><label>Its last service</label><input id="vehExtServiceDate" type="date"></div>
+        </div>
+        <label>Licence disk (photo)</label>
+        <input id="vehLicenceFileInput" type="file" accept="application/pdf,image/*" onchange="handleWorkshopFilePick(event,'vehLicence')">
+        <a id="vehLicenceFileLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:0.85rem; font-weight:600;">View current file &#8599;</a>
+        <label>Mobile-workshop approval letter</label>
+        <input id="vehApprovalFileInput" type="file" accept="application/pdf,image/*" onchange="handleWorkshopFilePick(event,'vehApproval')">
+        <a id="vehApprovalFileLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:0.85rem; font-weight:600;">View current file &#8599;</a>
+        <label>Notes</label><textarea id="vehNotes" rows="2"></textarea>
+        <div class="row" style="margin-top:16px;">
+          <button class="btn secondary" onclick="showView('view-company')">Cancel</button>
+          <button class="btn" onclick="saveVehicle()">Save</button>
+        </div>
+        <button class="btn ghost" id="vehDeleteBtn" style="margin-top:10px; display:none;" onclick="deleteVehicle()">Delete this vehicle</button>
+      </div>
+    </section>
+
+    <!-- ===== WORKSHOP / BRANCH FORM (admin) ===== -->
+    <section id="view-branch-form" class="view">
+      <div class="backbar"><button onclick="showView('view-company')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="branchFormTitle">New workshop</h2></div>
+      <div class="card">
+        <label style="margin-top:0;">Workshop / branch name</label><input id="branchName" placeholder="e.g. Cape Town workshop">
+        <label>Address</label><input id="branchAddress" placeholder="Street, suburb, city">
+        <label>Phone</label><input id="branchPhone" placeholder="Optional">
+        <div class="divider"></div>
+        <label style="margin-top:0;">SABS 1475 Mark Permit no.</label><input id="branchPermitNo" placeholder="e.g. 1475/1234">
+        <div class="row">
+          <div><label>Permit issued</label><input id="branchPermitIssue" type="date"></div>
+          <div><label>Permit expires</label><input id="branchPermitExpiry" type="date"></div>
+        </div>
+        <label>Mark Permit (PDF or photo)</label>
+        <input id="branchPermitFileInput" type="file" accept="application/pdf,image/*" onchange="handleWorkshopFilePick(event,'branchPermit')">
+        <div class="hint">Each workshop / branch must hold its own permit — a single permit can't cover more than one premises.</div>
+        <a id="branchPermitFileLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:0.85rem; font-weight:600;">View current file &#8599;</a>
+        <label>Notes</label><textarea id="branchNotes" rows="2"></textarea>
+        <div class="row" style="margin-top:16px;">
+          <button class="btn secondary" onclick="showView('view-company')">Cancel</button>
+          <button class="btn" onclick="saveBranch()">Save</button>
+        </div>
+        <button class="btn ghost" id="branchDeleteBtn" style="margin-top:10px; display:none;" onclick="deleteBranch()">Delete this workshop</button>
+      </div>
+    </section>
+
+    <!-- ===== EMPLOYEE COMPLIANCE (admin) ===== -->
+    <section id="view-employee-compliance" class="view">
+      <div class="backbar"><button onclick="showView('view-company')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="empComplianceTitle">Employee</h2></div>
+      <div class="card">
+        <div id="empComplianceHeader" class="hint" style="margin-top:0;"></div>
+        <div class="divider"></div>
+        <label style="margin-top:0;">Workshop / branch</label><select id="empBranch"></select>
+        <div class="row">
+          <div><label>SAQCC registration expiry</label><input id="empSaqccExpiry" type="date"></div>
+          <div><label>Medical certificate expiry</label><input id="empMedicalExpiry" type="date"></div>
+        </div>
+        <label>ID document (photo or PDF)</label>
+        <input id="empIdFileInput" type="file" accept="application/pdf,image/*" onchange="handleWorkshopFilePick(event,'empId')">
+        <a id="empIdFileLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:0.85rem; font-weight:600;">View current file &#8599;</a>
+        <label>Medical certificate</label>
+        <input id="empMedicalFileInput" type="file" accept="application/pdf,image/*" onchange="handleWorkshopFilePick(event,'empMedical')">
+        <a id="empMedicalFileLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:0.85rem; font-weight:600;">View current file &#8599;</a>
+        <label>Employment contract / appointment</label>
+        <input id="empContractFileInput" type="file" accept="application/pdf,image/*" onchange="handleWorkshopFilePick(event,'empContract')">
+        <a id="empContractFileLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:0.85rem; font-weight:600;">View current file &#8599;</a>
+        <div class="hint" id="empSelfServiceNote" style="margin-top:10px;"></div>
+        <div class="row" style="margin-top:16px;">
+          <button class="btn secondary" onclick="showView('view-company')">Cancel</button>
+          <button class="btn" onclick="saveEmployeeCompliance()">Save</button>
+        </div>
+      </div>
     </section>
 
     <!-- ===== REPORTS (admin) ===== -->
@@ -892,6 +1036,8 @@
         <label style="margin-top:16px;">Workshop reports</label>
         <button class="btn secondary" style="margin-top:6px;" onclick="openCalibrationReport('view-export')">Calibration register</button>
         <div class="hint">Covers all test equipment, not a single site — also on the Calib. tab, where technicians with the calibration permission can print it too.</div>
+        <button class="btn secondary" style="margin-top:8px;" onclick="openCompliancePack()">Company compliance pack</button>
+        <div class="hint">The Company tab's workshop file as one letterheaded document — company documents, employees, vehicles and workshops, with an expiry summary — for a SAQCC / SABS audit.</div>
         <label style="margin-top:16px;">Trainee logbook</label>
         <button class="btn secondary" style="margin-top:6px;" onclick="openVerification()">Sign-off verification</button>
         <div class="hint">Compares each profile's registered device against the device used for its logbook entries and sign-offs.</div>
@@ -1412,7 +1558,7 @@ function showView(id){
   document.getElementById('navTrainees').classList.toggle('active', ['view-trainees','view-trainee-form','view-trainee-detail'].includes(id));
   document.getElementById('navSignoffs').classList.toggle('active', ['view-signoffs','view-signoff-form'].includes(id));
   document.getElementById('navMyTrainees').classList.toggle('active', ['view-my-trainees','view-my-trainee-detail'].includes(id));
-  document.getElementById('navCompany').classList.toggle('active', id==='view-company');
+  document.getElementById('navCompany').classList.toggle('active', ['view-company','view-company-doc-form','view-vehicle-form','view-branch-form','view-employee-compliance'].includes(id));
   const calReport = id==='view-report' && reportBackView==='view-calibration';
   document.getElementById('navExport').classList.toggle('active', id==='view-export' || registerFromExport || id==='view-email' || id==='view-verification' || (id==='view-report' && !calReport && !sitesReport));
   document.getElementById('navCalibration').classList.toggle('active', id==='view-calibration' || calReport);
@@ -1433,6 +1579,7 @@ function showView(id){
 
 /* ---------- Firestore listener bookkeeping ---------- */
 let unsubSites = null, unsubEquipment = null, unsubInspections = null, unsubTechs = null, unsubCompetent = null, unsubCal = null, unsubTrainees = null;
+let unsubBranches = null, unsubVehicles = null, unsubCompanyDocs = null, unsubAllStaff = null;
 function detachAllListeners(){
   if(unsubSites){ unsubSites(); unsubSites=null; }
   if(unsubEquipment){ unsubEquipment(); unsubEquipment=null; }
@@ -1441,6 +1588,10 @@ function detachAllListeners(){
   if(unsubCompetent){ unsubCompetent(); unsubCompetent=null; }
   if(unsubCal){ unsubCal(); unsubCal=null; }
   if(unsubTrainees){ unsubTrainees(); unsubTrainees=null; }
+  if(unsubBranches){ unsubBranches(); unsubBranches=null; }
+  if(unsubVehicles){ unsubVehicles(); unsubVehicles=null; }
+  if(unsubCompanyDocs){ unsubCompanyDocs(); unsubCompanyDocs=null; }
+  if(unsubAllStaff){ unsubAllStaff(); unsubAllStaff=null; }
 }
 
 /* ---------- Sites ---------- */
@@ -1722,6 +1873,615 @@ async function loadCompanySettings(){
   }
   renderCompanyLogoPreview();
   renderCompanySignaturePreview();
+  startWorkshopFileListeners();
+  paintCompanyTab();
+}
+
+/* ======================================================================
+   Workshop file (Company tab → Company Documents / Employees / Vehicles /
+   Workshops) — the servicing business's own SAQCC / SABS audit evidence,
+   as opposed to the client-facing registers under Reports. Three admin-only
+   tenant-scoped collections (branches, vehicles, companyDocuments) written
+   direct from the client and guarded by firestore.rules; employee
+   compliance data lives on the existing technicians doc. All list queries
+   filter companyId so the read rules stay provable.
+   ====================================================================== */
+let companyTab = 'documents';
+let branchesCache = [], vehiclesCache = [], companyDocsCache = [], allStaffCache = [];
+
+const COMPANY_DOC_TYPES = {
+  'sabs-mark-permit': 'SABS 1475 Mark Permit',
+  'saqcc-company-registration': 'SAQCC company registration',
+  'cipc-registration': 'CIPC company registration',
+  'tax-clearance': 'Tax clearance / letter of good standing',
+  'public-liability-insurance': 'Public liability insurance',
+  'coida-good-standing': 'COIDA letter of good standing',
+  'bbbee-certificate': 'B-BBEE certificate',
+  'other': 'Other'
+};
+const ROLE_LABEL = { admin:'Administrator', technician:'Technician', trainee:'Trainee', competent:'Competent Person' };
+
+function startWorkshopFileListeners(){
+  if(!currentCompanyId) return;
+  if(unsubBranches) unsubBranches();
+  unsubBranches = db.collection('branches').where('companyId','==',currentCompanyId).onSnapshot(snap=>{
+    branchesCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    branchesCache.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+    paintCompanyTab();
+  }, err=>{ toast('Could not load workshops: ' + err.message); });
+
+  if(unsubVehicles) unsubVehicles();
+  unsubVehicles = db.collection('vehicles').where('companyId','==',currentCompanyId).onSnapshot(snap=>{
+    vehiclesCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    vehiclesCache.sort((a,b)=>(a.registrationNo||'').localeCompare(b.registrationNo||''));
+    paintCompanyTab();
+  }, err=>{ toast('Could not load vehicles: ' + err.message); });
+
+  if(unsubCompanyDocs) unsubCompanyDocs();
+  unsubCompanyDocs = db.collection('companyDocuments').where('companyId','==',currentCompanyId).onSnapshot(snap=>{
+    companyDocsCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    paintCompanyTab();
+  }, err=>{ toast('Could not load company documents: ' + err.message); });
+
+  if(unsubAllStaff) unsubAllStaff();
+  unsubAllStaff = db.collection('technicians').where('companyId','==',currentCompanyId).onSnapshot(snap=>{
+    allStaffCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    paintCompanyTab();
+  }, err=>{ toast('Could not load employees: ' + err.message); });
+}
+
+function setCompanyTab(k){ companyTab = k; paintCompanyTab(); }
+function paintCompanyTab(){
+  const chips = document.getElementById('companyTabChips');
+  if(!chips) return;
+  const expiredCount = workshopExpiryItems().filter(i=>i.status==='expired').length;
+  const tabs = [
+    ['documents', `Company documents (${companyDocsCache.length})`],
+    ['employees', `Employees (${allStaffCache.length})`],
+    ['vehicles', `Vehicles (${vehiclesCache.length})`],
+    ['workshops', `Workshops (${branchesCache.length})`]
+  ];
+  chips.innerHTML = tabs.map(([k,label])=>`<button class="chip ${companyTab===k?'active':''}" onclick="setCompanyTab('${k}')">${escapeHtml(label)}${k==='documents'&&expiredCount?' <span style="color:var(--red-dark);">&#9679;</span>':''}</button>`).join('');
+  ['documents','employees','vehicles','workshops'].forEach(k=>{
+    const el = document.getElementById('companyTab-'+k);
+    if(el) el.style.display = (companyTab===k) ? 'block' : 'none';
+  });
+  renderCompanyExpirySummary();
+  if(companyTab==='documents') renderCompanyDocs();
+  if(companyTab==='employees') renderEmployeeCompliance();
+  if(companyTab==='vehicles') renderVehicles();
+  if(companyTab==='workshops') renderBranches();
+}
+
+/* ---- expiry engine ---- */
+function expiryStatus(dateStr){
+  if(!dateStr) return null;
+  const today = toLocalISO(new Date());
+  const days = Math.round((new Date(dateStr+'T00:00:00') - new Date(today+'T00:00:00')) / 86400000);
+  if(days < 0) return 'expired';
+  if(days <= 60) return 'soon';
+  return 'ok';
+}
+function expiryPill(dateStr, labelPrefix){
+  const st = expiryStatus(dateStr);
+  if(!dateStr) return '';
+  const cls = st==='expired' ? 'fail' : (st==='soon' ? 'due' : 'pass');
+  const txt = st==='expired' ? 'Expired' : (st==='soon' ? 'Expiring' : 'Valid');
+  return `<span class="pill ${cls}" style="margin:0;">${labelPrefix?escapeHtml(labelPrefix)+' ':''}${txt} ${escapeHtml(dateStr)}</span>`;
+}
+function workshopExpiryItems(){
+  const out = [];
+  const push = (name, dateStr)=>{ const st = expiryStatus(dateStr); if(st==='expired'||st==='soon') out.push({label:name, date:dateStr, status: st==='expired'?'expired':'soon'}); };
+  companyDocsCache.forEach(d=> push(`${COMPANY_DOC_TYPES[d.type]||'Document'}${d.title?(' — '+d.title):''}`, d.expiryDate));
+  branchesCache.forEach(b=> push(`${b.name||'Workshop'} — Mark Permit`, b.markPermitExpiryDate));
+  vehiclesCache.forEach(v=>{
+    push(`${v.registrationNo||'Vehicle'} — licence disk`, v.licenceDiskExpiry);
+    push(`${v.registrationNo||'Vehicle'} — mobile-workshop approval`, v.mobileWorkshopApprovalExpiry);
+  });
+  allStaffCache.forEach(s=>{
+    push(`${s.name||'Employee'} — SAQCC registration`, s.saqccRegExpiry);
+    push(`${s.name||'Employee'} — medical certificate`, s.medicalCertExpiry);
+    if(s.role==='trainee' && s.trainingCertificateDate){
+      const w = certificateWindowInfo(s.trainingCertificateDate);
+      if(w && w.cls==='fail') out.push({label:`${s.name||'Trainee'} — SAQCC completion window`, date:w.maxDate, status:'expired'});
+      else if(w) push(`${s.name||'Trainee'} — SAQCC completion deadline`, w.maxDate);
+    }
+  });
+  return out;
+}
+function renderCompanyExpirySummary(){
+  const wrap = document.getElementById('companyExpirySummary');
+  if(!wrap) return;
+  const items = workshopExpiryItems();
+  if(items.length===0){ wrap.innerHTML = ''; return; }
+  const expired = items.filter(i=>i.status==='expired');
+  const soon = items.filter(i=>i.status==='soon');
+  items.sort((a,b)=> (a.status===b.status ? (a.date||'').localeCompare(b.date||'') : (a.status==='expired'?-1:1)));
+  wrap.innerHTML = `<div class="card" style="border-left:4px solid var(--${expired.length?'red':'amber'});">
+    <strong style="font-size:0.9rem;">${expired.length} expired &middot; ${soon.length} expiring within 60 days</strong>
+    <div style="margin-top:8px; display:flex; flex-direction:column; gap:6px;">
+      ${items.slice(0,12).map(i=>`<div style="display:flex; justify-content:space-between; gap:10px; font-size:0.82rem;">
+        <span>${escapeHtml(i.label)}</span>
+        <span class="pill ${i.status==='expired'?'fail':'due'}" style="margin:0; white-space:nowrap;">${escapeHtml(i.date||'')}</span>
+      </div>`).join('')}
+      ${items.length>12?`<div class="hint" style="margin:0;">+ ${items.length-12} more</div>`:''}
+    </div>
+  </div>`;
+}
+
+/* ---- renderers ---- */
+function branchName(id){ const b = branchesCache.find(x=>x.id===id); return b ? (b.name||'') : ''; }
+
+function renderCompanyDocs(){
+  const wrap = document.getElementById('companyDocsList');
+  if(!wrap) return;
+  if(companyDocsCache.length===0){ wrap.innerHTML = `<div class="empty">No company documents yet.</div>`; return; }
+  const order = Object.keys(COMPANY_DOC_TYPES);
+  const sorted = [...companyDocsCache].sort((a,b)=> order.indexOf(a.type)-order.indexOf(b.type) || (a.title||'').localeCompare(b.title||''));
+  wrap.innerHTML = sorted.map(d=>`<div class="card tech-card" onclick="openCompanyDocForm('${d.id}')" style="cursor:pointer;">
+    <div>
+      <div class="name">${escapeHtml(COMPANY_DOC_TYPES[d.type]||'Document')}</div>
+      <div class="meta">${escapeHtml(d.title||'')}${d.referenceNo?(' &middot; '+escapeHtml(d.referenceNo)):''}${d.fileURL?' &middot; file attached':''}</div>
+    </div>
+    ${d.expiryDate ? expiryPill(d.expiryDate) : ''}
+  </div>`).join('');
+}
+
+function renderVehicles(){
+  const wrap = document.getElementById('vehiclesList');
+  if(!wrap) return;
+  if(vehiclesCache.length===0){ wrap.innerHTML = `<div class="empty">No vehicles yet.</div>`; return; }
+  wrap.innerHTML = vehiclesCache.map(v=>{
+    const tech = allStaffCache.find(s=>s.id===v.assignedTechnicianId);
+    return `<div class="card tech-card" onclick="openVehicleForm('${v.id}')" style="cursor:pointer;">
+      <div>
+        <div class="name">${escapeHtml(v.registrationNo||'—')}</div>
+        <div class="meta">${escapeHtml(v.description||'')}${v.branchId?(' &middot; '+escapeHtml(branchName(v.branchId))):''}${tech?(' &middot; '+escapeHtml(tech.name)):''}</div>
+      </div>
+      ${v.licenceDiskExpiry ? expiryPill(v.licenceDiskExpiry, 'Licence') : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderBranches(){
+  const wrap = document.getElementById('branchesList');
+  if(!wrap) return;
+  if(branchesCache.length===0){ wrap.innerHTML = `<div class="empty">No workshops yet.</div>`; return; }
+  wrap.innerHTML = branchesCache.map(b=>`<div class="card tech-card" onclick="openBranchForm('${b.id}')" style="cursor:pointer;">
+    <div>
+      <div class="name">${escapeHtml(b.name||'—')}</div>
+      <div class="meta">${escapeHtml(b.address||'')}${b.markPermitNo?(' &middot; Permit '+escapeHtml(b.markPermitNo)):''}</div>
+    </div>
+    ${b.markPermitExpiryDate ? expiryPill(b.markPermitExpiryDate, 'Permit') : ''}
+  </div>`).join('');
+}
+
+function employeeExpectedDocs(s){
+  const need = [['idDocumentPhotoURL','ID document']];
+  if(s.role==='technician'){ need.push(['saqccCardPhotoURL','SAQCC card'], ['medicalCertPhotoURL','Medical']); }
+  else if(s.role==='trainee'){ need.push(['trainingCertificatePhotoURL','Training certificate']); }
+  else if(s.role==='competent'){ need.push(['appointmentLetterPhotoURL','Appointment letter']); }
+  return need;
+}
+function renderEmployeeCompliance(){
+  const wrap = document.getElementById('employeeComplianceList');
+  if(!wrap) return;
+  if(allStaffCache.length===0){ wrap.innerHTML = `<div class="empty">No employees yet.</div>`; return; }
+  const roleOrder = ['admin','technician','competent','trainee'];
+  const sorted = [...allStaffCache].sort((a,b)=> roleOrder.indexOf(a.role)-roleOrder.indexOf(b.role) || (a.name||'').localeCompare(b.name||''));
+  wrap.innerHTML = sorted.map(s=>{
+    const need = employeeExpectedDocs(s);
+    const missing = need.filter(([f])=> !s[f]).length;
+    const inactive = s.active === false;
+    const right = inactive
+      ? `<span class="pill" style="margin:0;">Deactivated</span>`
+      : (missing
+        ? `<span class="pill due" style="margin:0;">${missing} missing</span>`
+        : `<span class="pill pass" style="margin:0;">Complete</span>`);
+    return `<div class="card tech-card" onclick="openEmployeeCompliance('${s.id}')" style="cursor:pointer;${inactive?'opacity:0.55;':''}">
+      <div>
+        <div class="name">${escapeHtml(s.name||'')}</div>
+        <div class="meta">${escapeHtml(ROLE_LABEL[s.role]||s.role||'')}${s.techNumber?(' &middot; '+escapeHtml(s.techNumber)):''}${s.branchId?(' &middot; '+escapeHtml(branchName(s.branchId))):''}</div>
+      </div>
+      ${right}
+    </div>`;
+  }).join('');
+}
+
+/* ---- shared file upload (handles PDF as well as images) ---- */
+let workshopPendingFiles = {};   // key -> File, staged until the form saves
+function handleWorkshopFilePick(evt, key){
+  const file = evt.target.files[0];
+  if(!file){ delete workshopPendingFiles[key]; return; }
+  if(file.size > 15 * 1024 * 1024){ toast('That file is over 15 MB — choose a smaller one'); evt.target.value = ''; return; }
+  workshopPendingFiles[key] = file;
+}
+function shrinkImageToBlob(file, maxW){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onerror = ()=>reject(new Error('Could not read file'));
+    reader.onload = e=>{
+      const img = new Image();
+      img.onerror = ()=>reject(new Error('Could not read image'));
+      img.onload = ()=>{
+        const scale = Math.min(1, maxW / img.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(b=> b ? resolve(b) : reject(new Error('Could not process image')), 'image/jpeg', 0.8);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+async function uploadWorkshopFile(file, keyPath){
+  const ref = storage.ref(keyPath);
+  if(file.type === 'application/pdf'){ await ref.put(file); }
+  else { await ref.put(await shrinkImageToBlob(file, 1400), { contentType:'image/jpeg' }); }
+  return ref.getDownloadURL();
+}
+function fileExt(file){ return file.type === 'application/pdf' ? 'pdf' : 'jpg'; }
+function setFileLink(linkId, url){
+  const a = document.getElementById(linkId);
+  if(!a) return;
+  if(url){ a.href = url; a.style.display = 'inline-block'; }
+  else { a.style.display = 'none'; }
+}
+
+/* ---- Company documents: form ---- */
+let editingCompanyDocId = null;
+function openCompanyDocForm(id){
+  editingCompanyDocId = id || null;
+  workshopPendingFiles = {};
+  const d = id ? companyDocsCache.find(x=>x.id===id) : null;
+  document.getElementById('companyDocFormTitle').textContent = d ? 'Edit document' : 'New document';
+  document.getElementById('docType').value = d ? (d.type||'other') : 'sabs-mark-permit';
+  document.getElementById('docTitle').value = d ? (d.title||'') : '';
+  document.getElementById('docRef').value = d ? (d.referenceNo||'') : '';
+  document.getElementById('docIssueDate').value = d ? (d.issueDate||'') : '';
+  document.getElementById('docExpiryDate').value = d ? (d.expiryDate||'') : '';
+  document.getElementById('docNotes').value = d ? (d.notes||'') : '';
+  document.getElementById('docFileInput').value = '';
+  setFileLink('docFileLink', d && d.fileURL);
+  document.getElementById('docDeleteBtn').style.display = d ? 'block' : 'none';
+  showView('view-company-doc-form');
+}
+async function saveCompanyDoc(){
+  const type = document.getElementById('docType').value;
+  const title = document.getElementById('docTitle').value.trim();
+  if(!title){ toast('Give the document a title'); return; }
+  const payload = {
+    companyId: currentCompanyId, type, title,
+    referenceNo: document.getElementById('docRef').value.trim(),
+    issueDate: document.getElementById('docIssueDate').value || '',
+    expiryDate: document.getElementById('docExpiryDate').value || '',
+    notes: document.getElementById('docNotes').value.trim(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  try{
+    const ref = editingCompanyDocId
+      ? db.collection('companyDocuments').doc(editingCompanyDocId)
+      : db.collection('companyDocuments').doc();
+    if(!editingCompanyDocId) payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    if(workshopPendingFiles.doc){
+      toast('Uploading…');
+      payload.fileURL = await uploadWorkshopFile(workshopPendingFiles.doc, `company-files/${currentCompanyId}/documents/${ref.id}.${fileExt(workshopPendingFiles.doc)}`);
+    }
+    await ref.set(payload, {merge:true});
+    toast('Document saved');
+    showView('view-company');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+async function deleteCompanyDoc(){
+  if(!editingCompanyDocId) return;
+  if(!confirm('Delete this document record? The uploaded file is not removed.')) return;
+  try{
+    await db.collection('companyDocuments').doc(editingCompanyDocId).delete();
+    toast('Deleted');
+    showView('view-company');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+
+/* ---- Vehicles: form ---- */
+let editingVehicleId = null;
+function fillBranchSelect(selectId, chosen){
+  const sel = document.getElementById(selectId);
+  if(!sel) return;
+  sel.innerHTML = '<option value="">— none —</option>' + branchesCache.map(b=>`<option value="${b.id}">${escapeHtml(b.name||'')}</option>`).join('');
+  sel.value = chosen || '';
+}
+function openVehicleForm(id){
+  editingVehicleId = id || null;
+  workshopPendingFiles = {};
+  const v = id ? vehiclesCache.find(x=>x.id===id) : null;
+  document.getElementById('vehicleFormTitle').textContent = v ? 'Edit vehicle' : 'New vehicle';
+  const g = (k)=> v ? (v[k]||'') : '';
+  document.getElementById('vehReg').value = g('registrationNo');
+  document.getElementById('vehDescription').value = g('description');
+  fillBranchSelect('vehBranch', v && v.branchId);
+  const techSel = document.getElementById('vehTechnician');
+  techSel.innerHTML = '<option value="">— none —</option>' + allStaffCache
+    .filter(s=>s.role==='technician' && s.active!==false)
+    .sort((a,b)=>(a.name||'').localeCompare(b.name||''))
+    .map(s=>`<option value="${s.id}">${escapeHtml(s.name||'')}</option>`).join('');
+  techSel.value = (v && v.assignedTechnicianId) || '';
+  document.getElementById('vehLicenceExpiry').value = g('licenceDiskExpiry');
+  document.getElementById('vehRoadworthy').value = g('roadworthyDate');
+  document.getElementById('vehApprovalRef').value = g('mobileWorkshopApprovalRef');
+  document.getElementById('vehApprovalExpiry').value = g('mobileWorkshopApprovalExpiry');
+  document.getElementById('vehExtSerial').value = g('carriedExtinguisherSerial');
+  document.getElementById('vehExtServiceDate').value = g('carriedExtinguisherServiceDate');
+  document.getElementById('vehNotes').value = g('notes');
+  document.getElementById('vehLicenceFileInput').value = '';
+  document.getElementById('vehApprovalFileInput').value = '';
+  setFileLink('vehLicenceFileLink', v && v.licenceDiskFileURL);
+  setFileLink('vehApprovalFileLink', v && v.approvalLetterFileURL);
+  document.getElementById('vehDeleteBtn').style.display = v ? 'block' : 'none';
+  showView('view-vehicle-form');
+}
+async function saveVehicle(){
+  const registrationNo = document.getElementById('vehReg').value.trim();
+  if(!registrationNo){ toast('Registration number is required'); return; }
+  const payload = {
+    companyId: currentCompanyId, registrationNo,
+    description: document.getElementById('vehDescription').value.trim(),
+    branchId: document.getElementById('vehBranch').value || '',
+    assignedTechnicianId: document.getElementById('vehTechnician').value || '',
+    licenceDiskExpiry: document.getElementById('vehLicenceExpiry').value || '',
+    roadworthyDate: document.getElementById('vehRoadworthy').value || '',
+    mobileWorkshopApprovalRef: document.getElementById('vehApprovalRef').value.trim(),
+    mobileWorkshopApprovalExpiry: document.getElementById('vehApprovalExpiry').value || '',
+    carriedExtinguisherSerial: document.getElementById('vehExtSerial').value.trim(),
+    carriedExtinguisherServiceDate: document.getElementById('vehExtServiceDate').value || '',
+    notes: document.getElementById('vehNotes').value.trim(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  try{
+    const ref = editingVehicleId ? db.collection('vehicles').doc(editingVehicleId) : db.collection('vehicles').doc();
+    if(!editingVehicleId){ payload.createdAt = firebase.firestore.FieldValue.serverTimestamp(); payload.active = true; }
+    if(workshopPendingFiles.vehLicence || workshopPendingFiles.vehApproval) toast('Uploading…');
+    if(workshopPendingFiles.vehLicence){
+      payload.licenceDiskFileURL = await uploadWorkshopFile(workshopPendingFiles.vehLicence, `company-files/${currentCompanyId}/vehicles/${ref.id}/licence-disk.${fileExt(workshopPendingFiles.vehLicence)}`);
+    }
+    if(workshopPendingFiles.vehApproval){
+      payload.approvalLetterFileURL = await uploadWorkshopFile(workshopPendingFiles.vehApproval, `company-files/${currentCompanyId}/vehicles/${ref.id}/approval-letter.${fileExt(workshopPendingFiles.vehApproval)}`);
+    }
+    await ref.set(payload, {merge:true});
+    toast('Vehicle saved');
+    showView('view-company');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+async function deleteVehicle(){
+  if(!editingVehicleId) return;
+  if(!confirm('Delete this vehicle?')) return;
+  try{
+    await db.collection('vehicles').doc(editingVehicleId).delete();
+    toast('Deleted');
+    showView('view-company');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+
+/* ---- Workshops / branches: form ---- */
+let editingBranchId = null;
+function openBranchForm(id){
+  editingBranchId = id || null;
+  workshopPendingFiles = {};
+  const b = id ? branchesCache.find(x=>x.id===id) : null;
+  document.getElementById('branchFormTitle').textContent = b ? 'Edit workshop' : 'New workshop';
+  const g = (k)=> b ? (b[k]||'') : '';
+  document.getElementById('branchName').value = g('name');
+  document.getElementById('branchAddress').value = g('address');
+  document.getElementById('branchPhone').value = g('phone');
+  document.getElementById('branchPermitNo').value = g('markPermitNo');
+  document.getElementById('branchPermitIssue').value = g('markPermitIssueDate');
+  document.getElementById('branchPermitExpiry').value = g('markPermitExpiryDate');
+  document.getElementById('branchNotes').value = g('notes');
+  document.getElementById('branchPermitFileInput').value = '';
+  setFileLink('branchPermitFileLink', b && b.markPermitFileURL);
+  document.getElementById('branchDeleteBtn').style.display = b ? 'block' : 'none';
+  showView('view-branch-form');
+}
+async function saveBranch(){
+  const name = document.getElementById('branchName').value.trim();
+  if(!name){ toast('Give the workshop a name'); return; }
+  const payload = {
+    companyId: currentCompanyId, name,
+    address: document.getElementById('branchAddress').value.trim(),
+    phone: document.getElementById('branchPhone').value.trim(),
+    markPermitNo: document.getElementById('branchPermitNo').value.trim(),
+    markPermitIssueDate: document.getElementById('branchPermitIssue').value || '',
+    markPermitExpiryDate: document.getElementById('branchPermitExpiry').value || '',
+    notes: document.getElementById('branchNotes').value.trim(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  try{
+    const ref = editingBranchId ? db.collection('branches').doc(editingBranchId) : db.collection('branches').doc();
+    if(!editingBranchId){ payload.createdAt = firebase.firestore.FieldValue.serverTimestamp(); payload.active = true; }
+    if(workshopPendingFiles.branchPermit){
+      toast('Uploading…');
+      payload.markPermitFileURL = await uploadWorkshopFile(workshopPendingFiles.branchPermit, `company-files/${currentCompanyId}/branches/${ref.id}/mark-permit.${fileExt(workshopPendingFiles.branchPermit)}`);
+    }
+    await ref.set(payload, {merge:true});
+    toast('Workshop saved');
+    showView('view-company');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+async function deleteBranch(){
+  if(!editingBranchId) return;
+  if(vehiclesCache.some(v=>v.branchId===editingBranchId) || allStaffCache.some(s=>s.branchId===editingBranchId)){
+    toast('Reassign its vehicles and employees first'); return;
+  }
+  if(!confirm('Delete this workshop?')) return;
+  try{
+    await db.collection('branches').doc(editingBranchId).delete();
+    toast('Deleted');
+    showView('view-company');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+
+/* ---- Employee compliance: form (writes onto the technicians doc) ---- */
+let editingEmployeeId = null;
+function openEmployeeCompliance(id){
+  editingEmployeeId = id;
+  workshopPendingFiles = {};
+  const s = allStaffCache.find(x=>x.id===id);
+  if(!s){ toast('Employee not found'); return; }
+  document.getElementById('empComplianceTitle').textContent = s.name || 'Employee';
+  let header = `<strong>${escapeHtml(ROLE_LABEL[s.role]||s.role||'')}</strong>`;
+  if(s.techNumber) header += ` &middot; ${escapeHtml(s.techNumber)}`;
+  if(s.saqcc) header += ` &middot; SAQCC ${escapeHtml(s.saqcc)}`;
+  if(s.role==='trainee'){
+    if(s.traineeRegisteredDate) header += `<br>Registered as trainee: ${escapeHtml(s.traineeRegisteredDate)}`;
+    const w = s.trainingCertificateDate ? certificateWindowInfo(s.trainingCertificateDate) : null;
+    if(w) header += `<br>SAQCC completion window: ${escapeHtml(w.minDate)} → ${escapeHtml(w.maxDate)} (${escapeHtml(w.label)})`;
+  }
+  document.getElementById('empComplianceHeader').innerHTML = header;
+  fillBranchSelect('empBranch', s.branchId);
+  document.getElementById('empSaqccExpiry').value = s.saqccRegExpiry || '';
+  document.getElementById('empMedicalExpiry').value = s.medicalCertExpiry || '';
+  ['empIdFileInput','empMedicalFileInput','empContractFileInput'].forEach(x=> document.getElementById(x).value = '');
+  setFileLink('empIdFileLink', s.idDocumentPhotoURL);
+  setFileLink('empMedicalFileLink', s.medicalCertPhotoURL);
+  setFileLink('empContractFileLink', s.employmentContractFileURL);
+  const selfDocs = { technician:'SAQCC card', trainee:'training certificate', competent:'appointment letter' }[s.role];
+  document.getElementById('empSelfServiceNote').textContent = selfDocs
+    ? `The ${selfDocs} and profile photo are captured by the employee themselves in "Complete your profile" and shown on the Reports → Sign-off verification screen — they're not edited here.`
+    : '';
+  showView('view-employee-compliance');
+}
+async function saveEmployeeCompliance(){
+  if(!editingEmployeeId) return;
+  const update = {
+    branchId: document.getElementById('empBranch').value || '',
+    saqccRegExpiry: document.getElementById('empSaqccExpiry').value || '',
+    medicalCertExpiry: document.getElementById('empMedicalExpiry').value || ''
+  };
+  try{
+    const base = `company-files/${currentCompanyId}/employees/${editingEmployeeId}`;
+    if(workshopPendingFiles.empId || workshopPendingFiles.empMedical || workshopPendingFiles.empContract) toast('Uploading…');
+    if(workshopPendingFiles.empId){
+      update.idDocumentPhotoURL = await uploadWorkshopFile(workshopPendingFiles.empId, `${base}/id-document.${fileExt(workshopPendingFiles.empId)}`);
+    }
+    if(workshopPendingFiles.empMedical){
+      update.medicalCertPhotoURL = await uploadWorkshopFile(workshopPendingFiles.empMedical, `${base}/medical-cert.${fileExt(workshopPendingFiles.empMedical)}`);
+    }
+    if(workshopPendingFiles.empContract){
+      update.employmentContractFileURL = await uploadWorkshopFile(workshopPendingFiles.empContract, `${base}/contract.${fileExt(workshopPendingFiles.empContract)}`);
+    }
+    await db.collection('technicians').doc(editingEmployeeId).update(update);
+    toast('Saved');
+    showView('view-company');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+
+/* ---- Company compliance pack (printable, from Reports) ---- */
+async function openCompliancePack(){
+  toast('Building pack…');
+  await loadCompanySettings();
+  let branches = [], vehicles = [], docs = [], staff = [];
+  try{
+    const [b, v, d, s] = await Promise.all([
+      db.collection('branches').where('companyId','==',currentCompanyId).get(),
+      db.collection('vehicles').where('companyId','==',currentCompanyId).get(),
+      db.collection('companyDocuments').where('companyId','==',currentCompanyId).get(),
+      db.collection('technicians').where('companyId','==',currentCompanyId).get()
+    ]);
+    branches = b.docs.map(x=>({id:x.id, ...x.data()}));
+    vehicles = v.docs.map(x=>({id:x.id, ...x.data()}));
+    docs = d.docs.map(x=>({id:x.id, ...x.data()}));
+    staff = s.docs.map(x=>({id:x.id, ...x.data()}));
+  }catch(e){ toast('Could not load: ' + e.message); return; }
+  const co = companySettings || {};
+  const today = toLocalISO(new Date());
+  const bn = (id)=>{ const x = branches.find(y=>y.id===id); return x ? escapeHtml(x.name||'') : ''; };
+  const expCell = (dateStr)=>{
+    if(!dateStr) return '—';
+    const st = expiryStatus(dateStr);
+    const tag = st==='expired' ? ' (EXPIRED)' : (st==='soon' ? ' (expiring)' : '');
+    return escapeHtml(dateStr) + tag;
+  };
+  const scan = [];
+  docs.forEach(x=>{ const st = expiryStatus(x.expiryDate); if(st==='expired'||st==='soon') scan.push([`${COMPANY_DOC_TYPES[x.type]||'Document'} — ${x.title||''}`, x.expiryDate, st]); });
+  branches.forEach(x=>{ const st = expiryStatus(x.markPermitExpiryDate); if(st==='expired'||st==='soon') scan.push([`${x.name||'Workshop'} — Mark Permit`, x.markPermitExpiryDate, st]); });
+  vehicles.forEach(x=>{ const st = expiryStatus(x.licenceDiskExpiry); if(st==='expired'||st==='soon') scan.push([`${x.registrationNo||'Vehicle'} — licence disk`, x.licenceDiskExpiry, st]); });
+  staff.forEach(x=>{
+    const a = expiryStatus(x.saqccRegExpiry); if(a==='expired'||a==='soon') scan.push([`${x.name||'Employee'} — SAQCC registration`, x.saqccRegExpiry, a]);
+    const m = expiryStatus(x.medicalCertExpiry); if(m==='expired'||m==='soon') scan.push([`${x.name||'Employee'} — medical certificate`, x.medicalCertExpiry, m]);
+  });
+  scan.sort((a,b)=> (a[2]===b[2] ? (a[1]||'').localeCompare(b[1]||'') : (a[2]==='expired'?-1:1)));
+
+  const docsRows = docs.length ? docs.map(x=>`<tr>
+    <td>${escapeHtml(COMPANY_DOC_TYPES[x.type]||'Document')}</td>
+    <td>${escapeHtml(x.title||'')}</td>
+    <td>${escapeHtml(x.referenceNo||'—')}</td>
+    <td>${escapeHtml(x.issueDate||'—')}</td>
+    <td>${expCell(x.expiryDate)}</td>
+    <td>${x.fileURL?'Yes':'No'}</td>
+  </tr>`).join('') : `<tr><td colspan="6">No company documents recorded.</td></tr>`;
+
+  const empRows = staff.length ? [...staff].sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(x=>`<tr>
+    <td>${escapeHtml(x.name||'')}</td>
+    <td>${escapeHtml(ROLE_LABEL[x.role]||x.role||'')}</td>
+    <td>${escapeHtml(x.techNumber||'—')}</td>
+    <td>${escapeHtml(x.saqcc||'—')}</td>
+    <td>${escapeHtml(bn(x.branchId)||'—')}</td>
+    <td>${expCell(x.saqccRegExpiry)}</td>
+    <td>${expCell(x.medicalCertExpiry)}</td>
+    <td>${x.active===false?'Deactivated':'Active'}</td>
+  </tr>`).join('') : `<tr><td colspan="8">No employees recorded.</td></tr>`;
+
+  const vehRows = vehicles.length ? vehicles.map(x=>{
+    const t = staff.find(y=>y.id===x.assignedTechnicianId);
+    return `<tr>
+      <td>${escapeHtml(x.registrationNo||'')}</td>
+      <td>${escapeHtml(x.description||'—')}</td>
+      <td>${escapeHtml(bn(x.branchId)||'—')}</td>
+      <td>${t?escapeHtml(t.name):'—'}</td>
+      <td>${expCell(x.licenceDiskExpiry)}</td>
+      <td>${escapeHtml(x.mobileWorkshopApprovalRef||'—')}</td>
+      <td>${expCell(x.mobileWorkshopApprovalExpiry)}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="7">No vehicles recorded.</td></tr>`;
+
+  const brRows = branches.length ? branches.map(x=>`<tr>
+    <td>${escapeHtml(x.name||'')}</td>
+    <td>${escapeHtml(x.address||'—')}</td>
+    <td>${escapeHtml(x.markPermitNo||'—')}</td>
+    <td>${escapeHtml(x.markPermitIssueDate||'—')}</td>
+    <td>${expCell(x.markPermitExpiryDate)}</td>
+  </tr>`).join('') : `<tr><td colspan="5">No workshops recorded.</td></tr>`;
+
+  const alertBlock = scan.length ? `<div class="meta" style="border-left:3px solid #C8102E; padding-left:10px;">
+    <strong>Items expired or expiring within 60 days (${scan.length})</strong><br>
+    ${scan.map(r=>`${escapeHtml(r[0])} — ${escapeHtml(r[1]||'')}${r[2]==='expired'?' (EXPIRED)':''}`).join('<br>')}
+  </div>` : `<div class="meta">No documents or registrations are expired or expiring within 60 days.</div>`;
+
+  showReport('Company compliance pack', `${letterheadHTML(co)}
+    <h2 style="margin-top:16px; font-size:1rem;">Company Compliance Pack — SANS 1475 servicing organisation</h2>
+    <div class="meta"><strong>Generated:</strong> ${today}</div>
+    ${alertBlock}
+    <h3 style="margin-top:18px; font-size:0.95rem;">Company documents</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Type</th><th>Title</th><th>Reference</th><th>Issued</th><th>Expiry</th><th>File</th></tr></thead>
+      <tbody>${docsRows}</tbody>
+    </table></div>
+    <h3 style="margin-top:18px; font-size:0.95rem;">Employees</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Name</th><th>Role</th><th>No.</th><th>SAQCC</th><th>Workshop</th><th>SAQCC expiry</th><th>Medical expiry</th><th>Status</th></tr></thead>
+      <tbody>${empRows}</tbody>
+    </table></div>
+    <h3 style="margin-top:18px; font-size:0.95rem;">Service vehicles</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Registration</th><th>Description</th><th>Workshop</th><th>Technician</th><th>Licence expiry</th><th>Approval ref</th><th>Approval expiry</th></tr></thead>
+      <tbody>${vehRows}</tbody>
+    </table></div>
+    <h3 style="margin-top:18px; font-size:0.95rem;">Workshops / branches</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Name</th><th>Address</th><th>Mark Permit no.</th><th>Issued</th><th>Expiry</th></tr></thead>
+      <tbody>${brRows}</tbody>
+    </table></div>`, 'view-export');
 }
 
 function renderCompanyLogoPreview(){
