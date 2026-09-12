@@ -760,6 +760,7 @@
       <div class="pillrow" id="traineeFilterChips" style="margin-bottom:12px;"></div>
       <div id="traineeList"></div>
       <button class="btn" onclick="openTraineeForm()">+ Add trainee</button>
+      <button class="btn secondary" style="margin-top:8px;" onclick="openVerification()">Sign-off verification</button>
     </section>
 
     <!-- ===== TRAINEE DETAIL (admin) — status, competencies, logbook, export, qualify ===== -->
@@ -1086,9 +1087,6 @@
         <label style="margin-top:16px;">Workshop reports</label>
         <button class="btn secondary" style="margin-top:6px;" onclick="openCalibrationReport('view-export')">Weekly verification register</button>
         <div class="hint">Covers all test equipment, not a single site — also on the Verify tab, where technicians with the verification permission can print it too.</div>
-        <label style="margin-top:16px;">Trainee logbook</label>
-        <button class="btn secondary" style="margin-top:6px;" onclick="openVerification()">Sign-off verification</button>
-        <div class="hint">Compares each profile's registered device against the device used for its logbook entries and sign-offs.</div>
       </div>
       <div class="section-title"><h2>Recent emails</h2></div>
       <div id="emailLogList"><div class="empty">Choose a site above to see its email history.</div></div>
@@ -1096,7 +1094,7 @@
 
     <!-- ===== SIGN-OFF VERIFICATION (admin) — device/IP fraud-tracking review ===== -->
     <section id="view-verification" class="view">
-      <div class="backbar"><button onclick="showView('view-export')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2>Sign-off verification</h2></div>
+      <div class="backbar"><button onclick="showView('view-trainees')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2>Sign-off verification</h2></div>
       <p class="hint" style="margin:0 0 14px;">Every profile records the device it was set up on; every logbook entry and sign-off records the device used at that moment. A mismatch isn't proof of anything by itself — people replace phones — but a pattern is worth asking about. Rows in <strong style="color:var(--red-dark);">red</strong> have a device that doesn't match the profile's registered device.</p>
 
       <div class="section-title"><h2>Profiles</h2></div>
@@ -1622,14 +1620,14 @@ function showView(id){
   document.getElementById('navSites').classList.toggle('active', (SITES_VIEWS.includes(id) && !registerFromExport) || sitesReport);
   document.getElementById('navDue').classList.toggle('active', id==='view-due');
   document.getElementById('navTechnicians').classList.toggle('active', ['view-technicians','view-tech-form'].includes(id));
-  document.getElementById('navTrainees').classList.toggle('active', ['view-trainees','view-trainee-form','view-trainee-detail'].includes(id));
+  document.getElementById('navTrainees').classList.toggle('active', ['view-trainees','view-trainee-form','view-trainee-detail','view-verification'].includes(id));
   document.getElementById('navSignoffs').classList.toggle('active', ['view-signoffs','view-signoff-form'].includes(id));
   document.getElementById('navMyTrainees').classList.toggle('active', ['view-my-trainees','view-my-trainee-detail'].includes(id));
   document.getElementById('navCompany').classList.toggle('active', id==='view-company');
   const auditReport = id==='view-report' && reportBackView==='view-audit';
   document.getElementById('navAudit').classList.toggle('active', AUDIT_VIEWS.includes(id) || auditReport);
   const calReport = id==='view-report' && reportBackView==='view-calibration';
-  document.getElementById('navExport').classList.toggle('active', id==='view-export' || registerFromExport || id==='view-email' || id==='view-verification' || (id==='view-report' && !calReport && !sitesReport && !auditReport));
+  document.getElementById('navExport').classList.toggle('active', id==='view-export' || registerFromExport || id==='view-email' || (id==='view-report' && !calReport && !sitesReport && !auditReport));
   document.getElementById('navCalibration').classList.toggle('active', id==='view-calibration' || calReport);
   if(id==='view-sites') renderSites();
   if(id==='view-due') renderDueDashboard();
@@ -2429,7 +2427,7 @@ function openEmployeeCompliance(id){
   setFileLink('empContractFileLink', s.employmentContractFileURL);
   const selfDocs = { technician:'SAQCC card', trainee:'training certificate', competent:'appointment letter' }[s.role];
   document.getElementById('empSelfServiceNote').textContent = selfDocs
-    ? `The ${selfDocs} and profile photo are captured by the employee themselves in "Complete your profile" and shown on the Reports → Sign-off verification screen — they're not edited here.`
+    ? `The ${selfDocs} and profile photo are captured by the employee themselves in "Complete your profile" and shown on the Trainees → Sign-off verification screen — they're not edited here.`
     : '';
   showView('view-employee-compliance');
 }
