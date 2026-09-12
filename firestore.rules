@@ -42,11 +42,33 @@ service cloud.firestore {
       return isSignedIn() &&
         get(/databases/$(database)/documents/technicians/$(request.auth.uid)).data.canCalibrate == true;
     }
+    // Whether this company has been granted the Audit add-on (Company
+    // Documents / Employees / Vehicles / Workshops / Calibration) by a
+    // superadmin in admin.html. A missing companyAddons doc means "no
+    // add-on" — exists() is checked explicitly rather than relying on a
+    // failed get() to deny, so that intent reads clearly here.
+    function hasAuditAddon(companyId) {
+      return isSuperadmin() || (
+        exists(/databases/$(database)/documents/companyAddons/$(companyId)) &&
+        get(/databases/$(database)/documents/companyAddons/$(companyId)).data.audit == true
+      );
+    }
 
     // Internal operator dashboard (separate admin.html, superadmin-only).
     // Nothing here is reachable by an ordinary company admin/technician/trainee.
     match /companies/{companyId} {
       allow read, write: if isSuperadmin();
+    }
+
+    // Per-company add-on flags, set only by a superadmin from admin.html (the
+    // company's own admin may read theirs, to know whether to show the Audit
+    // tab). Kept separate from `companies` — that doc also carries the
+    // superadmin's private notes and usage figures, and Firestore rules grant
+    // access per document, not per field, so a company admin reading their
+    // own `companies` doc would see those too.
+    match /companyAddons/{companyId} {
+      allow read:  if isSuperadmin() || isCompanyAdmin(companyId);
+      allow write: if isSuperadmin();
     }
 
     match /technicians/{uid} {
@@ -205,45 +227,47 @@ service cloud.firestore {
       allow write: if isCompanyAdmin(companyId);
     }
 
-    // Workshop / auditor file (Company tab → Company Documents / Employees /
-    // Vehicles / Workshops). These three collections hold the servicing
-    // business's own compliance evidence — statutory documents, service
-    // vehicles, and branch premises/Mark-Permit records — as opposed to the
-    // client-facing site registers and certificates. Purely admin-managed
-    // within one tenant, so the plain company-admin pattern: create checks the
-    // incoming companyId, everything else checks the stored one. A `list`
-    // query on any of these must filter `where('companyId','==', <own>)` for
-    // the read rule to be provable. Employee compliance data (SAQCC/medical
-    // expiry, ID copies) lives on the existing `technicians` doc, written by
-    // the admin through the update rule above — no separate collection.
+    // Audit tab (Company Documents / Employees / Vehicles / Workshops /
+    // Calibration) — the servicing business's own compliance evidence for a
+    // SAQCC/SABS audit, as opposed to the client-facing site registers and
+    // certificates. Gated behind the `audit` company add-on (hasAuditAddon,
+    // above) — a superadmin grants it per company in admin.html; off by
+    // default for every company. Otherwise plain company-admin pattern:
+    // create checks the incoming companyId, everything else checks the
+    // stored one. A `list` query on any of these must filter
+    // `where('companyId','==', <own>)` for the read rule to be provable.
+    // Employee compliance data (SAQCC/medical expiry, ID copies) lives on the
+    // existing `technicians` doc, written by the admin through the update
+    // rule above — no separate collection.
     match /branches/{id} {
-      allow read:   if isCompanyAdmin(resource.data.companyId);
-      allow create: if isCompanyAdmin(request.resource.data.companyId);
-      allow update: if isCompanyAdmin(resource.data.companyId);
-      allow delete: if isCompanyAdmin(resource.data.companyId);
+      allow read:   if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
+      allow update: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
     }
     match /vehicles/{id} {
-      allow read:   if isCompanyAdmin(resource.data.companyId);
-      allow create: if isCompanyAdmin(request.resource.data.companyId);
-      allow update: if isCompanyAdmin(resource.data.companyId);
-      allow delete: if isCompanyAdmin(resource.data.companyId);
+      allow read:   if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
+      allow update: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
     }
     match /companyDocuments/{id} {
-      allow read:   if isCompanyAdmin(resource.data.companyId);
-      allow create: if isCompanyAdmin(request.resource.data.companyId);
-      allow update: if isCompanyAdmin(resource.data.companyId);
-      allow delete: if isCompanyAdmin(resource.data.companyId);
+      allow read:   if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
+      allow update: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
     }
     // Annual external calibration of the workshop's reference instruments by a
     // SANAS-accredited body — one record + certificate upload per instrument.
     // Distinct from `calibrations` (below), which is the *weekly verification*
-    // log. Admin-managed only; the certificate files live under
-    // company-files/{companyId}/calibration/ in Storage.
+    // log. Admin-managed only, and gated behind the same Audit add-on; the
+    // certificate files live under company-files/{companyId}/calibration/ in
+    // Storage.
     match /calibrationCertificates/{id} {
-      allow read:   if isCompanyAdmin(resource.data.companyId);
-      allow create: if isCompanyAdmin(request.resource.data.companyId);
-      allow update: if isCompanyAdmin(resource.data.companyId);
-      allow delete: if isCompanyAdmin(resource.data.companyId);
+      allow read:   if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
+      allow update: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
     }
 
     // Weekly verification log (SANS 1475 Annex A) — production-control equipment

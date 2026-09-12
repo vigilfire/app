@@ -179,6 +179,9 @@
         <textarea id="detailNotes" onblur="onDetailNotesBlur()" placeholder="Internal notes about this account…"></textarea>
       </div>
 
+      <div class="section-title"><h2>Add-ons</h2></div>
+      <div class="card" id="addonsCard"></div>
+
       <div class="section-title"><h2>Technicians</h2></div>
       <div class="card" style="padding:0; overflow-x:auto;">
         <table><thead><tr><th>Name</th><th>Role</th><th>Last login</th></tr></thead><tbody id="detailTechBody"></tbody></table>
@@ -442,6 +445,13 @@ async function openCompanyDetail(companyId){
   document.getElementById('detailStatusSelect').value = company.status || 'trialing';
   document.getElementById('detailNotes').value = company.notes || '';
 
+  let addons = {};
+  try{
+    const addonsSnap = await db.collection('companyAddons').doc(companyId).get();
+    addons = addonsSnap.exists ? addonsSnap.data() : {};
+  }catch(e){ addons = {}; }
+  renderAddonsCard(addons);
+
   const [used] = await Promise.all([
     seatCountFor(companyId),
     paintDetailTechnicians(companyId),
@@ -473,6 +483,31 @@ async function onDetailNotesBlur(){
   try{
     await db.collection('companies').doc(detailCompanyId).update({ notes });
   }catch(e){ toast('Error saving notes: ' + e.message); }
+}
+// Every add-on Vigil Fire offers, gated per company via companyAddons/{companyId}
+// (firestore.rules: superadmin-write, that company's own admin can read). Add a
+// new one here and it appears in every company's detail view automatically —
+// no other admin.html change needed. The feature side (a rule helper like
+// hasAuditAddon, gating a nav tab in index.html, etc.) is still built per add-on.
+const ADDONS = [
+  { key: 'audit', label: 'Audit tab', description: 'Workshop compliance file — Company Documents, Employees, Vehicles, Workshops, Calibration. Off by default; ticking this grants the company the Audit tab in the app.' }
+];
+function renderAddonsCard(addons){
+  document.getElementById('addonsCard').innerHTML = ADDONS.map((a,i)=>`
+    <label style="margin-top:${i===0?'0':'16px'};">${escapeHtml(a.label)}</label>
+    <div style="display:flex; align-items:flex-start; gap:8px;">
+      <input type="checkbox" id="addon-${a.key}" style="width:auto; margin-top:3px;" ${addons[a.key]?'checked':''} onchange="onAddonToggle('${a.key}')">
+      <span style="font-size:0.85rem; text-transform:none; font-weight:500;">${escapeHtml(a.description)}</span>
+    </div>`).join('');
+}
+async function onAddonToggle(key){
+  if(!detailCompanyId) return;
+  const checked = document.getElementById('addon-'+key).checked;
+  try{
+    await db.collection('companyAddons').doc(detailCompanyId).set(
+      { [key]: checked, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, {merge:true});
+    toast('Add-on updated');
+  }catch(e){ toast('Error: ' + e.message); }
 }
 
 async function paintDetailTechnicians(companyId){

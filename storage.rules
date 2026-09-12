@@ -29,15 +29,19 @@ service firebase.storage {
         firestore.get(/databases/(default)/documents/technicians/$(request.auth.uid)).data.companyId == companyId;
     }
 
-    // Workshop / auditor file: company statutory documents, service-vehicle
-    // papers, and employee compliance documents (ID copies, medical
-    // certificates, employment contracts). Unlike technician-photos/ — which
-    // is self-service, writable only by its owning uid — these are uploaded by
+    // Audit tab: company statutory documents, service-vehicle papers, and
+    // employee compliance documents (ID copies, medical certificates,
+    // employment contracts). Unlike technician-photos/ — which is
+    // self-service, writable only by its owning uid — these are uploaded by
     // a company admin on behalf of the business, so write is gated on the
-    // caller being an admin of the matching company. Accepts PDF as well as
-    // images (statutory documents are usually PDFs), capped at 15 MB. One
-    // {path=**} block covers documents/, vehicles/<id>/, employees/<uid>/ and
-    // branches/<id>/ under the company folder.
+    // caller being an admin of the matching company, AND on that company
+    // holding the Audit add-on (companyAddons/{companyId}.audit — see
+    // firestore.rules' hasAuditAddon) — read stays ungated by the add-on so
+    // a company that loses it can still see files already on file, just not
+    // add new ones. Accepts PDF as well as images (statutory documents are
+    // usually PDFs), capped at 15 MB. One {path=**} block covers documents/,
+    // vehicles/<id>/, employees/<uid>/, branches/<id>/ and calibration/<id>/
+    // under the company folder.
     match /company-files/{companyId}/{path=**} {
       allow read: if request.auth != null && (
         request.auth.token.role == 'superadmin' ||
@@ -46,6 +50,7 @@ service firebase.storage {
       allow write: if request.auth != null &&
         firestore.get(/databases/(default)/documents/technicians/$(request.auth.uid)).data.role == 'admin' &&
         firestore.get(/databases/(default)/documents/technicians/$(request.auth.uid)).data.companyId == companyId &&
+        firestore.get(/databases/(default)/documents/companyAddons/$(companyId)).data.audit == true &&
         request.resource.size < 15 * 1024 * 1024 &&
         request.resource.contentType.matches('application/pdf|image/.*');
     }

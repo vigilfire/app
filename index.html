@@ -873,9 +873,13 @@
         <button class="btn secondary" style="margin-top:12px;" onclick="saveBackupSettings()">Save backup schedule</button>
         <button class="btn" style="margin-top:8px;" onclick="downloadFullBackup()">Download backup now</button>
       </div>
+    </section>
 
-      <div class="section-title"><h2>Workshop file</h2></div>
-      <p class="hint" style="margin:0 0 12px 0;">Your business's own compliance evidence for a SAQCC / SABS audit — separate from the client-facing site registers and certificates under Reports. A printable roll-up is under Reports → "Company compliance pack".</p>
+    <!-- ===== AUDIT (admin, Audit add-on only) ===== -->
+    <section id="view-audit" class="view">
+      <div class="section-title"><h2>Audit</h2></div>
+      <p class="hint" style="margin:0 0 12px 0;">Your business's own compliance evidence for a SAQCC / SABS audit — separate from the client-facing site registers and certificates under Reports, and never sent to a client.</p>
+      <button class="btn secondary" style="margin-bottom:12px;" onclick="openCompliancePack()">Print compliance pack</button>
       <div id="companyExpirySummary"></div>
       <div class="pillrow" id="companyTabChips" style="margin-bottom:12px;"></div>
 
@@ -907,12 +911,13 @@
         </div>
         <div id="calCertList"></div>
         <button class="btn" style="margin-top:12px;" onclick="openCalibrationCertForm()">+ Add calibration certificate</button>
+        <button class="btn secondary" style="margin-top:8px;" onclick="openCalibrationCertRegister()">Print calibration register</button>
       </div>
     </section>
 
     <!-- ===== CALIBRATION CERTIFICATE FORM (admin) ===== -->
     <section id="view-calibration-cert-form" class="view">
-      <div class="backbar"><button onclick="showView('view-company')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="calCertFormTitle">New calibration certificate</h2></div>
+      <div class="backbar"><button onclick="showView('view-audit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="calCertFormTitle">New calibration certificate</h2></div>
       <div class="card">
         <label style="margin-top:0;">Instrument type</label>
         <select id="calCertType">
@@ -936,7 +941,7 @@
         <a id="calCertFileLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:0.85rem; font-weight:600;">View current file &#8599;</a>
         <label>Notes</label><textarea id="calCertNotes" rows="2"></textarea>
         <div class="row" style="margin-top:16px;">
-          <button class="btn secondary" onclick="showView('view-company')">Cancel</button>
+          <button class="btn secondary" onclick="showView('view-audit')">Cancel</button>
           <button class="btn" onclick="saveCalibrationCert()">Save</button>
         </div>
         <button class="btn ghost" id="calCertDeleteBtn" style="margin-top:10px; display:none;" onclick="deleteCalibrationCert()">Delete this certificate</button>
@@ -945,7 +950,7 @@
 
     <!-- ===== COMPANY DOCUMENT FORM (admin) ===== -->
     <section id="view-company-doc-form" class="view">
-      <div class="backbar"><button onclick="showView('view-company')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="companyDocFormTitle">New document</h2></div>
+      <div class="backbar"><button onclick="showView('view-audit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="companyDocFormTitle">New document</h2></div>
       <div class="card">
         <label style="margin-top:0;">Document type</label>
         <select id="docType">
@@ -970,7 +975,7 @@
         <a id="docFileLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:0.85rem; font-weight:600;">View current file &#8599;</a>
         <label>Notes</label><textarea id="docNotes" rows="2"></textarea>
         <div class="row" style="margin-top:16px;">
-          <button class="btn secondary" onclick="showView('view-company')">Cancel</button>
+          <button class="btn secondary" onclick="showView('view-audit')">Cancel</button>
           <button class="btn" onclick="saveCompanyDoc()">Save</button>
         </div>
         <button class="btn ghost" id="docDeleteBtn" style="margin-top:10px; display:none;" onclick="deleteCompanyDoc()">Delete this document</button>
@@ -979,7 +984,7 @@
 
     <!-- ===== VEHICLE FORM (admin) ===== -->
     <section id="view-vehicle-form" class="view">
-      <div class="backbar"><button onclick="showView('view-company')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="vehicleFormTitle">New vehicle</h2></div>
+      <div class="backbar"><button onclick="showView('view-audit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="vehicleFormTitle">New vehicle</h2></div>
       <div class="card">
         <label style="margin-top:0;">Registration number</label><input id="vehReg" placeholder="e.g. CA 123-456">
         <label>Description</label><input id="vehDescription" placeholder="e.g. 2019 Toyota Hilux — white">
@@ -1003,7 +1008,7 @@
         <a id="vehApprovalFileLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:0.85rem; font-weight:600;">View current file &#8599;</a>
         <label>Notes</label><textarea id="vehNotes" rows="2"></textarea>
         <div class="row" style="margin-top:16px;">
-          <button class="btn secondary" onclick="showView('view-company')">Cancel</button>
+          <button class="btn secondary" onclick="showView('view-audit')">Cancel</button>
           <button class="btn" onclick="saveVehicle()">Save</button>
         </div>
         <button class="btn ghost" id="vehDeleteBtn" style="margin-top:10px; display:none;" onclick="deleteVehicle()">Delete this vehicle</button>
@@ -1012,7 +1017,7 @@
 
     <!-- ===== WORKSHOP / BRANCH FORM (admin) ===== -->
     <section id="view-branch-form" class="view">
-      <div class="backbar"><button onclick="showView('view-company')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="branchFormTitle">New workshop</h2></div>
+      <div class="backbar"><button onclick="showView('view-audit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="branchFormTitle">New workshop</h2></div>
       <div class="card">
         <label style="margin-top:0;">Workshop / branch name</label><input id="branchName" placeholder="e.g. Cape Town workshop">
         <label>Address</label><input id="branchAddress" placeholder="Street, suburb, city">
@@ -1029,7 +1034,7 @@
         <a id="branchPermitFileLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:0.85rem; font-weight:600;">View current file &#8599;</a>
         <label>Notes</label><textarea id="branchNotes" rows="2"></textarea>
         <div class="row" style="margin-top:16px;">
-          <button class="btn secondary" onclick="showView('view-company')">Cancel</button>
+          <button class="btn secondary" onclick="showView('view-audit')">Cancel</button>
           <button class="btn" onclick="saveBranch()">Save</button>
         </div>
         <button class="btn ghost" id="branchDeleteBtn" style="margin-top:10px; display:none;" onclick="deleteBranch()">Delete this workshop</button>
@@ -1038,7 +1043,7 @@
 
     <!-- ===== EMPLOYEE COMPLIANCE (admin) ===== -->
     <section id="view-employee-compliance" class="view">
-      <div class="backbar"><button onclick="showView('view-company')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="empComplianceTitle">Employee</h2></div>
+      <div class="backbar"><button onclick="showView('view-audit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="empComplianceTitle">Employee</h2></div>
       <div class="card">
         <div id="empComplianceHeader" class="hint" style="margin-top:0;"></div>
         <div class="divider"></div>
@@ -1058,7 +1063,7 @@
         <a id="empContractFileLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:0.85rem; font-weight:600;">View current file &#8599;</a>
         <div class="hint" id="empSelfServiceNote" style="margin-top:10px;"></div>
         <div class="row" style="margin-top:16px;">
-          <button class="btn secondary" onclick="showView('view-company')">Cancel</button>
+          <button class="btn secondary" onclick="showView('view-audit')">Cancel</button>
           <button class="btn" onclick="saveEmployeeCompliance()">Save</button>
         </div>
       </div>
@@ -1081,10 +1086,6 @@
         <label style="margin-top:16px;">Workshop reports</label>
         <button class="btn secondary" style="margin-top:6px;" onclick="openCalibrationReport('view-export')">Weekly verification register</button>
         <div class="hint">Covers all test equipment, not a single site — also on the Verify tab, where technicians with the verification permission can print it too.</div>
-        <button class="btn secondary" style="margin-top:8px;" onclick="openCalibrationCertRegister()">Calibration register (SANAS)</button>
-        <div class="hint">The annual calibration of the workshop's reference instruments by a SANAS-accredited lab — entered under Company &rarr; Workshop file &rarr; Calibration.</div>
-        <button class="btn secondary" style="margin-top:8px;" onclick="openCompliancePack()">Company compliance pack</button>
-        <div class="hint">The Company tab's workshop file as one letterheaded document — company documents, employees, vehicles and workshops, with an expiry summary — for a SAQCC / SABS audit.</div>
         <label style="margin-top:16px;">Trainee logbook</label>
         <button class="btn secondary" style="margin-top:6px;" onclick="openVerification()">Sign-off verification</button>
         <div class="hint">Compares each profile's registered device against the device used for its logbook entries and sign-offs.</div>
@@ -1130,7 +1131,7 @@
     <!-- ===== CALIBRATION REGISTER (weekly checks of test equipment) — own tab ===== -->
     <section id="view-calibration" class="view">
       <div class="section-title"><h2>Weekly verification</h2></div>
-      <p class="hint" style="margin:0 0 12px;">SANS 1475 Annex A: the workshop's production-control equipment (weighing scales, working and master pressure gauges) must be verified against reference instruments at least weekly, and recorded in writing. Log each weekly verification here. The annual calibration of the reference instruments by a SANAS-accredited lab is recorded separately, under Company &rarr; Workshop file &rarr; Calibration.</p>
+      <p class="hint" style="margin:0 0 12px;">SANS 1475 Annex A: the workshop's production-control equipment (weighing scales, working and master pressure gauges) must be verified against reference instruments at least weekly, and recorded in writing. Log each weekly verification here. The annual calibration of the reference instruments by a SANAS-accredited lab is recorded separately, under Audit &rarr; Calibration.</p>
       <div class="card">
         <label style="margin-top:0;">Record a check</label>
         <div class="row">
@@ -1232,6 +1233,7 @@
     <button id="navSignoffs" style="display:none;" onclick="showView('view-signoffs')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg></span><span>Sign-offs</span></button>
     <button id="navMyTrainees" style="display:none;" onclick="showView('view-my-trainees')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span><span>Trainees</span></button>
     <button id="navCompany" style="display:none;" onclick="showView('view-company')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="7" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></span><span>Company</span></button>
+    <button id="navAudit" style="display:none;" onclick="showView('view-audit')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg></span><span>Audit</span></button>
     <button id="navExport" style="display:none;" onclick="showView('view-export')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg></span><span>Reports</span></button>
   </nav>
 </div>
@@ -1340,10 +1342,11 @@ let currentUser = null;   // firebase auth user
 let currentProfile = null; // technicians/{uid} doc data
 let currentRole = null;
 let currentCompanyId = null;  // this technician's tenant — scopes every multi-tenant read/write
+let currentCompanyAddons = {};  // { audit: true } once granted by a superadmin — see companyAddons/{companyId}
 
 auth.onAuthStateChanged(async (user)=>{
   if(!user){
-    currentUser = null; currentProfile = null; currentRole = null; currentCompanyId = null;
+    currentUser = null; currentProfile = null; currentRole = null; currentCompanyId = null; currentCompanyAddons = {};
     document.getElementById('authScreen').style.display='flex';
     document.getElementById('appShell').style.display='none';
     detachAllListeners();
@@ -1361,6 +1364,13 @@ auth.onAuthStateChanged(async (user)=>{
     currentProfile = doc.data();
     currentRole = currentProfile.role;
     currentCompanyId = currentProfile.companyId || null;
+    currentCompanyAddons = {};
+    if(currentRole === 'admin' && currentCompanyId){
+      try{
+        const addonsDoc = await db.collection('companyAddons').doc(currentCompanyId).get();
+        currentCompanyAddons = addonsDoc.exists ? addonsDoc.data() : {};
+      }catch(e){ currentCompanyAddons = {}; }   // e.g. add-on doc doesn't exist yet — treated as "off"
+    }
     if(currentProfile.active === false){
       document.getElementById('authError').style.display='block';
       document.getElementById('authError').textContent = 'This account has been deactivated. Contact your administrator.';
@@ -1575,6 +1585,9 @@ function setupRoleUI(){
   document.getElementById('navMyTrainees').style.display = (currentRole === 'technician') ? 'flex' : 'none';
   document.getElementById('sitesTitle').textContent = isAdmin ? 'All sites' : 'My sites';
   document.getElementById('navCompany').style.display = isAdmin ? 'flex' : 'none';
+  // Audit tab: admin-only, and only once a superadmin has granted this
+  // company the add-on (admin.html → company detail → Add-ons).
+  document.getElementById('navAudit').style.display = (isAdmin && currentCompanyAddons && currentCompanyAddons.audit) ? 'flex' : 'none';
   document.getElementById('navExport').style.display = isAdmin ? 'flex' : 'none';
   // The weekly-verification tab ("Verify") is shown to admins and to
   // technicians the admin has granted the verification permission (canCalibrate).
@@ -1594,7 +1607,14 @@ let myTraineeDetailId = null;   // trainee currently open on a supervising techn
 const SITES_VIEWS = ['view-sites','view-site-form','view-site-detail','view-equipment-form','view-monthly','view-certificate','view-register'];
 let registerBackView = 'view-site-detail';   // where the printable register's Back returns to
 let emailBackView = 'view-export';           // where the "Email to site" screen's Back/Cancel returns to (Reports only)
+// The Audit tab (Company Documents / Employees / Vehicles / Workshops /
+// Calibration) is gated behind the `audit` company add-on — see
+// currentCompanyAddons, populated once at login.
+const AUDIT_VIEWS = ['view-audit','view-company-doc-form','view-vehicle-form','view-branch-form','view-employee-compliance','view-calibration-cert-form'];
 function showView(id){
+  if(AUDIT_VIEWS.includes(id) && !(currentRole==='admin' && currentCompanyAddons && currentCompanyAddons.audit)){
+    id = 'view-sites';   // add-on not enabled (or disabled after this session logged in) — the nav button is hidden too, this just guards direct navigation
+  }
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   const registerFromExport = id==='view-register' && registerBackView==='view-export';
@@ -1605,14 +1625,17 @@ function showView(id){
   document.getElementById('navTrainees').classList.toggle('active', ['view-trainees','view-trainee-form','view-trainee-detail'].includes(id));
   document.getElementById('navSignoffs').classList.toggle('active', ['view-signoffs','view-signoff-form'].includes(id));
   document.getElementById('navMyTrainees').classList.toggle('active', ['view-my-trainees','view-my-trainee-detail'].includes(id));
-  document.getElementById('navCompany').classList.toggle('active', ['view-company','view-company-doc-form','view-vehicle-form','view-branch-form','view-employee-compliance','view-calibration-cert-form'].includes(id));
+  document.getElementById('navCompany').classList.toggle('active', id==='view-company');
+  const auditReport = id==='view-report' && reportBackView==='view-audit';
+  document.getElementById('navAudit').classList.toggle('active', AUDIT_VIEWS.includes(id) || auditReport);
   const calReport = id==='view-report' && reportBackView==='view-calibration';
-  document.getElementById('navExport').classList.toggle('active', id==='view-export' || registerFromExport || id==='view-email' || id==='view-verification' || (id==='view-report' && !calReport && !sitesReport));
+  document.getElementById('navExport').classList.toggle('active', id==='view-export' || registerFromExport || id==='view-email' || id==='view-verification' || (id==='view-report' && !calReport && !sitesReport && !auditReport));
   document.getElementById('navCalibration').classList.toggle('active', id==='view-calibration' || calReport);
   if(id==='view-sites') renderSites();
   if(id==='view-due') renderDueDashboard();
   if(id==='view-technicians') renderTechnicians();
   if(id==='view-company') loadCompanySettings();
+  if(id==='view-audit'){ loadCompanySettings(); startWorkshopFileListeners(); paintCompanyTab(); }
   if(id==='view-export'){ refreshExport(); loadCompanySettings(); }
   if(id==='view-calibration') renderCalibrationView();
   if(id==='view-trainees') renderTrainees();
@@ -1921,15 +1944,16 @@ async function loadCompanySettings(){
   }
   renderCompanyLogoPreview();
   renderCompanySignaturePreview();
-  startWorkshopFileListeners();
-  paintCompanyTab();
 }
 
 /* ======================================================================
-   Workshop file (Company tab → Company Documents / Employees / Vehicles /
-   Workshops) — the servicing business's own SAQCC / SABS audit evidence,
-   as opposed to the client-facing registers under Reports. Three admin-only
-   tenant-scoped collections (branches, vehicles, companyDocuments) written
+   Audit tab (Company Documents / Employees / Vehicles / Workshops /
+   Calibration) — the servicing business's own SAQCC / SABS audit evidence,
+   as opposed to the client-facing registers under Reports. Gated behind the
+   `audit` company add-on (currentCompanyAddons.audit) — see showView's
+   AUDIT_VIEWS guard and setupRoleUI's navAudit visibility. Four admin-only
+   tenant-scoped collections (branches, vehicles, companyDocuments,
+   calibrationCertificates) written
    direct from the client and guarded by firestore.rules; employee
    compliance data lives on the existing technicians doc. All list queries
    filter companyId so the read rules stay provable.
@@ -2229,7 +2253,7 @@ async function saveCompanyDoc(){
     }
     await ref.set(payload, {merge:true});
     toast('Document saved');
-    showView('view-company');
+    showView('view-audit');
   }catch(e){ toast('Error: ' + e.message); }
 }
 async function deleteCompanyDoc(){
@@ -2238,7 +2262,7 @@ async function deleteCompanyDoc(){
   try{
     await db.collection('companyDocuments').doc(editingCompanyDocId).delete();
     toast('Deleted');
-    showView('view-company');
+    showView('view-audit');
   }catch(e){ toast('Error: ' + e.message); }
 }
 
@@ -2308,7 +2332,7 @@ async function saveVehicle(){
     }
     await ref.set(payload, {merge:true});
     toast('Vehicle saved');
-    showView('view-company');
+    showView('view-audit');
   }catch(e){ toast('Error: ' + e.message); }
 }
 async function deleteVehicle(){
@@ -2317,7 +2341,7 @@ async function deleteVehicle(){
   try{
     await db.collection('vehicles').doc(editingVehicleId).delete();
     toast('Deleted');
-    showView('view-company');
+    showView('view-audit');
   }catch(e){ toast('Error: ' + e.message); }
 }
 
@@ -2363,7 +2387,7 @@ async function saveBranch(){
     }
     await ref.set(payload, {merge:true});
     toast('Workshop saved');
-    showView('view-company');
+    showView('view-audit');
   }catch(e){ toast('Error: ' + e.message); }
 }
 async function deleteBranch(){
@@ -2375,7 +2399,7 @@ async function deleteBranch(){
   try{
     await db.collection('branches').doc(editingBranchId).delete();
     toast('Deleted');
-    showView('view-company');
+    showView('view-audit');
   }catch(e){ toast('Error: ' + e.message); }
 }
 
@@ -2430,7 +2454,7 @@ async function saveEmployeeCompliance(){
     }
     await db.collection('technicians').doc(editingEmployeeId).update(update);
     toast('Saved');
-    showView('view-company');
+    showView('view-audit');
   }catch(e){ toast('Error: ' + e.message); }
 }
 
@@ -2511,7 +2535,7 @@ async function saveCalibrationCert(){
     }
     await ref.set(payload, {merge:true});
     toast('Calibration certificate saved');
-    showView('view-company');
+    showView('view-audit');
   }catch(e){ toast('Error: ' + e.message); }
 }
 async function deleteCalibrationCert(){
@@ -2520,7 +2544,7 @@ async function deleteCalibrationCert(){
   try{
     await db.collection('calibrationCertificates').doc(editingCalCertId).delete();
     toast('Deleted');
-    showView('view-company');
+    showView('view-audit');
   }catch(e){ toast('Error: ' + e.message); }
 }
 async function openCalibrationCertRegister(){
@@ -2561,7 +2585,7 @@ async function openCalibrationCertRegister(){
     <div class="tablewrap"><table>
       <thead><tr><th>Instrument</th><th>Type</th><th>Serial</th><th>Laboratory</th><th>Certificate no.</th><th>Calibrated</th><th>Next due</th><th>Certificate on file</th></tr></thead>
       <tbody>${rows}</tbody>
-    </table></div>`, 'view-export');
+    </table></div>`, 'view-audit');
 }
 
 /* ---- Company compliance pack (printable, from Reports) ---- */
@@ -2688,7 +2712,7 @@ async function openCompliancePack(){
     <div class="tablewrap"><table>
       <thead><tr><th>Instrument</th><th>Type</th><th>Laboratory</th><th>Certificate no.</th><th>Calibrated</th><th>Next due</th><th>Certificate on file</th></tr></thead>
       <tbody>${certRows}</tbody>
-    </table></div>`, 'view-export');
+    </table></div>`, 'view-audit');
 }
 
 function renderCompanyLogoPreview(){
@@ -5317,7 +5341,8 @@ async function openRechargeReport(){
    Weekly checks of scales / working + master gauges against reference
    instruments. Collection stays `calibrations` for historical reasons; the
    real (annual, external, SANAS) calibration register is
-   `calibrationCertificates`, on the Company → Workshop file tab. */
+   `calibrationCertificates`, on the Audit tab (an add-on — see hasAuditAddon
+   in firestore.rules and currentCompanyAddons here). */
 let calibrationsCache = [];
 function calTypeLabel(t){
   return { scale:'Weighing scale', gauge:'Working pressure gauge', master:'Master pressure gauge', other:'Other test equipment' }[t] || t || '';
