@@ -807,6 +807,55 @@ exports.saveMonthlyCheck = onCall(async (request) => {
   return { saved: true };
 });
 
+/* ---------- Toolbox talk attendance ----------
+   Same fraud-tracking shape as the other sign-off callables: profile must be
+   complete on this device, and the write is stamped with the server-observed
+   IP plus the client's device id rather than accepted as a plain client
+   write. Idempotent on purpose — a second sign-off attempt doesn't overwrite
+   the first, so the original device/IP evidence can't quietly be replaced. */
+exports.signToolboxTalk = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "Sign in first.");
+  }
+  const db = admin.firestore();
+  const selfSnap = await db.collection("technicians").doc(uid).get();
+  if (!selfSnap.exists) {
+    throw new HttpsError("not-found", "Profile not found.");
+  }
+  await requireProfileComplete(selfSnap, "sign a toolbox talk");
+  const selfData = selfSnap.data();
+
+  const data = request.data || {};
+  const talkId = String(data.talkId || "").trim();
+  const deviceId = String(data.deviceId || "").trim();
+  if (!talkId) throw new HttpsError("invalid-argument", "Missing talk id.");
+  if (!deviceId) throw new HttpsError("invalid-argument", "Missing device id — reload the app and try again.");
+
+  const talkRef = db.collection("toolboxTalks").doc(talkId);
+  const talkSnap = await talkRef.get();
+  if (!talkSnap.exists || talkSnap.data().companyId !== selfData.companyId) {
+    throw new HttpsError("not-found", "Talk not found.");
+  }
+
+  const attendeeRef = talkRef.collection("attendees").doc(uid);
+  const existing = await attendeeRef.get();
+  if (existing.exists) {
+    return { signed: true, alreadySigned: true };
+  }
+
+  await attendeeRef.set({
+    companyId: selfData.companyId,
+    name: selfData.name || "",
+    role: selfData.role || "",
+    signedAt: admin.firestore.FieldValue.serverTimestamp(),
+    signedIp: getCallerIp(request),
+    signedDeviceId: deviceId,
+    signedUserAgent: getUserAgent(request),
+  });
+  return { signed: true, alreadySigned: false };
+});
+
 /* ---------- Company `lastActivityAt` ----------
    Bumped whenever any user in a company writes to one of these tenant-scoped
    collections, so /admin's "active this month" figure reflects real usage.
@@ -819,6 +868,7 @@ const ACTIVITY_COLLECTIONS = [
   "monthlyChecks", "serviceEvents", "traineeAssignments",
   "technicians", "emailLog", "traineeCompetencies",
   "branches", "vehicles", "companyDocuments", "calibrationCertificates",
+  "toolboxTalks",
 ];
 ACTIVITY_COLLECTIONS.forEach((collectionId) => {
   exports[`bumpActivity_${collectionId}`] = onDocumentWritten(

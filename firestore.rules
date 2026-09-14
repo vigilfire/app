@@ -42,6 +42,10 @@ service cloud.firestore {
       return isSignedIn() &&
         get(/databases/$(database)/documents/technicians/$(request.auth.uid)).data.canCalibrate == true;
     }
+    function isTechnician() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/technicians/$(request.auth.uid)).data.role == 'technician';
+    }
     // Whether this company has been granted the Audit add-on (Company
     // Documents / Employees / Vehicles / Workshops / Calibration) by a
     // superadmin in admin.html. A missing companyAddons doc means "no
@@ -281,6 +285,28 @@ service cloud.firestore {
       allow create: if isCompanyAdmin(request.resource.data.companyId)
         || (canCalibrate() && myCompanyId() == request.resource.data.companyId);
       allow update, delete: if isCompanyAdmin(resource.data.companyId);
+    }
+
+    // Toolbox talks — short recorded safety briefings. Admin or any technician
+    // may log one (mirrors calibrations' create rule); a trainee may only read
+    // and sign attendance. Free, core feature — not gated behind an add-on.
+    match /toolboxTalks/{id} {
+      allow read:   if isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && myCompanyId() == resource.data.companyId);
+      allow create: if isCompanyAdmin(request.resource.data.companyId)
+        || (isTechnician() && myCompanyId() == request.resource.data.companyId);
+      allow update, delete: if isCompanyAdmin(resource.data.companyId);
+
+      // Each attendee's own signed attendance record — doc id is their uid, so
+      // "have I signed" is a free existence check. Written only by the
+      // signToolboxTalk Cloud Function (Admin SDK bypasses these rules): that's
+      // where the real server-observed IP/device gets stamped, which a rule
+      // can't do, and where profile completion is enforced. companyId is
+      // copied onto this doc from the parent talk so read needs no nested get().
+      match /attendees/{uid} {
+        allow read:           if isCompanyAdmin(resource.data.companyId) || (isSignedIn() && myCompanyId() == resource.data.companyId);
+        allow create, update: if false;
+        allow delete:         if isCompanyAdmin(resource.data.companyId);
+      }
     }
 
     // Monthly responsible-person inspection log (SANS 10105-1). One record per
