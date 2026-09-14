@@ -438,6 +438,7 @@ exports.createTechnician = onCall(async (request) => {
   const saqcc = String(data.saqcc || "").trim();
   const phone = String(data.phone || "").trim();
   const canCalibrate = !!data.canCalibrate;
+  const canRunToolboxTalks = !!data.canRunToolboxTalks;
   const VALID_TECH_ROLES = ["technician", "trainee", "competent"];
   const role = VALID_TECH_ROLES.includes(data.role) ? data.role : "technician";
   const traineeRegisteredDate = role === "trainee" ? data.traineeRegisteredDate || null : null;
@@ -488,6 +489,7 @@ exports.createTechnician = onCall(async (request) => {
     phone,
     active: true,
     canCalibrate,
+    canRunToolboxTalks,
     companyId,
     ...(traineeRegisteredDate ? { traineeRegisteredDate } : {}),
     consentConfirmedBy: uid,
@@ -836,6 +838,10 @@ exports.signToolboxTalk = onCall(async (request) => {
   const talkSnap = await talkRef.get();
   if (!talkSnap.exists || talkSnap.data().companyId !== selfData.companyId) {
     throw new HttpsError("not-found", "Talk not found.");
+  }
+  const invited = Array.isArray(talkSnap.data().invitedIds) ? talkSnap.data().invitedIds : [];
+  if (selfData.role !== "admin" && !invited.includes(uid)) {
+    throw new HttpsError("permission-denied", "You are not invited to this talk.");
   }
 
   const attendeeRef = talkRef.collection("attendees").doc(uid);

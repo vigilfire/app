@@ -7,6 +7,14 @@
         { "fieldPath": "assignedCompetentPersons", "arrayConfig": "CONTAINS" },
         { "fieldPath": "companyId", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "toolboxTalks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "invitedIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "companyId", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

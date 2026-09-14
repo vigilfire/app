@@ -458,6 +458,9 @@
         <label>Date</label><input id="talkDate" type="date">
         <label>Presented by</label><input id="talkPresenter" placeholder="Who ran the talk">
         <label>Notes / discussion points</label><textarea id="talkNotes" rows="3" placeholder="What was covered"></textarea>
+        <label>Invite attendees</label>
+        <div class="hint" style="margin-top:0;">Technicians and trainees invited to this talk — only invited people (and admin) will see it and can sign.</div>
+        <div id="talkInviteList" class="card" style="background:var(--paper); padding:10px 14px;"></div>
         <div class="row" style="margin-top:16px;">
           <button class="btn secondary" onclick="showView('view-talks')">Cancel</button>
           <button class="btn" onclick="saveTalk()">Save</button>
@@ -773,6 +776,7 @@
         <div id="techPermissionsWrap">
           <label style="margin-top:16px;">Permissions</label>
           <label class="chk" style="border-bottom:none;"><input type="checkbox" id="techCanCalibrate"><span>Weekly verification — allow this technician to record the workshop's weekly verification checks (scales and pressure gauges). A "Verify" tab appears in their app only while this is on.</span></label>
+          <label class="chk" style="border-bottom:none;"><input type="checkbox" id="techCanRunTalks"><span>Toolbox talks — allow this technician to log toolbox talks and choose who's invited. Anyone can still view and sign a talk they're invited to, with or without this on.</span></label>
         </div>
 
         <div id="techConsentWrap" style="margin-top:16px;">
@@ -4189,7 +4193,7 @@ function paintTechnicians(){
       <div>
         <div class="name">${escapeHtml(t.name)}</div>
         <div class="meta">${staffRoleFilter==='competent'?'No.':'Tech no.'} ${escapeHtml(t.techNumber||'')}${t.saqcc?(' · '+escapeHtml(t.saqcc)):''}</div>
-        ${(!inactive && t.canCalibrate) ? `<div style="margin-top:6px;"><span class="pill">Verification</span></div>` : ''}
+        ${(!inactive && (t.canCalibrate || t.canRunToolboxTalks)) ? `<div style="margin-top:6px; display:flex; gap:6px;">${t.canCalibrate?'<span class="pill">Verification</span>':''}${t.canRunToolboxTalks?'<span class="pill">Talks</span>':''}</div>` : ''}
       </div>
       ${right}
     </div>`;
@@ -4231,6 +4235,7 @@ function openTechForm(id){
     document.getElementById('techSaqcc').value = t.saqcc||'';
     document.getElementById('techPhone').value = t.phone||'';
     document.getElementById('techCanCalibrate').checked = !!t.canCalibrate;
+    document.getElementById('techCanRunTalks').checked = !!t.canRunToolboxTalks;
     document.getElementById('techConsentWrap').style.display = 'none';
   } else {
     document.getElementById('techFormTitle').textContent = staffRoleFilter==='competent' ? 'New competent person' : 'New technician';
@@ -4239,6 +4244,7 @@ function openTechForm(id){
     roleField.disabled = false;
     ['techName','techNumber','techPassword','techSaqcc','techPhone'].forEach(fid=>document.getElementById(fid).value='');
     document.getElementById('techCanCalibrate').checked = false;
+    document.getElementById('techCanRunTalks').checked = false;
     numberField.disabled = false;
     document.getElementById('techPasswordHint').textContent = 'Share this technician number and password with them — they can log in immediately with it.';
     document.getElementById('techConsentWrap').style.display = 'block';
@@ -4256,11 +4262,12 @@ async function saveTechnician(){
   const saqcc = role==='competent' ? '' : document.getElementById('techSaqcc').value.trim();
   const phone = document.getElementById('techPhone').value.trim();
   const canCalibrate = role==='competent' ? false : document.getElementById('techCanCalibrate').checked;
+  const canRunToolboxTalks = role==='competent' ? false : document.getElementById('techCanRunTalks').checked;
   if(!name || !techNumber){ toast('Name and technician number are required'); return; }
 
   if(editingTechId){
     try{
-      await db.collection('technicians').doc(editingTechId).update({ name, saqcc, phone, canCalibrate });
+      await db.collection('technicians').doc(editingTechId).update({ name, saqcc, phone, canCalibrate, canRunToolboxTalks });
       toast('Updated');
       showView('view-technicians');
     }catch(e){ toast('Error: ' + e.message); }
@@ -4275,7 +4282,7 @@ async function saveTechnician(){
     // longer write a technicians doc directly (see firestore.rules), because
     // the seat count it's checked against can't be trusted to a security rule.
     const call = firebase.functions().httpsCallable('createTechnician');
-    await call({ name, techNumber, password, saqcc, phone, canCalibrate, role, consentConfirmed:true });
+    await call({ name, techNumber, password, saqcc, phone, canCalibrate, canRunToolboxTalks, role, consentConfirmed:true });
     toast(role==='competent' ? 'Competent person created' : 'Technician created');
     showView('view-technicians');
   }catch(e){ toast('Error: ' + e.message); }
@@ -5497,9 +5504,15 @@ async function openCalibrationReport(backView){
 let talksCache = [];
 function renderTalks(){
   document.getElementById('talksBackToTraining').style.display = (currentRole==='trainee') ? 'block' : 'none';
-  document.getElementById('addTalkBtn').style.display = (currentRole==='trainee') ? 'none' : 'block';
+  const canCreate = currentRole==='admin' || (currentProfile && currentProfile.canRunToolboxTalks);
+  document.getElementById('addTalkBtn').style.display = canCreate ? 'block' : 'none';
   if(unsubTalks) unsubTalks();
-  unsubTalks = db.collection('toolboxTalks').where('companyId','==',currentCompanyId).onSnapshot(snap=>{
+  // Admin sees every talk in the company; everyone else only sees ones they
+  // were invited to (invitedIds) — see firestore.rules' toolboxTalks read
+  // rule, which this query has to match for the read to be provable.
+  let q = db.collection('toolboxTalks').where('companyId','==',currentCompanyId);
+  if(currentRole!=='admin') q = q.where('invitedIds','array-contains',currentUser.uid);
+  unsubTalks = q.onSnapshot(snap=>{
     talksCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
     talksCache.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
     paintTalks();
@@ -5516,21 +5529,45 @@ function paintTalks(){
     </div>
   </div>`).join('');
 }
-function openTalkForm(){
+async function openTalkForm(){
   document.getElementById('talkTopic').value = '';
   document.getElementById('talkDate').value = toLocalISO(new Date());
   document.getElementById('talkPresenter').value = currentProfile.name || '';
   document.getElementById('talkNotes').value = '';
+  const listEl = document.getElementById('talkInviteList');
+  listEl.innerHTML = `<div class="hint">Loading roster…</div>`;
   showView('view-talk-form');
+  // Fetched fresh here rather than reused from techsCache/traineesCache —
+  // those are only ever populated by the admin-only Technicians/Trainees
+  // tabs, and a permitted technician opening this form will usually have
+  // visited neither.
+  let roster = [];
+  try{
+    const snap = await db.collection('technicians').where('companyId','==',currentCompanyId).get();
+    roster = snap.docs.map(d=>({id:d.id, ...d.data()}))
+      .filter(p=>(p.role==='technician' || p.role==='trainee') && p.active!==false)
+      .sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  }catch(e){ listEl.innerHTML = `<div class="hint">Could not load roster: ${escapeHtml(e.message)}</div>`; return; }
+  if(roster.length===0){
+    listEl.innerHTML = `<div class="hint">No active technicians or trainees to invite yet.</div>`;
+    return;
+  }
+  listEl.innerHTML = roster.map(p=>`
+    <label class="tech-check" style="margin:0; text-transform:none; font-weight:400; color:var(--ink);">
+      <input type="checkbox" value="${p.id}" ${p.id===currentUser.uid?'checked':''} style="width:auto;">
+      ${escapeHtml(p.name)} <span class="hint" style="margin:0;">(${p.role==='trainee'?'trainee':'technician'})</span>
+    </label>`).join('');
 }
 async function saveTalk(){
   const topic = document.getElementById('talkTopic').value.trim();
   const date = document.getElementById('talkDate').value;
   if(!topic || !date){ toast('Enter at least a topic and date'); return; }
+  const invitedIds = Array.from(document.querySelectorAll('#talkInviteList input[type=checkbox]:checked')).map(el=>el.value);
   const payload = {
     companyId: currentCompanyId, topic, date,
     presenterName: document.getElementById('talkPresenter').value.trim(),
     notes: document.getElementById('talkNotes').value.trim(),
+    invitedIds,
     createdBy: currentUser.uid,
     createdByName: currentProfile.name || '',
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),

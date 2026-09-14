@@ -42,9 +42,9 @@ service cloud.firestore {
       return isSignedIn() &&
         get(/databases/$(database)/documents/technicians/$(request.auth.uid)).data.canCalibrate == true;
     }
-    function isTechnician() {
+    function canRunToolboxTalks() {
       return isSignedIn() &&
-        get(/databases/$(database)/documents/technicians/$(request.auth.uid)).data.role == 'technician';
+        get(/databases/$(database)/documents/technicians/$(request.auth.uid)).data.canRunToolboxTalks == true;
     }
     // Whether this company has been granted the Audit add-on (Company
     // Documents / Employees / Vehicles / Workshops / Calibration) by a
@@ -287,13 +287,18 @@ service cloud.firestore {
       allow update, delete: if isCompanyAdmin(resource.data.companyId);
     }
 
-    // Toolbox talks — short recorded safety briefings. Admin or any technician
-    // may log one (mirrors calibrations' create rule); a trainee may only read
-    // and sign attendance. Free, core feature — not gated behind an add-on.
+    // Toolbox talks — short recorded safety briefings. Admin or a technician
+    // the admin has granted the canRunToolboxTalks permission may log one
+    // (mirrors calibrations' create rule, gated the way weekly verification
+    // is). Visible only to admin and whoever the creator invited
+    // (invitedIds) — not the whole company — so an uninvited technician or
+    // trainee can neither see nor sign a talk they weren't asked to attend.
+    // Free, core feature — not gated behind an add-on.
     match /toolboxTalks/{id} {
-      allow read:   if isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && myCompanyId() == resource.data.companyId);
+      allow read:   if isSuperadmin() || isCompanyAdmin(resource.data.companyId)
+        || (isSignedIn() && myCompanyId() == resource.data.companyId && request.auth.uid in resource.data.invitedIds);
       allow create: if isCompanyAdmin(request.resource.data.companyId)
-        || (isTechnician() && myCompanyId() == request.resource.data.companyId);
+        || (canRunToolboxTalks() && myCompanyId() == request.resource.data.companyId);
       allow update, delete: if isCompanyAdmin(resource.data.companyId);
 
       // Each attendee's own signed attendance record — doc id is their uid, so
