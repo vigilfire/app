@@ -274,6 +274,26 @@ service cloud.firestore {
       allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
     }
 
+    // Tool register (Audit tab "Tools" chip) — workshop tools and each
+    // technician's issued kit share one register (tools.ownerType /
+    // assignedTechnicianId tells them apart); toolChecks is a flat,
+    // append-only check log against it, same shape as the weekly-
+    // verification `calibrations` log below (no due-date/recurrence —
+    // not asked for here). Admin-only, gated behind the Audit add-on
+    // like the rest of the workshop file.
+    match /tools/{id} {
+      allow read:   if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
+      allow update: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+    }
+    match /toolChecks/{id} {
+      allow read:   if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
+      allow update: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+    }
+
     // Weekly verification log (SANS 1475 Annex A) — production-control equipment
     // checked against reference instruments at least weekly. Collection name is
     // `calibrations` for historical reasons; the app now calls this "Weekly

@@ -999,6 +999,24 @@
         <button class="btn" style="margin-top:12px;" onclick="openCalibrationCertForm()">+ Add calibration certificate</button>
         <button class="btn secondary" style="margin-top:8px;" onclick="openCalibrationCertRegister()">Print calibration register</button>
       </div>
+      <div id="companyTab-tools" style="display:none;">
+        <p class="hint" style="margin:0 0 10px;">Workshop tools and each technician's issued kit, tracked together — who holds a tool tells the two apart.</p>
+        <div class="card">
+          <label style="margin-top:0;">Log a check</label>
+          <label>Tool</label><select id="toolCheckToolSelect"></select>
+          <div class="row">
+            <div><label>Date</label><input id="toolCheckDate" type="date"></div>
+            <div><label>Result</label><select id="toolCheckResult"><option value="ok">OK</option><option value="issue">Issue found</option></select></div>
+          </div>
+          <label>Notes</label><input id="toolCheckNotes" placeholder="Optional — e.g. handle cracked, replaced blade">
+          <button class="btn secondary" style="margin-top:12px;" onclick="saveToolCheck()">Add to log</button>
+        </div>
+        <div class="section-title"><h2>Tools</h2></div>
+        <div id="toolsList"></div>
+        <button class="btn" style="margin-top:12px;" onclick="openToolForm()">+ Add tool</button>
+        <div class="section-title"><h2>Recent checks</h2></div>
+        <div id="toolChecksList"></div>
+      </div>
     </section>
 
     <!-- ===== CALIBRATION CERTIFICATE FORM (admin) ===== -->
@@ -1098,6 +1116,32 @@
           <button class="btn" onclick="saveVehicle()">Save</button>
         </div>
         <button class="btn ghost" id="vehDeleteBtn" style="margin-top:10px; display:none;" onclick="deleteVehicle()">Delete this vehicle</button>
+      </div>
+    </section>
+
+    <!-- ===== TOOL FORM (admin) ===== -->
+    <section id="view-tool-form" class="view">
+      <div class="backbar"><button onclick="showView('view-audit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="toolFormTitle">New tool</h2></div>
+      <div class="card">
+        <label style="margin-top:0;">Tool name</label><input id="toolName" placeholder="e.g. Torque wrench">
+        <label>Serial / asset number</label><input id="toolSerial" placeholder="Optional">
+        <label>Held by</label>
+        <select id="toolOwnerType" onchange="onToolOwnerTypeChange()">
+          <option value="workshop">Workshop</option>
+          <option value="technician">A technician</option>
+        </select>
+        <div id="toolBranchWrap">
+          <label>Workshop / branch</label><select id="toolBranch"></select>
+        </div>
+        <div id="toolTechnicianWrap" style="display:none;">
+          <label>Technician</label><select id="toolTechnician"></select>
+        </div>
+        <label>Notes</label><textarea id="toolNotes" rows="2"></textarea>
+        <div class="row" style="margin-top:16px;">
+          <button class="btn secondary" onclick="showView('view-audit')">Cancel</button>
+          <button class="btn" onclick="saveTool()">Save</button>
+        </div>
+        <button class="btn ghost" id="toolDeleteBtn" style="margin-top:10px; display:none;" onclick="deleteTool()">Delete this tool</button>
       </div>
     </section>
 
@@ -1699,7 +1743,7 @@ let emailBackView = 'view-export';           // where the "Email to site" screen
 // The Audit tab (Company Documents / Employees / Vehicles / Workshops /
 // Calibration) is gated behind the `audit` company add-on — see
 // currentCompanyAddons, populated once at login.
-const AUDIT_VIEWS = ['view-audit','view-company-doc-form','view-vehicle-form','view-branch-form','view-employee-compliance','view-calibration-cert-form'];
+const AUDIT_VIEWS = ['view-audit','view-company-doc-form','view-vehicle-form','view-branch-form','view-employee-compliance','view-calibration-cert-form','view-tool-form'];
 function showView(id){
   if(AUDIT_VIEWS.includes(id) && !(currentRole==='admin' && currentCompanyAddons && currentCompanyAddons.audit)){
     id = 'view-sites';   // add-on not enabled (or disabled after this session logged in) — the nav button is hidden too, this just guards direct navigation
@@ -1743,6 +1787,7 @@ function showView(id){
 /* ---------- Firestore listener bookkeeping ---------- */
 let unsubSites = null, unsubEquipment = null, unsubInspections = null, unsubTechs = null, unsubCompetent = null, unsubCal = null, unsubTrainees = null;
 let unsubBranches = null, unsubVehicles = null, unsubCompanyDocs = null, unsubAllStaff = null, unsubCalCerts = null;
+let unsubTools = null, unsubToolChecks = null;
 let unsubTalks = null;
 function detachAllListeners(){
   if(unsubSites){ unsubSites(); unsubSites=null; }
@@ -1758,6 +1803,8 @@ function detachAllListeners(){
   if(unsubAllStaff){ unsubAllStaff(); unsubAllStaff=null; }
   if(unsubCalCerts){ unsubCalCerts(); unsubCalCerts=null; }
   if(unsubTalks){ unsubTalks(); unsubTalks=null; }
+  if(unsubTools){ unsubTools(); unsubTools=null; }
+  if(unsubToolChecks){ unsubToolChecks(); unsubToolChecks=null; }
 }
 
 /* ---------- Sites ---------- */
@@ -2055,6 +2102,7 @@ async function loadCompanySettings(){
    ====================================================================== */
 let companyTab = 'documents';
 let branchesCache = [], vehiclesCache = [], companyDocsCache = [], allStaffCache = [], calCertsCache = [];
+let toolsCache = [], toolChecksCache = [];
 
 const COMPANY_DOC_TYPES = {
   'sabs-mark-permit': 'SABS 1475 Mark Permit',
@@ -2102,6 +2150,20 @@ function startWorkshopFileListeners(){
     calCertsCache.sort((a,b)=>(b.calibrationDate||'').localeCompare(a.calibrationDate||''));
     paintCompanyTab();
   }, err=>{ toast('Could not load calibration register: ' + err.message); });
+
+  if(unsubTools) unsubTools();
+  unsubTools = db.collection('tools').where('companyId','==',currentCompanyId).onSnapshot(snap=>{
+    toolsCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    toolsCache.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+    paintCompanyTab();
+  }, err=>{ toast('Could not load tools: ' + err.message); });
+
+  if(unsubToolChecks) unsubToolChecks();
+  unsubToolChecks = db.collection('toolChecks').where('companyId','==',currentCompanyId).onSnapshot(snap=>{
+    toolChecksCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    toolChecksCache.sort((a,b)=>(b.checkDate||'').localeCompare(a.checkDate||''));
+    paintCompanyTab();
+  }, err=>{ toast('Could not load tool checks: ' + err.message); });
 }
 
 function setCompanyTab(k){ companyTab = k; paintCompanyTab(); }
@@ -2114,10 +2176,11 @@ function paintCompanyTab(){
     ['employees', `Employees (${allStaffCache.length})`],
     ['vehicles', `Vehicles (${vehiclesCache.length})`],
     ['workshops', `Workshops (${branchesCache.length})`],
-    ['calibration', `Calibration (${calCertsCache.length})`]
+    ['calibration', `Calibration (${calCertsCache.length})`],
+    ['tools', `Tools (${toolsCache.length})`]
   ];
   chips.innerHTML = tabs.map(([k,label])=>`<button class="chip ${companyTab===k?'active':''}" onclick="setCompanyTab('${k}')">${escapeHtml(label)}${k==='documents'&&expiredCount?' <span style="color:var(--red-dark);">&#9679;</span>':''}</button>`).join('');
-  ['documents','employees','vehicles','workshops','calibration'].forEach(k=>{
+  ['documents','employees','vehicles','workshops','calibration','tools'].forEach(k=>{
     const el = document.getElementById('companyTab-'+k);
     if(el) el.style.display = (companyTab===k) ? 'block' : 'none';
   });
@@ -2127,6 +2190,7 @@ function paintCompanyTab(){
   if(companyTab==='vehicles') renderVehicles();
   if(companyTab==='workshops') renderBranches();
   if(companyTab==='calibration') renderCalibrationRegister();
+  if(companyTab==='tools'){ renderTools(); renderToolChecks(); }
 }
 
 /* ---- expiry engine ---- */
@@ -2683,19 +2747,150 @@ async function openCalibrationCertRegister(){
     </table></div>`, 'view-audit');
 }
 
+/* ---- Tools: workshop + technician-issued register and check log ---- */
+function toolHolderLabel(t){
+  if(t.ownerType==='technician'){
+    const tech = allStaffCache.find(s=>s.id===t.assignedTechnicianId);
+    return tech ? `${escapeHtml(tech.name)} (technician)` : 'Unassigned technician';
+  }
+  return t.branchId ? `${escapeHtml(branchName(t.branchId))} (workshop)` : 'Workshop';
+}
+function renderTools(){
+  const wrap = document.getElementById('toolsList');
+  if(!wrap) return;
+  if(toolsCache.length===0){ wrap.innerHTML = `<div class="empty">No tools registered yet.</div>`; return; }
+  wrap.innerHTML = toolsCache.map(t=>`<div class="card tech-card" onclick="openToolForm('${t.id}')" style="cursor:pointer;">
+    <div>
+      <div class="name">${escapeHtml(t.name||'')}</div>
+      <div class="meta">${t.serial?(escapeHtml(t.serial)+' · '):''}${toolHolderLabel(t)}</div>
+    </div>
+  </div>`).join('');
+  fillToolCheckSelect();
+}
+function fillToolCheckSelect(){
+  const sel = document.getElementById('toolCheckToolSelect');
+  if(!sel) return;
+  const chosen = sel.value;
+  sel.innerHTML = toolsCache.length
+    ? toolsCache.map(t=>`<option value="${t.id}">${escapeHtml(t.name||'')}${t.serial?(' — '+escapeHtml(t.serial)):''}</option>`).join('')
+    : `<option value="">Add a tool first</option>`;
+  if(toolsCache.some(t=>t.id===chosen)) sel.value = chosen;
+}
+function onToolOwnerTypeChange(){
+  const isTech = document.getElementById('toolOwnerType').value === 'technician';
+  document.getElementById('toolBranchWrap').style.display = isTech ? 'none' : 'block';
+  document.getElementById('toolTechnicianWrap').style.display = isTech ? 'block' : 'none';
+}
+let editingToolId = null;
+function openToolForm(id){
+  editingToolId = id || null;
+  const t = id ? toolsCache.find(x=>x.id===id) : null;
+  document.getElementById('toolFormTitle').textContent = t ? 'Edit tool' : 'New tool';
+  const g = (k)=> t ? (t[k]||'') : '';
+  document.getElementById('toolName').value = g('name');
+  document.getElementById('toolSerial').value = g('serial');
+  document.getElementById('toolOwnerType').value = t ? (t.ownerType||'workshop') : 'workshop';
+  fillBranchSelect('toolBranch', t && t.branchId);
+  const techSel = document.getElementById('toolTechnician');
+  techSel.innerHTML = '<option value="">— none —</option>' + allStaffCache
+    .filter(s=>s.role==='technician' && s.active!==false)
+    .sort((a,b)=>(a.name||'').localeCompare(b.name||''))
+    .map(s=>`<option value="${s.id}">${escapeHtml(s.name||'')}</option>`).join('');
+  techSel.value = (t && t.assignedTechnicianId) || '';
+  document.getElementById('toolNotes').value = g('notes');
+  document.getElementById('toolDeleteBtn').style.display = t ? 'block' : 'none';
+  onToolOwnerTypeChange();
+  showView('view-tool-form');
+}
+async function saveTool(){
+  const name = document.getElementById('toolName').value.trim();
+  if(!name){ toast('Name the tool'); return; }
+  const ownerType = document.getElementById('toolOwnerType').value === 'technician' ? 'technician' : 'workshop';
+  const payload = {
+    companyId: currentCompanyId, name, ownerType,
+    serial: document.getElementById('toolSerial').value.trim(),
+    branchId: ownerType==='workshop' ? (document.getElementById('toolBranch').value || '') : '',
+    assignedTechnicianId: ownerType==='technician' ? (document.getElementById('toolTechnician').value || '') : '',
+    notes: document.getElementById('toolNotes').value.trim(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  try{
+    const ref = editingToolId ? db.collection('tools').doc(editingToolId) : db.collection('tools').doc();
+    if(!editingToolId){ payload.createdAt = firebase.firestore.FieldValue.serverTimestamp(); payload.active = true; }
+    await ref.set(payload, {merge:true});
+    toast('Tool saved');
+    showView('view-audit');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+async function deleteTool(){
+  if(!editingToolId) return;
+  if(!confirm('Delete this tool? Its past check history stays on file.')) return;
+  try{
+    await db.collection('tools').doc(editingToolId).delete();
+    toast('Deleted');
+    showView('view-audit');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+function renderToolChecks(){
+  const wrap = document.getElementById('toolChecksList');
+  if(!wrap) return;
+  fillToolCheckSelect();
+  const dEl = document.getElementById('toolCheckDate');
+  if(dEl && !dEl.value) dEl.value = toLocalISO(new Date());
+  if(toolChecksCache.length===0){ wrap.innerHTML = `<div class="empty">No checks logged yet.</div>`; return; }
+  wrap.innerHTML = toolChecksCache.slice(0,50).map(c=>`
+    <div class="insp-row status-${c.result==='issue'?'fail':'pass'}">
+      <div class="top">
+        <span class="date">${escapeHtml(c.checkDate||'')} · ${escapeHtml(c.toolName||'')}</span>
+        <span class="pill ${c.result==='issue'?'fail':'pass'}">${c.result==='issue'?'Issue':'OK'}</span>
+      </div>
+      <div class="sub">Checked by ${escapeHtml(c.checkedByName||'—')}${c.notes?(' · '+escapeHtml(c.notes)):''} <span onclick="deleteToolCheck('${c.id}')" style="color:var(--red-dark); cursor:pointer; font-weight:700;">delete</span></div>
+    </div>`).join('');
+}
+async function saveToolCheck(){
+  const toolId = document.getElementById('toolCheckToolSelect').value;
+  const checkDate = document.getElementById('toolCheckDate').value;
+  if(!toolId){ toast('Add a tool to check first'); return; }
+  if(!checkDate){ toast('Pick a date'); return; }
+  const tool = toolsCache.find(t=>t.id===toolId);
+  const payload = {
+    companyId: currentCompanyId, toolId,
+    toolName: tool ? tool.name : '',
+    checkDate,
+    result: document.getElementById('toolCheckResult').value === 'issue' ? 'issue' : 'ok',
+    notes: document.getElementById('toolCheckNotes').value.trim(),
+    checkedBy: currentUser.uid,
+    checkedByName: currentProfile.name || '',
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  try{
+    await db.collection('toolChecks').add(payload);
+    document.getElementById('toolCheckNotes').value = '';
+    toast('Check logged');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+async function deleteToolCheck(id){
+  if(currentRole!=='admin') return;
+  if(!confirm('Delete this tool check entry?')) return;
+  try{ await db.collection('toolChecks').doc(id).delete(); toast('Deleted'); }
+  catch(e){ toast('Error: ' + e.message); }
+}
+
 /* ---- Company compliance pack (printable, from Reports) ---- */
 async function openCompliancePack(){
   toast('Building pack…');
   await loadCompanySettings();
-  let branches = [], vehicles = [], docs = [], staff = [], certs = [], training = { topics:[], roster:[], rows:[] };
+  let branches = [], vehicles = [], docs = [], staff = [], certs = [], training = { topics:[], roster:[], rows:[] }, tools = [], toolChecks = [];
   try{
-    const [b, v, d, s, cc, tc] = await Promise.all([
+    const [b, v, d, s, cc, tc, tl, tk] = await Promise.all([
       db.collection('branches').where('companyId','==',currentCompanyId).get(),
       db.collection('vehicles').where('companyId','==',currentCompanyId).get(),
       db.collection('companyDocuments').where('companyId','==',currentCompanyId).get(),
       db.collection('technicians').where('companyId','==',currentCompanyId).get(),
       db.collection('calibrationCertificates').where('companyId','==',currentCompanyId).get(),
-      computeTrainingCompliance()
+      computeTrainingCompliance(),
+      db.collection('tools').where('companyId','==',currentCompanyId).get(),
+      db.collection('toolChecks').where('companyId','==',currentCompanyId).get()
     ]);
     branches = b.docs.map(x=>({id:x.id, ...x.data()}));
     vehicles = v.docs.map(x=>({id:x.id, ...x.data()}));
@@ -2703,6 +2898,8 @@ async function openCompliancePack(){
     staff = s.docs.map(x=>({id:x.id, ...x.data()}));
     certs = cc.docs.map(x=>({id:x.id, ...x.data()}));
     training = tc;
+    tools = tl.docs.map(x=>({id:x.id, ...x.data()}));
+    toolChecks = tk.docs.map(x=>({id:x.id, ...x.data()}));
   }catch(e){ toast('Could not load: ' + e.message); return; }
   const co = companySettings || {};
   const today = toLocalISO(new Date());
@@ -2795,6 +2992,29 @@ async function openCompliancePack(){
     <td>${trainingStatusText(r)}</td>
   </tr>`).join('') : `<tr><td colspan="6">No mandatory training topics recorded.</td></tr>`;
 
+  const latestCheckByTool = {};
+  toolChecks.forEach(c=>{
+    if(!c.toolId || !c.checkDate) return;
+    if(!latestCheckByTool[c.toolId] || c.checkDate > latestCheckByTool[c.toolId].checkDate) latestCheckByTool[c.toolId] = c;
+  });
+  const toolHolder = (t)=>{
+    if(t.ownerType==='technician'){
+      const tech = staff.find(s=>s.id===t.assignedTechnicianId);
+      return tech ? `${escapeHtml(tech.name)} (technician)` : 'Unassigned technician';
+    }
+    return t.branchId ? `${bn(t.branchId)} (workshop)` : 'Workshop';
+  };
+  const toolRows = tools.length ? tools.map(t=>{
+    const last = latestCheckByTool[t.id];
+    return `<tr>
+      <td>${escapeHtml(t.name||'')}</td>
+      <td>${escapeHtml(t.serial||'—')}</td>
+      <td>${toolHolder(t)}</td>
+      <td>${last ? escapeHtml(last.checkDate) : 'Never'}</td>
+      <td>${last ? (last.result==='issue'?'Issue found':'OK') : '—'}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="5">No tools registered.</td></tr>`;
+
   showReport('Company compliance pack', `${letterheadHTML(co)}
     <h2 style="margin-top:16px; font-size:1rem;">Company Compliance Pack — SANS 1475 servicing organisation</h2>
     <div class="meta"><strong>Generated:</strong> ${today}</div>
@@ -2829,6 +3049,11 @@ async function openCompliancePack(){
     <div class="tablewrap"><table>
       <thead><tr><th>Topic</th><th>Name</th><th>Role</th><th>Last completed</th><th>Next due</th><th>Status</th></tr></thead>
       <tbody>${trainingRows}</tbody>
+    </table></div>
+    <h3 style="margin-top:18px; font-size:0.95rem;">Tools</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Tool</th><th>Serial</th><th>Held by</th><th>Last checked</th><th>Result</th></tr></thead>
+      <tbody>${toolRows}</tbody>
     </table></div>`, 'view-audit');
 }
 

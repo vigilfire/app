@@ -878,7 +878,7 @@ const ACTIVITY_COLLECTIONS = [
   "monthlyChecks", "serviceEvents", "traineeAssignments",
   "technicians", "emailLog", "traineeCompetencies",
   "branches", "vehicles", "companyDocuments", "calibrationCertificates",
-  "toolboxTalks", "mandatoryTopics",
+  "toolboxTalks", "mandatoryTopics", "tools", "toolChecks",
 ];
 ACTIVITY_COLLECTIONS.forEach((collectionId) => {
   exports[`bumpActivity_${collectionId}`] = onDocumentWritten(
