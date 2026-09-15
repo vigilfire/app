@@ -446,6 +446,10 @@
       <button id="talksBackToTraining" style="display:none; margin-bottom:10px;" class="btn ghost" onclick="showView('view-my-training')">&larr; My training</button>
       <div class="section-title"><h2>Toolbox talks</h2></div>
       <p class="hint" style="margin:0 0 12px;">Short recorded safety briefings. Anyone who attended signs their own attendance on their own device.</p>
+      <div id="talksAdminRow" style="display:none; margin-bottom:12px;" class="row">
+        <button class="btn secondary" onclick="showView('view-training-compliance')">Training compliance</button>
+        <button class="btn secondary" onclick="showView('view-mandatory-topics')">Manage mandatory topics</button>
+      </div>
       <div id="talksList"></div>
       <button class="btn" id="addTalkBtn" style="margin-top:12px;" onclick="openTalkForm()">+ Add talk</button>
     </section>
@@ -458,6 +462,11 @@
         <label>Date</label><input id="talkDate" type="date">
         <label>Presented by</label><input id="talkPresenter" placeholder="Who ran the talk">
         <label>Notes / discussion points</label><textarea id="talkNotes" rows="3" placeholder="What was covered"></textarea>
+        <label class="chk" style="border-bottom:none; margin-top:16px;"><input type="checkbox" id="talkIsMandatory" onchange="onTalkMandatoryChange()"><span>This is mandatory health &amp; safety training</span></label>
+        <div id="talkMandatoryTopicWrap" style="display:none;">
+          <label style="margin-top:0;">Mandatory topic</label>
+          <select id="talkMandatoryTopic"></select>
+        </div>
         <label>Invite attendees</label>
         <div class="hint" style="margin-top:0;">Technicians and trainees invited to this talk — only invited people (and admin) will see it and can sign.</div>
         <div id="talkInviteList" class="card" style="background:var(--paper); padding:10px 14px;"></div>
@@ -475,6 +484,39 @@
       <button class="btn" id="talkSignBtn" style="display:none;" onclick="signTalkAttendance()">Sign attendance</button>
       <div class="section-title"><h2>Attendance</h2></div>
       <div id="talkAttendeesList"></div>
+    </section>
+
+    <!-- ===== MANDATORY TOPICS (admin only) ===== -->
+    <section id="view-mandatory-topics" class="view">
+      <div class="backbar"><button onclick="showView('view-talks')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2>Mandatory topics</h2></div>
+      <p class="hint" style="margin:0 0 12px;">The required health &amp; safety topics your staff must periodically cover. A toolbox talk tagged with one of these counts toward it.</p>
+      <div id="mandatoryTopicsList"></div>
+      <button class="btn" style="margin-top:12px;" onclick="openMandatoryTopicForm()">+ Add mandatory topic</button>
+
+      <div class="card" style="margin-top:20px; display:none;" id="mandatoryTopicFormCard">
+        <label style="margin-top:0;" id="mandatoryTopicFormTitle">New mandatory topic</label>
+        <label>Topic name</label><input id="mtName" placeholder="e.g. Fire safety induction">
+        <label>Repeats every</label>
+        <select id="mtRecurrence">
+          <option value="6">6 months</option>
+          <option value="12" selected>12 months</option>
+          <option value="24">24 months</option>
+          <option value="36">36 months</option>
+        </select>
+        <label>Notes</label><textarea id="mtNotes" rows="2"></textarea>
+        <div class="row" style="margin-top:16px;">
+          <button class="btn secondary" onclick="cancelMandatoryTopicForm()">Cancel</button>
+          <button class="btn" onclick="saveMandatoryTopic()">Save</button>
+        </div>
+        <button class="btn ghost" id="mtDeleteBtn" style="margin-top:10px; display:none;" onclick="deleteMandatoryTopic()">Delete this topic</button>
+      </div>
+    </section>
+
+    <!-- ===== TRAINING COMPLIANCE (admin only) ===== -->
+    <section id="view-training-compliance" class="view">
+      <div class="backbar"><button onclick="showView('view-talks')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2>Training compliance</h2></div>
+      <p class="hint" style="margin:0 0 12px;">Each active technician/trainee's most recent sign-off against each mandatory topic, and when they're next due.</p>
+      <div id="trainingComplianceList"></div>
     </section>
 
     <!-- ===== SITES (shared: admin sees all + manage, tech sees assigned only) ===== -->
@@ -920,7 +962,10 @@
     <section id="view-audit" class="view">
       <div class="section-title"><h2>Audit</h2></div>
       <p class="hint" style="margin:0 0 12px 0;">Your business's own compliance evidence for a SAQCC / SABS audit — separate from the client-facing site registers and certificates under Reports, and never sent to a client.</p>
-      <button class="btn secondary" style="margin-bottom:12px;" onclick="openCompliancePack()">Print compliance pack</button>
+      <div class="row" style="margin-bottom:12px;">
+        <button class="btn secondary" onclick="openCompliancePack()">Print compliance pack</button>
+        <button class="btn secondary" onclick="openTrainingComplianceReport()">Print training compliance report</button>
+      </div>
       <div id="companyExpirySummary"></div>
       <div class="pillrow" id="companyTabChips" style="margin-bottom:12px;"></div>
 
@@ -1669,7 +1714,7 @@ function showView(id){
   document.getElementById('navTrainees').classList.toggle('active', ['view-trainees','view-trainee-form','view-trainee-detail','view-verification'].includes(id));
   document.getElementById('navSignoffs').classList.toggle('active', ['view-signoffs','view-signoff-form'].includes(id));
   document.getElementById('navMyTrainees').classList.toggle('active', ['view-my-trainees','view-my-trainee-detail'].includes(id));
-  document.getElementById('navTalks').classList.toggle('active', ['view-talks','view-talk-form','view-talk-detail'].includes(id));
+  document.getElementById('navTalks').classList.toggle('active', ['view-talks','view-talk-form','view-talk-detail','view-mandatory-topics','view-training-compliance'].includes(id));
   document.getElementById('navCompany').classList.toggle('active', id==='view-company');
   const auditReport = id==='view-report' && reportBackView==='view-audit';
   document.getElementById('navAudit').classList.toggle('active', AUDIT_VIEWS.includes(id) || auditReport);
@@ -1691,6 +1736,8 @@ function showView(id){
   if(id==='view-my-trainees') renderMyTrainees();
   if(id==='view-my-trainee-detail') renderMyTraineeDetail();
   if(id==='view-talks') renderTalks();
+  if(id==='view-mandatory-topics') renderMandatoryTopics();
+  if(id==='view-training-compliance') loadTrainingCompliance();
 }
 
 /* ---------- Firestore listener bookkeeping ---------- */
@@ -2640,20 +2687,22 @@ async function openCalibrationCertRegister(){
 async function openCompliancePack(){
   toast('Building pack…');
   await loadCompanySettings();
-  let branches = [], vehicles = [], docs = [], staff = [], certs = [];
+  let branches = [], vehicles = [], docs = [], staff = [], certs = [], training = { topics:[], roster:[], rows:[] };
   try{
-    const [b, v, d, s, cc] = await Promise.all([
+    const [b, v, d, s, cc, tc] = await Promise.all([
       db.collection('branches').where('companyId','==',currentCompanyId).get(),
       db.collection('vehicles').where('companyId','==',currentCompanyId).get(),
       db.collection('companyDocuments').where('companyId','==',currentCompanyId).get(),
       db.collection('technicians').where('companyId','==',currentCompanyId).get(),
-      db.collection('calibrationCertificates').where('companyId','==',currentCompanyId).get()
+      db.collection('calibrationCertificates').where('companyId','==',currentCompanyId).get(),
+      computeTrainingCompliance()
     ]);
     branches = b.docs.map(x=>({id:x.id, ...x.data()}));
     vehicles = v.docs.map(x=>({id:x.id, ...x.data()}));
     docs = d.docs.map(x=>({id:x.id, ...x.data()}));
     staff = s.docs.map(x=>({id:x.id, ...x.data()}));
     certs = cc.docs.map(x=>({id:x.id, ...x.data()}));
+    training = tc;
   }catch(e){ toast('Could not load: ' + e.message); return; }
   const co = companySettings || {};
   const today = toLocalISO(new Date());
@@ -2673,6 +2722,11 @@ async function openCompliancePack(){
     const m = expiryStatus(x.medicalCertExpiry); if(m==='expired'||m==='soon') scan.push([`${x.name||'Employee'} — medical certificate`, x.medicalCertExpiry, m]);
   });
   certs.forEach(x=>{ const st = expiryStatus(x.nextDueDate); if(st==='expired'||st==='soon') scan.push([`${x.instrument||'Instrument'} — calibration`, x.nextDueDate, st]); });
+  training.rows.forEach(r=>{
+    if(!r.last){ scan.push([`${r.person.name||'Employee'} — ${r.topic.name}`, 'Never completed', 'expired']); return; }
+    const st = expiryStatus(r.nextDue);
+    if(st==='expired'||st==='soon') scan.push([`${r.person.name||'Employee'} — ${r.topic.name}`, r.nextDue, st]);
+  });
   scan.sort((a,b)=> (a[2]===b[2] ? (a[1]||'').localeCompare(b[1]||'') : (a[2]==='expired'?-1:1)));
 
   const docsRows = docs.length ? docs.map(x=>`<tr>
@@ -2731,6 +2785,16 @@ async function openCompliancePack(){
     <td>${x.certificateFileURL?'Yes':'No'}</td>
   </tr>`).join('') : `<tr><td colspan="7">No calibration certificates recorded.</td></tr>`;
 
+  const trainingStatusText = r => !r.last ? 'Never completed' : (expiryStatus(r.nextDue)==='expired' ? 'Overdue' : (expiryStatus(r.nextDue)==='soon' ? 'Due soon' : 'OK'));
+  const trainingRows = training.rows.length ? training.rows.map(r=>`<tr>
+    <td>${escapeHtml(r.topic.name)}</td>
+    <td>${escapeHtml(r.person.name)}</td>
+    <td>${escapeHtml(ROLE_LABEL[r.person.role]||r.person.role||'')}</td>
+    <td>${escapeHtml(r.last||'Never')}</td>
+    <td>${escapeHtml(r.nextDue||'—')}</td>
+    <td>${trainingStatusText(r)}</td>
+  </tr>`).join('') : `<tr><td colspan="6">No mandatory training topics recorded.</td></tr>`;
+
   showReport('Company compliance pack', `${letterheadHTML(co)}
     <h2 style="margin-top:16px; font-size:1rem;">Company Compliance Pack — SANS 1475 servicing organisation</h2>
     <div class="meta"><strong>Generated:</strong> ${today}</div>
@@ -2760,6 +2824,11 @@ async function openCompliancePack(){
     <div class="tablewrap"><table>
       <thead><tr><th>Instrument</th><th>Type</th><th>Laboratory</th><th>Certificate no.</th><th>Calibrated</th><th>Next due</th><th>Certificate on file</th></tr></thead>
       <tbody>${certRows}</tbody>
+    </table></div>
+    <h3 style="margin-top:18px; font-size:0.95rem;">Mandatory health &amp; safety training</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Topic</th><th>Name</th><th>Role</th><th>Last completed</th><th>Next due</th><th>Status</th></tr></thead>
+      <tbody>${trainingRows}</tbody>
     </table></div>`, 'view-audit');
 }
 
@@ -5504,6 +5573,7 @@ async function openCalibrationReport(backView){
 let talksCache = [];
 function renderTalks(){
   document.getElementById('talksBackToTraining').style.display = (currentRole==='trainee') ? 'block' : 'none';
+  document.getElementById('talksAdminRow').style.display = (currentRole==='admin') ? 'flex' : 'none';
   const canCreate = currentRole==='admin' || (currentProfile && currentProfile.canRunToolboxTalks);
   document.getElementById('addTalkBtn').style.display = canCreate ? 'block' : 'none';
   if(unsubTalks) unsubTalks();
@@ -5526,14 +5596,18 @@ function paintTalks(){
     <div>
       <div class="name">${escapeHtml(t.topic||'')}</div>
       <div class="meta">${escapeHtml(t.date||'')}${t.presenterName?(' · '+escapeHtml(t.presenterName)):''}</div>
+      ${t.mandatoryTopicName ? `<div style="margin-top:6px;"><span class="pill due">Mandatory: ${escapeHtml(t.mandatoryTopicName)}</span></div>` : ''}
     </div>
   </div>`).join('');
 }
+let mandatoryTopicsCache = [];
 async function openTalkForm(){
   document.getElementById('talkTopic').value = '';
   document.getElementById('talkDate').value = toLocalISO(new Date());
   document.getElementById('talkPresenter').value = currentProfile.name || '';
   document.getElementById('talkNotes').value = '';
+  document.getElementById('talkIsMandatory').checked = false;
+  document.getElementById('talkMandatoryTopicWrap').style.display = 'none';
   const listEl = document.getElementById('talkInviteList');
   listEl.innerHTML = `<div class="hint">Loading roster…</div>`;
   showView('view-talk-form');
@@ -5541,13 +5615,30 @@ async function openTalkForm(){
   // those are only ever populated by the admin-only Technicians/Trainees
   // tabs, and a permitted technician opening this form will usually have
   // visited neither.
-  let roster = [];
-  try{
-    const snap = await db.collection('technicians').where('companyId','==',currentCompanyId).get();
-    roster = snap.docs.map(d=>({id:d.id, ...d.data()}))
-      .filter(p=>(p.role==='technician' || p.role==='trainee') && p.active!==false)
+  const [rosterResult, topicsResult] = await Promise.allSettled([
+    db.collection('technicians').where('companyId','==',currentCompanyId).get(),
+    db.collection('mandatoryTopics').where('companyId','==',currentCompanyId).get()
+  ]);
+
+  const topicSel = document.getElementById('talkMandatoryTopic');
+  if(topicsResult.status==='fulfilled'){
+    mandatoryTopicsCache = topicsResult.value.docs.map(d=>({id:d.id, ...d.data()}))
+      .filter(t=>t.active!==false)
       .sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-  }catch(e){ listEl.innerHTML = `<div class="hint">Could not load roster: ${escapeHtml(e.message)}</div>`; return; }
+  } else {
+    mandatoryTopicsCache = [];
+  }
+  topicSel.innerHTML = mandatoryTopicsCache.length
+    ? mandatoryTopicsCache.map(t=>`<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('')
+    : `<option value="">No mandatory topics set up yet</option>`;
+
+  if(rosterResult.status!=='fulfilled'){
+    listEl.innerHTML = `<div class="hint">Could not load roster: ${escapeHtml(rosterResult.reason.message)}</div>`;
+    return;
+  }
+  const roster = rosterResult.value.docs.map(d=>({id:d.id, ...d.data()}))
+    .filter(p=>(p.role==='technician' || p.role==='trainee') && p.active!==false)
+    .sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   if(roster.length===0){
     listEl.innerHTML = `<div class="hint">No active technicians or trainees to invite yet.</div>`;
     return;
@@ -5558,16 +5649,26 @@ async function openTalkForm(){
       ${escapeHtml(p.name)} <span class="hint" style="margin:0;">(${p.role==='trainee'?'trainee':'technician'})</span>
     </label>`).join('');
 }
+function onTalkMandatoryChange(){
+  document.getElementById('talkMandatoryTopicWrap').style.display = document.getElementById('talkIsMandatory').checked ? 'block' : 'none';
+}
 async function saveTalk(){
   const topic = document.getElementById('talkTopic').value.trim();
   const date = document.getElementById('talkDate').value;
   if(!topic || !date){ toast('Enter at least a topic and date'); return; }
   const invitedIds = Array.from(document.querySelectorAll('#talkInviteList input[type=checkbox]:checked')).map(el=>el.value);
+  let mandatoryTopicId = '', mandatoryTopicName = '';
+  if(document.getElementById('talkIsMandatory').checked){
+    mandatoryTopicId = document.getElementById('talkMandatoryTopic').value;
+    if(!mandatoryTopicId){ toast('Choose which mandatory topic this covers, or add one first'); return; }
+    const mt = mandatoryTopicsCache.find(t=>t.id===mandatoryTopicId);
+    mandatoryTopicName = mt ? mt.name : '';
+  }
   const payload = {
     companyId: currentCompanyId, topic, date,
     presenterName: document.getElementById('talkPresenter').value.trim(),
     notes: document.getElementById('talkNotes').value.trim(),
-    invitedIds,
+    invitedIds, mandatoryTopicId, mandatoryTopicName,
     createdBy: currentUser.uid,
     createdByName: currentProfile.name || '',
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -5589,6 +5690,7 @@ async function openTalkDetail(id){
     <div class="kv"><span class="k">Date</span><span class="v">${escapeHtml(t.date||'')}</span></div>
     <div class="kv"><span class="k">Presented by</span><span class="v">${escapeHtml(t.presenterName||'—')}</span></div>
     <div class="kv"><span class="k">Logged by</span><span class="v">${escapeHtml(t.createdByName||'—')}</span></div>
+    ${t.mandatoryTopicName ? `<div class="kv"><span class="k">Mandatory topic</span><span class="v">${escapeHtml(t.mandatoryTopicName)}</span></div>` : ''}
     ${t.notes ? `<div class="kv"><span class="k">Notes</span><span class="v">${escapeHtml(t.notes)}</span></div>` : ''}`;
   document.getElementById('talkAttendeesList').innerHTML = `<div class="empty">Loading…</div>`;
   document.getElementById('talkSignBtn').style.display = 'none';
@@ -5637,6 +5739,179 @@ async function deleteTalkAttendee(talkId, uid){
     toast('Removed');
     await openTalkDetail(talkId);
   }catch(e){ toast('Error: ' + e.message); }
+}
+
+/* ---------- Mandatory H&S topics + training compliance (admin only) ----------
+   A mandatory topic is just a recurrence rule (name + how often, e.g. every
+   12 months). A toolboxTalks doc tags itself against one (mandatoryTopicId);
+   "compliant" is computed, not stored — see loadTrainingCompliance(). */
+let mandatoryTopicsAdminCache = [];
+async function renderMandatoryTopics(){
+  const wrap = document.getElementById('mandatoryTopicsList');
+  wrap.innerHTML = `<div class="empty">Loading…</div>`;
+  cancelMandatoryTopicForm();
+  try{
+    const snap = await db.collection('mandatoryTopics').where('companyId','==',currentCompanyId).get();
+    mandatoryTopicsAdminCache = snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  }catch(e){ wrap.innerHTML = `<div class="empty">Could not load: ${escapeHtml(e.message)}</div>`; return; }
+  if(mandatoryTopicsAdminCache.length===0){ wrap.innerHTML = `<div class="empty">No mandatory topics yet.</div>`; return; }
+  wrap.innerHTML = mandatoryTopicsAdminCache.map(t=>`<div class="card tech-card" onclick="openMandatoryTopicForm('${t.id}')" style="cursor:pointer;${t.active===false?'opacity:0.55;':''}">
+    <div>
+      <div class="name">${escapeHtml(t.name)}</div>
+      <div class="meta">Every ${t.recurrenceMonths||12} months</div>
+    </div>
+    ${t.active===false ? `<span class="pill" style="margin:0;">Inactive</span>` : ''}
+  </div>`).join('');
+}
+let editingMandatoryTopicId = null;
+function openMandatoryTopicForm(id){
+  editingMandatoryTopicId = id || null;
+  const t = id ? mandatoryTopicsAdminCache.find(x=>x.id===id) : null;
+  document.getElementById('mandatoryTopicFormTitle').textContent = t ? 'Edit mandatory topic' : 'New mandatory topic';
+  document.getElementById('mtName').value = t ? (t.name||'') : '';
+  document.getElementById('mtRecurrence').value = t ? String(t.recurrenceMonths||12) : '12';
+  document.getElementById('mtNotes').value = t ? (t.notes||'') : '';
+  document.getElementById('mtDeleteBtn').style.display = t ? 'block' : 'none';
+  document.getElementById('mandatoryTopicFormCard').style.display = 'block';
+}
+function cancelMandatoryTopicForm(){
+  editingMandatoryTopicId = null;
+  document.getElementById('mandatoryTopicFormCard').style.display = 'none';
+}
+async function saveMandatoryTopic(){
+  const name = document.getElementById('mtName').value.trim();
+  if(!name){ toast('Name the topic'); return; }
+  const payload = {
+    companyId: currentCompanyId, name,
+    recurrenceMonths: parseInt(document.getElementById('mtRecurrence').value, 10) || 12,
+    notes: document.getElementById('mtNotes').value.trim(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  try{
+    const ref = editingMandatoryTopicId ? db.collection('mandatoryTopics').doc(editingMandatoryTopicId) : db.collection('mandatoryTopics').doc();
+    if(!editingMandatoryTopicId){ payload.createdAt = firebase.firestore.FieldValue.serverTimestamp(); payload.active = true; }
+    await ref.set(payload, {merge:true});
+    toast('Mandatory topic saved');
+    await renderMandatoryTopics();
+  }catch(e){ toast('Error: ' + e.message); }
+}
+async function deleteMandatoryTopic(){
+  if(!editingMandatoryTopicId) return;
+  if(!confirm('Delete this mandatory topic? Past talks tagged with it keep their record, but compliance tracking for it stops.')) return;
+  try{
+    await db.collection('mandatoryTopics').doc(editingMandatoryTopicId).delete();
+    toast('Deleted');
+    await renderMandatoryTopics();
+  }catch(e){ toast('Error: ' + e.message); }
+}
+// Shared by the on-screen Training compliance table (Talks tab, admin) and
+// both Audit reports (standalone + folded into the Company compliance pack)
+// — one {topics, roster, rows} computation, reused everywhere so the number
+// on screen and the number on a printed report can never disagree.
+async function computeTrainingCompliance(){
+  const [topicsSnap, rosterSnap] = await Promise.all([
+    db.collection('mandatoryTopics').where('companyId','==',currentCompanyId).get(),
+    db.collection('technicians').where('companyId','==',currentCompanyId).get()
+  ]);
+  const topics = topicsSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(t=>t.active!==false);
+  const roster = rosterSnap.docs.map(d=>({id:d.id, ...d.data()}))
+    .filter(p=>(p.role==='technician' || p.role==='trainee') && p.active!==false)
+    .sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+
+  // For each topic, a collection-group query across every talk's attendees
+  // finds every signed attendance company-wide; reduced here to the latest
+  // signedAt per person (Firestore has no server-side GROUP BY).
+  const latestByTopic = {};
+  for(const topic of topics){
+    latestByTopic[topic.id] = {};
+    try{
+      const snap = await db.collectionGroup('attendees')
+        .where('companyId','==',currentCompanyId)
+        .where('mandatoryTopicId','==',topic.id)
+        .get();
+      snap.docs.forEach(d=>{
+        const data = d.data();
+        const uid = d.id;
+        const signedAt = (data.signedAt && data.signedAt.toDate) ? toLocalISO(data.signedAt.toDate()) : null;
+        if(signedAt && (!latestByTopic[topic.id][uid] || signedAt > latestByTopic[topic.id][uid])){
+          latestByTopic[topic.id][uid] = signedAt;
+        }
+      });
+    }catch(e){ toast(`Could not load compliance for ${topic.name}: ${e.message}`); }
+  }
+
+  const rows = [];
+  topics.forEach(topic=>{
+    roster.forEach(person=>{
+      const last = latestByTopic[topic.id][person.id];
+      const nextDue = last ? addMonthsToDate(last, topic.recurrenceMonths||12) : '';
+      rows.push({ person, topic, last, nextDue });
+    });
+  });
+  rows.sort((a,b)=>(a.topic.name||'').localeCompare(b.topic.name||'') || (a.person.name||'').localeCompare(b.person.name||''));
+  return { topics, roster, rows };
+}
+async function loadTrainingCompliance(){
+  const wrap = document.getElementById('trainingComplianceList');
+  wrap.innerHTML = `<div class="empty">Loading…</div>`;
+  let topics, roster, rows;
+  try{
+    ({ topics, roster, rows } = await computeTrainingCompliance());
+  }catch(e){ wrap.innerHTML = `<div class="empty">Could not load: ${escapeHtml(e.message)}</div>`; return; }
+  if(topics.length===0){ wrap.innerHTML = `<div class="empty">No active mandatory topics — add one first.</div>`; return; }
+  if(roster.length===0){ wrap.innerHTML = `<div class="empty">No active technicians or trainees yet.</div>`; return; }
+
+  wrap.innerHTML = `<div class="card" style="padding:0; overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:0.82rem;">
+      <thead><tr>
+        <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--line);">Topic</th>
+        <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--line);">Person</th>
+        <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--line);">Last completed</th>
+        <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--line);">Status</th>
+      </tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td style="padding:8px 10px; border-bottom:1px solid var(--line);">${escapeHtml(r.topic.name)}</td>
+        <td style="padding:8px 10px; border-bottom:1px solid var(--line);">${escapeHtml(r.person.name)} <span class="hint" style="margin:0;">(${escapeHtml(r.person.role)})</span></td>
+        <td style="padding:8px 10px; border-bottom:1px solid var(--line);">${escapeHtml(r.last||'Never')}</td>
+        <td style="padding:8px 10px; border-bottom:1px solid var(--line);">${r.nextDue ? expiryPill(r.nextDue,'Next due') : `<span class="pill fail">Never completed</span>`}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+  </div>`;
+}
+// Standalone printable version of the same compliance data, launched from the
+// Audit tab — mandatory training is a required record, so it belongs in the
+// audit package alongside Company Documents/Employees/Vehicles/Workshops/
+// Calibration, not just the on-screen table under Talks.
+async function openTrainingComplianceReport(){
+  toast('Building report…');
+  await loadCompanySettings();
+  let topics, roster, rows;
+  try{
+    ({ topics, roster, rows } = await computeTrainingCompliance());
+  }catch(e){ toast('Could not load: ' + e.message); return; }
+  const co = companySettings || {};
+  const today = toLocalISO(new Date());
+  const statusText = r => !r.last ? 'Never completed' : (expiryStatus(r.nextDue)==='expired' ? 'Overdue' : (expiryStatus(r.nextDue)==='soon' ? 'Due soon' : 'OK'));
+  const overdueCount = rows.filter(r=>!r.last || expiryStatus(r.nextDue)==='expired').length;
+  const rowsHtml = rows.length ? rows.map(r=>`<tr>
+    <td>${escapeHtml(r.topic.name)}</td>
+    <td>${escapeHtml(r.person.name)}</td>
+    <td>${escapeHtml(ROLE_LABEL[r.person.role]||r.person.role||'')}</td>
+    <td>${escapeHtml(r.last||'Never')}</td>
+    <td>${escapeHtml(r.nextDue||'—')}</td>
+    <td>${statusText(r)}</td>
+  </tr>`).join('') : `<tr><td colspan="6">No mandatory topics or staff to report on yet.</td></tr>`;
+  showReport('Training compliance report', `${letterheadHTML(co)}
+    <h2 style="margin-top:16px; font-size:1rem;">Mandatory Health &amp; Safety Training — Compliance Report</h2>
+    <div class="meta">
+      <strong>Generated:</strong> ${today}<br>
+      <strong>Mandatory topics:</strong> ${topics.length}<br>
+      <strong>Overdue / never completed:</strong> ${overdueCount}
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Topic</th><th>Name</th><th>Role</th><th>Last completed</th><th>Next due</th><th>Status</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table></div>`, 'view-audit');
 }
 
 /* ---------- Monthly responsible-person inspection (SANS 10105-1) ----------

@@ -15,6 +15,14 @@
         { "fieldPath": "invitedIds", "arrayConfig": "CONTAINS" },
         { "fieldPath": "companyId", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "attendees",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "companyId", "order": "ASCENDING" },
+        { "fieldPath": "mandatoryTopicId", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -314,6 +314,18 @@ service cloud.firestore {
       }
     }
 
+    // Admin-managed catalog of mandatory H&S topics (e.g. "Fire safety
+    // induction", recurring every 12 months) — a toolboxTalks doc tags itself
+    // against one of these (mandatoryTopicId) to count as satisfying it. Read
+    // is company-wide (not admin-only) because the talk-creation form needs
+    // this list for its topic dropdown, and a technician permitted to create
+    // a talk won't necessarily have visited any admin-only screen.
+    match /mandatoryTopics/{id} {
+      allow read:   if isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && myCompanyId() == resource.data.companyId);
+      allow create: if isCompanyAdmin(request.resource.data.companyId);
+      allow update, delete: if isCompanyAdmin(resource.data.companyId);
+    }
+
     // Monthly responsible-person inspection log (SANS 10105-1). One record per
     // site per month. Read access is restricted to whichever Competent
     // Person(s) are assigned to the site — not a maintenance technician's

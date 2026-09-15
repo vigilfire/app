@@ -854,6 +854,10 @@ exports.signToolboxTalk = onCall(async (request) => {
     companyId: selfData.companyId,
     name: selfData.name || "",
     role: selfData.role || "",
+    // Copied from the parent talk so a collection-group query across every
+    // talk's attendees can find "who's completed mandatory topic X and when"
+    // without joining back to each parent doc.
+    mandatoryTopicId: talkSnap.data().mandatoryTopicId || null,
     signedAt: admin.firestore.FieldValue.serverTimestamp(),
     signedIp: getCallerIp(request),
     signedDeviceId: deviceId,
@@ -874,7 +878,7 @@ const ACTIVITY_COLLECTIONS = [
   "monthlyChecks", "serviceEvents", "traineeAssignments",
   "technicians", "emailLog", "traineeCompetencies",
   "branches", "vehicles", "companyDocuments", "calibrationCertificates",
-  "toolboxTalks",
+  "toolboxTalks", "mandatoryTopics",
 ];
 ACTIVITY_COLLECTIONS.forEach((collectionId) => {
   exports[`bumpActivity_${collectionId}`] = onDocumentWritten(
