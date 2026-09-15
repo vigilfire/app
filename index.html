@@ -1145,6 +1145,20 @@
       </div>
     </section>
 
+    <!-- ===== ASSIGN TOOL TO TECHNICIAN (admin) — quick action, workshop tools only ===== -->
+    <section id="view-tool-assign" class="view">
+      <div class="backbar"><button onclick="showView('view-audit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="toolAssignTitle">Assign to technician</h2></div>
+      <div class="card">
+        <p class="hint" style="margin:0 0 12px;">The technician in charge of this workshop tool — it stays a shared workshop tool, this just names who's responsible for it.</p>
+        <label style="margin-top:0;">Technician in charge</label>
+        <select id="toolAssignTechnician"></select>
+        <div class="row" style="margin-top:16px;">
+          <button class="btn secondary" onclick="showView('view-audit')">Cancel</button>
+          <button class="btn" onclick="saveToolAssign()">Save</button>
+        </div>
+      </div>
+    </section>
+
     <!-- ===== WORKSHOP / BRANCH FORM (admin) ===== -->
     <section id="view-branch-form" class="view">
       <div class="backbar"><button onclick="showView('view-audit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="branchFormTitle">New workshop</h2></div>
@@ -1743,7 +1757,7 @@ let emailBackView = 'view-export';           // where the "Email to site" screen
 // The Audit tab (Company Documents / Employees / Vehicles / Workshops /
 // Calibration) is gated behind the `audit` company add-on — see
 // currentCompanyAddons, populated once at login.
-const AUDIT_VIEWS = ['view-audit','view-company-doc-form','view-vehicle-form','view-branch-form','view-employee-compliance','view-calibration-cert-form','view-tool-form'];
+const AUDIT_VIEWS = ['view-audit','view-company-doc-form','view-vehicle-form','view-branch-form','view-employee-compliance','view-calibration-cert-form','view-tool-form','view-tool-assign'];
 function showView(id){
   if(AUDIT_VIEWS.includes(id) && !(currentRole==='admin' && currentCompanyAddons && currentCompanyAddons.audit)){
     id = 'view-sites';   // add-on not enabled (or disabled after this session logged in) — the nav button is hidden too, this just guards direct navigation
@@ -2753,7 +2767,10 @@ function toolHolderLabel(t){
     const tech = allStaffCache.find(s=>s.id===t.assignedTechnicianId);
     return tech ? `${escapeHtml(tech.name)} (technician)` : 'Unassigned technician';
   }
-  return t.branchId ? `${escapeHtml(branchName(t.branchId))} (workshop)` : 'Workshop';
+  const base = t.branchId ? `${escapeHtml(branchName(t.branchId))} (workshop)` : 'Workshop';
+  if(!t.responsibleTechnicianId) return base;
+  const resp = allStaffCache.find(s=>s.id===t.responsibleTechnicianId);
+  return resp ? `${base} — ${escapeHtml(resp.name)} in charge` : base;
 }
 function renderTools(){
   const wrap = document.getElementById('toolsList');
@@ -2764,6 +2781,7 @@ function renderTools(){
       <div class="name">${escapeHtml(t.name||'')}</div>
       <div class="meta">${t.serial?(escapeHtml(t.serial)+' · '):''}${toolHolderLabel(t)}</div>
     </div>
+    ${t.ownerType!=='technician' ? `<span onclick="event.stopPropagation(); openToolAssign('${t.id}')" style="color:var(--red-dark); cursor:pointer; font-weight:700; font-size:0.8rem; white-space:nowrap;">Assign to technician</span>` : ''}
   </div>`).join('');
   fillToolCheckSelect();
 }
@@ -2828,6 +2846,31 @@ async function deleteTool(){
   try{
     await db.collection('tools').doc(editingToolId).delete();
     toast('Deleted');
+    showView('view-audit');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+let assigningToolId = null;
+function openToolAssign(id){
+  assigningToolId = id;
+  const t = toolsCache.find(x=>x.id===id);
+  if(!t){ toast('Tool not found'); return; }
+  document.getElementById('toolAssignTitle').textContent = `Assign "${t.name||'tool'}"`;
+  const sel = document.getElementById('toolAssignTechnician');
+  sel.innerHTML = '<option value="">— none —</option>' + allStaffCache
+    .filter(s=>s.role==='technician' && s.active!==false)
+    .sort((a,b)=>(a.name||'').localeCompare(b.name||''))
+    .map(s=>`<option value="${s.id}">${escapeHtml(s.name||'')}</option>`).join('');
+  sel.value = t.responsibleTechnicianId || '';
+  showView('view-tool-assign');
+}
+async function saveToolAssign(){
+  if(!assigningToolId) return;
+  try{
+    await db.collection('tools').doc(assigningToolId).update({
+      responsibleTechnicianId: document.getElementById('toolAssignTechnician').value || '',
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    toast('Tool assigned');
     showView('view-audit');
   }catch(e){ toast('Error: ' + e.message); }
 }
@@ -3002,7 +3045,10 @@ async function openCompliancePack(){
       const tech = staff.find(s=>s.id===t.assignedTechnicianId);
       return tech ? `${escapeHtml(tech.name)} (technician)` : 'Unassigned technician';
     }
-    return t.branchId ? `${bn(t.branchId)} (workshop)` : 'Workshop';
+    const base = t.branchId ? `${bn(t.branchId)} (workshop)` : 'Workshop';
+    if(!t.responsibleTechnicianId) return base;
+    const resp = staff.find(s=>s.id===t.responsibleTechnicianId);
+    return resp ? `${base} — ${escapeHtml(resp.name)} in charge` : base;
   };
   const toolRows = tools.length ? tools.map(t=>{
     const last = latestCheckByTool[t.id];
