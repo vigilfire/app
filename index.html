@@ -586,6 +586,7 @@
 
       <button class="btn secondary" id="registerBtn" style="margin-bottom:8px; display:none;" onclick="openRegister(currentSiteId)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>Printable register</button>
       <div id="registerBlockNote" class="hint" style="display:none; color:var(--red-dark); margin:0 0 14px 2px;"></div>
+      <button class="btn secondary" id="condemnedReportBtn" style="margin-bottom:14px; display:none;" onclick="openCondemnedReport(currentSiteId)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Condemned units notice</button>
 
       <button class="btn secondary" id="monthlyBtn" style="margin-bottom:14px;" onclick="openMonthlyCheck(currentSiteId)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/></svg>Monthly inspection</button>
 
@@ -726,6 +727,23 @@
           <label>Replaced by (new asset tag / serial, if applicable)</label>
           <input id="eqReplacedBy" placeholder="e.g. FW-0417">
           <div class="hint">A condemned cylinder is indelibly marked "CONDEMNED" and returned to the owner un-assembled (clause 5.3.6). It stays in the register history but is dropped from the active equipment count, the compliance summary and the Due list.</div>
+          <div id="condemnClientResponseWrap" style="display:none;">
+            <div class="divider"></div>
+            <label style="margin-top:0;">Client response</label>
+            <div class="hint" id="condemnResponseStatus" style="margin:0 0 10px;"></div>
+            <label>Action plan</label>
+            <select id="eqCondemnedActionPlan">
+              <option value="">Not yet decided</option>
+              <option value="replace-company">Replace via company</option>
+              <option value="replace-privately">Replace privately</option>
+              <option value="other">Other</option>
+            </select>
+            <label>Notes</label>
+            <input id="eqCondemnedActionPlanNotes" placeholder="Optional — detail on the client's decision">
+            <label>Date recorded</label>
+            <input id="eqCondemnedActionPlanDate" type="date">
+            <div class="hint">Send the condemned units report from Site &rarr; Email (or Reports) to notify the client — it starts the 7-day response window. Record what they decide here.</div>
+          </div>
         </div>
 
         <div class="divider"></div>
@@ -783,6 +801,7 @@
     <section id="view-due" class="view">
       <div class="section-title"><h2>Due &amp; overdue</h2></div>
       <p class="hint" style="margin:0 0 12px 0;">Equipment overdue or due this month or next, plus anything awaiting a recharge, across your sites. Tap an item to open it, or record a recharge month right here.</p>
+      <div class="pillrow" id="dueFilterChips" style="margin-bottom:10px;"></div>
       <div id="dueList"><div class="empty">Loading…</div></div>
     </section>
 
@@ -965,6 +984,7 @@
       <div class="row" style="margin-bottom:12px;">
         <button class="btn secondary" onclick="openCompliancePack()">Print compliance pack</button>
         <button class="btn secondary" onclick="openTrainingComplianceReport()">Print training compliance report</button>
+        <button class="btn secondary" onclick="openCondemnedUnitsSummaryReport()">Condemned units summary</button>
       </div>
       <div id="companyExpirySummary"></div>
       <div class="pillrow" id="companyTabChips" style="margin-bottom:12px;"></div>
@@ -1351,6 +1371,8 @@
         <label class="chk"><input type="checkbox" id="emailInclRegister" checked><span>Printable site register</span></label>
         <label class="chk"><input type="checkbox" id="emailInclCert"><span>Maintenance certificate</span></label>
         <div class="hint" id="emailCertHint"></div>
+        <label class="chk"><input type="checkbox" id="emailInclCondemned"><span>Condemned units notice</span></label>
+        <div class="hint" id="emailCondemnedHint"></div>
         <label>Message (optional)</label>
         <textarea id="emailMessage" placeholder="Short note to the site contact"></textarea>
         <div class="row" style="margin-top:16px;">
@@ -1880,6 +1902,7 @@ function openSite(id){
   document.getElementById('siteDetailAddress').textContent = site ? (site.address||'') : '';
   document.getElementById('registerBtn').style.display = currentRole==='admin' ? '' : 'none';
   document.getElementById('registerBlockNote').style.display = 'none';
+  document.getElementById('condemnedReportBtn').style.display = 'none';
   // Monthly checks are a Competent Person's job now, not a maintenance
   // technician's — this button stays for admin oversight/fallback only.
   document.getElementById('monthlyBtn').style.display = currentRole==='admin' ? '' : 'none';
@@ -3576,6 +3599,99 @@ async function openRegister(siteId, backView, opts){
   showView('view-register');
 }
 
+/* ---------- Condemned units notice (admin only) ----------
+   Lists every condemned item at the site that has no recorded client action
+   plan yet, with a fixed notice that the client must respond within 7 days
+   with their intended action — replacement through the company, or
+   privately. Once an item's action plan is recorded it drops off this list
+   (see saveEquipment()/the equipment form's "Client response" block) — the
+   full, permanent record of every condemned item and how it was resolved
+   lives in the Audit "Condemned units summary" report instead. */
+async function openCondemnedReport(siteId, opts){
+  opts = opts || {};
+  const say = m => { if(!opts.silent) toast(m); };
+  if(currentRole !== 'admin'){ say('Only an administrator can generate the condemned units notice'); return opts.silent ? {error:'Admins only'} : undefined; }
+  const site = sitesCache.find(s=>s.id===siteId);
+  if(!site){ say('Site not found'); return opts.silent ? {error:'Site not found'} : undefined; }
+  say('Building condemned units notice…');
+  await loadCompanySettings();
+  let items = [];
+  try{
+    const snap = await db.collection('equipment').where('siteId','==', siteId).where('companyId','==',currentCompanyId).get();
+    items = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  }catch(e){ say('Could not load equipment: ' + e.message); return opts.silent ? {error:e.message} : undefined; }
+  items = items.filter(e=>e.condemned && !e.condemnedActionPlan);
+  if(!items.length){ say('No unresolved condemned units at this site'); return opts.silent ? {error:'Nothing to report'} : undefined; }
+  items.sort((a,b)=>(a.location||'').localeCompare(b.location||''));
+
+  const co = companySettings || {};
+  const today = toLocalISO(new Date());
+  const siteContact = [
+    site.contactPerson ? `Attn: ${escapeHtml(site.contactPerson)}` : '',
+    site.contactPhone ? escapeHtml(site.contactPhone) : '',
+    site.email ? escapeHtml(site.email) : ''
+  ].filter(Boolean).join('<br>');
+
+  const rows = items.map(e=>{
+    const criteria = Object.entries(e.condemnedCriteria||{}).filter(([,v])=>v)
+      .map(([k])=>{ const c = CONDEMN_CRITERIA.find(c=>c[0]===k); return c ? c[1] : k; });
+    const reason = [e.condemnedReason||'', ...criteria].filter(Boolean).join('; ');
+    return `<tr>
+      <td>${escapeHtml(typeLabel(e.type))}</td>
+      <td>${escapeHtml(e.serial||'')}</td>
+      <td>${escapeHtml(e.location||'')}</td>
+      <td>${escapeHtml(ym(e.condemnedDate)||'')}</td>
+      <td>${escapeHtml(reason)}</td>
+    </tr>`;
+  }).join('');
+
+  const inner = `
+    <div class="cert-head">
+      <div class="from">
+        ${co.logo ? `<img class="logo" src="${co.logo}" alt="">` : ''}
+        <h1>${escapeHtml(co.name || 'Condemned Units Notice')}</h1>
+        <div class="co">
+          ${co.reg ? 'Reg: '+escapeHtml(co.reg)+'<br>' : ''}
+          ${co.address ? escapeHtml(co.address)+'<br>' : ''}
+          ${[co.phone, co.email].filter(Boolean).map(escapeHtml).join(' · ')}
+        </div>
+      </div>
+      <div class="to">
+        <div class="k">Site</div>
+        <div class="site-name">${escapeHtml(site.name)}</div>
+        ${site.address ? `<div>${escapeHtml(site.address)}</div>` : ''}
+        ${siteContact ? `<div>${siteContact}</div>` : ''}
+      </div>
+    </div>
+
+    <h2 style="margin-top:18px; font-size:1rem;">Condemned Units Notice</h2>
+    <div class="meta"><strong>Date issued:</strong> ${today}</div>
+
+    <div class="declaration" style="margin-top:14px; padding:12px 14px; border:2px solid #C0362C; border-radius:8px; background:#FCEEEC;">
+      <strong>Action required within 7 days.</strong> The fire extinguishing unit(s) listed
+      below have been inspected and condemned in accordance with SANS 1475-1 (clause
+      5.2.6) and are no longer serviceable. They have been marked "CONDEMNED" and
+      removed from service. Please respond to this notice within <strong>7 days</strong>
+      of the date issued above with your intended action for each unit — replacement
+      through ${escapeHtml(co.name || 'us')}, or replacement arranged privately. Until a
+      replacement is in place, fire-fighting coverage at the affected location(s) is
+      reduced.
+    </div>
+
+    <h3>Condemned units</h3>
+    <table>
+      <thead><tr><th>Equipment type</th><th>Serial / tag</th><th>Location</th><th>Condemned</th><th>Reason</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+
+    <div class="declaration">Condemned cylinders are indelibly marked "CONDEMNED" and returned to the owner un-assembled (SANS 1475-1 clause 5.3.6).</div>
+
+    ${signatoryBlockHTML(co)}`;
+
+  if(opts.silent) return { inner, title:'Condemned units notice — '+site.name, itemIds: items.map(e=>e.id) };
+  showReport('Condemned units notice — ' + site.name, inner, 'view-site-detail');
+}
+
 /* ============================================================
    Email the register / certificate to the site (admin only)
    The PDF is rendered by the `emailSiteDocuments` Cloud Function from the
@@ -3642,6 +3758,18 @@ async function openEmailSite(siteId, backView){
   certCb.disabled = !certOk;
   document.getElementById('emailCertHint').textContent = certOk
     ? '' : 'The certificate becomes available once the site is marked complete.';
+  const condemnedCb = document.getElementById('emailInclCondemned');
+  const condemnedHint = document.getElementById('emailCondemnedHint');
+  condemnedCb.checked = false;
+  condemnedCb.disabled = true;
+  condemnedHint.textContent = 'Checking for condemned units…';
+  db.collection('equipment').where('siteId','==', siteId).where('companyId','==',currentCompanyId).get()
+    .then(snap => {
+      const unresolved = snap.docs.some(d => { const e = d.data(); return e.condemned && !e.condemnedActionPlan; });
+      condemnedCb.disabled = !unresolved;
+      condemnedHint.textContent = unresolved ? '' : 'No unresolved condemned units at this site.';
+    })
+    .catch(() => { condemnedHint.textContent = ''; });
   document.getElementById('emailMessage').value = '';
   const sendBtn = document.getElementById('emailSendBtn');
   const status = document.getElementById('emailStatus');
@@ -3664,7 +3792,8 @@ async function sendSiteEmail(){
   if(!/^\S+@\S+\.\S+$/.test(to)){ toast('Enter a valid recipient email'); return; }
   const wantReg = document.getElementById('emailInclRegister').checked;
   const wantCert = document.getElementById('emailInclCert').checked;
-  if(!wantReg && !wantCert){ toast('Choose at least one document'); return; }
+  const wantCondemned = document.getElementById('emailInclCondemned').checked;
+  if(!wantReg && !wantCert && !wantCondemned){ toast('Choose at least one document'); return; }
   if(!navigator.onLine){ toast('You are offline — reconnect to send'); return; }
 
   const btn = document.getElementById('emailSendBtn');
@@ -3673,6 +3802,7 @@ async function sendSiteEmail(){
   status.textContent = 'Preparing documents…';
 
   const documents = [];
+  let condemnedItemIds = [];
   try{
     if(wantReg){
       const r = await openRegister(siteId, null, {silent:true});
@@ -3686,6 +3816,13 @@ async function sendSiteEmail(){
       documents.push({ kind:'certificate', landscape:false, filename:`maintenance-certificate-${slugify(site.name)}.pdf`,
         html: certDocumentHTML(c.inner, c.title) });
     }
+    if(wantCondemned){
+      const cn = await openCondemnedReport(siteId, {silent:true});
+      if(!cn || cn.error) throw new Error(cn && cn.error ? cn.error : 'Could not build the condemned units notice');
+      documents.push({ kind:'condemned', landscape:false, filename:`condemned-units-notice-${slugify(site.name)}.pdf`,
+        html: certDocumentHTML(cn.inner, cn.title) });
+      condemnedItemIds = cn.itemIds || [];
+    }
     status.textContent = 'Sending…';
     const call = firebase.functions().httpsCallable('emailSiteDocuments');
     await call({
@@ -3693,6 +3830,11 @@ async function sendSiteEmail(){
       message: document.getElementById('emailMessage').value.trim(),
       documents
     });
+    if(condemnedItemIds.length){
+      const batch = db.batch();
+      condemnedItemIds.forEach(id => batch.update(db.collection('equipment').doc(id), { condemnedReportSentAt: firebase.firestore.FieldValue.serverTimestamp() }));
+      await batch.commit().catch(()=>{});
+    }
     status.textContent = 'Sent to ' + to + '.';
     toast('Email sent');
     renderEmailLog(siteId);
@@ -3778,6 +3920,11 @@ function paintEquipment(){
     note.style.display = (currentRole==='admin' && outstanding) ? 'block' : 'none';
     note.textContent = `${outstanding} item${outstanding===1?'':'s'} awaiting recharge — clear these before the register can be generated.`;
   }
+  const condemnedBtn = document.getElementById('condemnedReportBtn');
+  if(condemnedBtn){
+    const unresolvedCondemned = equipmentCache.filter(e=>e.condemned && !e.condemnedActionPlan).length;
+    condemnedBtn.style.display = (currentRole==='admin' && unresolvedCondemned) ? 'inline-flex' : 'none';
+  }
   if(equipmentCache.length===0){
     bar.style.display = 'none';
     wrap.innerHTML = `<div class="empty"><div class="big">${ICON.extinguisher}</div>No equipment logged at this site yet.</div>`;
@@ -3862,6 +4009,9 @@ function renderEquipFilterChips(counts){
 function setEquipFilter(k){ equipmentFilter = k; paintEquipment(); }
 
 /* ---------- "Due & overdue" dashboard ---------- */
+let dueFilter = 'routine';   // routine | medium
+let dueItemsCache = [];      // last-fetched batch — reused when just toggling the chip
+
 async function renderDueDashboard(){
   const wrap = document.getElementById('dueList');
   const siteIds = sitesCache.map(s=>s.id);
@@ -3870,20 +4020,41 @@ async function renderDueDashboard(){
     return;
   }
   wrap.innerHTML = `<div class="empty">Loading…</div>`;
-  const cm = thisMonth();                 // current month, YYYY-MM
-  const horizonMonth = addMonths(cm, 1);  // include items due this month or next
-
-  let items = [];
   try{
     const batches = [];
     for(let i=0; i<siteIds.length; i+=10){
       batches.push(db.collection('equipment').where('siteId','in', siteIds.slice(i, i+10)).where('companyId','==',currentCompanyId).get());
     }
-    (await Promise.all(batches)).forEach(snap => snap.forEach(d=>items.push({ id:d.id, ...d.data() })));
+    dueItemsCache = [];
+    (await Promise.all(batches)).forEach(snap => snap.forEach(d=>dueItemsCache.push({ id:d.id, ...d.data() })));
   }catch(e){
     wrap.innerHTML = `<div class="empty">Could not load equipment: ${escapeHtml(e.message)}</div>`;
     return;
   }
+  paintDueDashboard();
+}
+
+function setDueFilter(k){ dueFilter = k; paintDueDashboard(); }
+
+function renderDueFilterChips(routineCount, mediumCount){
+  const chips = [
+    ['routine', `Routine ${routineCount}`],
+    ['medium', `Medium replacement ${mediumCount}`]
+  ];
+  document.getElementById('dueFilterChips').innerHTML = chips.map(([k,label])=>
+    `<button class="chip ${dueFilter===k?'active':''}" onclick="setDueFilter('${k}')">${escapeHtml(label)}</button>`).join('');
+}
+
+// Medium-replacement items get their own chip rather than being folded into
+// the routine list: a 5-10 year interval needs a much longer lookahead than
+// routine's 1-month horizon, and mixing the two would bury this one — the
+// "kept in the background" reminder the user asked for.
+function paintDueDashboard(){
+  const wrap = document.getElementById('dueList');
+  const items = dueItemsCache;
+  const cm = thisMonth();                 // current month, YYYY-MM
+  const horizonMonth = addMonths(cm, 1);  // include items due this month or next
+  const mediumHorizon = addMonths(cm, 12);
 
   const flagged = [];
   items.forEach(e=>{
@@ -3909,6 +4080,32 @@ async function renderDueDashboard(){
     if(reasons.length) flagged.push({ e, reasons, earliest, overdue: reasons.some(r=>r.overdue), rechargeOut });
   });
 
+  const mediumFlagged = items
+    .filter(e=>!e.condemned && e.mediumReplaceDue && e.mediumReplaceDue <= mediumHorizon)
+    .sort((a,b)=>(a.mediumReplaceDue||'').localeCompare(b.mediumReplaceDue||''));
+
+  renderDueFilterChips(flagged.length, mediumFlagged.length);
+
+  const siteName = id => (sitesCache.find(s=>s.id===id)||{}).name || 'Unknown site';
+
+  if(dueFilter==='medium'){
+    if(mediumFlagged.length===0){
+      wrap.innerHTML = `<div class="empty"><div class="big">${ICON.check}</div>No extinguishing-medium replacements due in the next 12 months.</div>`;
+      return;
+    }
+    wrap.innerHTML = mediumFlagged.map(e=>{
+      const overdue = e.mediumReplaceDue < cm;
+      return `<div class="insp-row status-${overdue?'fail':'due'}" onclick="dashboardOpen('${e.siteId}','${e.id}')">
+        <div class="top">
+          <span class="date">${escapeHtml(typeLabel(e.type))}${e.serial?(' · '+escapeHtml(e.serial)):''}</span>
+          <span class="pill ${overdue?'fail':'due'}">${overdue?'Overdue':'Due '+escapeHtml(e.mediumReplaceDue)}</span>
+        </div>
+        <div class="sub">${escapeHtml(siteName(e.siteId))}${e.location?(' · '+escapeHtml(e.location)):''}</div>
+      </div>`;
+    }).join('');
+    return;
+  }
+
   if(flagged.length===0){
     wrap.innerHTML = `<div class="empty"><div class="big">${ICON.check}</div>Nothing due this month or next.</div>`;
     return;
@@ -3918,7 +4115,6 @@ async function renderDueDashboard(){
     (b.overdue - a.overdue) ||
     ((a.earliest||'9999-99-99').localeCompare(b.earliest||'9999-99-99')));
 
-  const siteName = id => (sitesCache.find(s=>s.id===id)||{}).name || 'Unknown site';
   wrap.innerHTML = flagged.map(({e, reasons, overdue, rechargeOut})=>`
     <div class="insp-row status-${overdue?'fail':'due'}" onclick="dashboardOpen('${e.siteId}','${e.id}')">
       <div class="top">
@@ -3973,17 +4169,22 @@ function statusLabel(s){ return s==='fail' ? 'Non-compliant' : (s==='attention' 
                          "pressure test due" (null = no auto-fill)
    weightCheckMonths  -> interim weight-check interval (CO₂ / gas cartridge = 6)
    hoseYears          -> hose-replacement interval for hose reels (5)
-   hasMass            -> show the "actual mass at service" field                */
+   hasMass            -> show the "actual mass at service" field
+   mediumYears        -> extinguishing-medium life span, SANS 1475-1 clause 4.4.2
+                         Table 1 (10 yrs powder/halon/CO₂, 5 yrs water/foam; null =
+                         no defined medium life span for this type). Drives the
+                         background-computed mediumReplaceDue — see saveEquipment()
+                         and the Due tab's "Medium replacement" chip.             */
 const EQUIPMENT_TYPES = {
-  '1.5kg DCP':    { label:'1.5kg DCP',      category:'default',  ptYears:5,    hasMass:true },
-  '2kg DCP':      { label:'2kg DCP',        category:'default',  ptYears:5,    hasMass:true },
-  '4.5kg DCP':    { label:'4.5kg DCP',      category:'default',  ptYears:5,    hasMass:true },
-  '9kg DCP':      { label:'9kg DCP',        category:'default',  ptYears:5,    hasMass:true },
-  '2kg CO2':      { label:'2kg CO₂',        category:'co2',      ptYears:10,   hasMass:true, weightCheckMonths:6 },
-  '5kg CO2':      { label:'5kg CO₂',        category:'co2',      ptYears:10,   hasMass:true, weightCheckMonths:6 },
-  '10kg CO2':     { label:'10kg CO₂',       category:'co2',      ptYears:10,   hasMass:true, weightCheckMonths:6 },
-  '9L Water':     { label:'9L Water',       category:'default',  ptYears:5,    hasMass:true },
-  '9L Foam':      { label:'9L Foam',        category:'default',  ptYears:5,    hasMass:true },
+  '1.5kg DCP':    { label:'1.5kg DCP',      category:'default',  ptYears:5,    hasMass:true, mediumYears:10 },
+  '2kg DCP':      { label:'2kg DCP',        category:'default',  ptYears:5,    hasMass:true, mediumYears:10 },
+  '4.5kg DCP':    { label:'4.5kg DCP',      category:'default',  ptYears:5,    hasMass:true, mediumYears:10 },
+  '9kg DCP':      { label:'9kg DCP',        category:'default',  ptYears:5,    hasMass:true, mediumYears:10 },
+  '2kg CO2':      { label:'2kg CO₂',        category:'co2',      ptYears:10,   hasMass:true, weightCheckMonths:6, mediumYears:10 },
+  '5kg CO2':      { label:'5kg CO₂',        category:'co2',      ptYears:10,   hasMass:true, weightCheckMonths:6, mediumYears:10 },
+  '10kg CO2':     { label:'10kg CO₂',       category:'co2',      ptYears:10,   hasMass:true, weightCheckMonths:6, mediumYears:10 },
+  '9L Water':     { label:'9L Water',       category:'default',  ptYears:5,    hasMass:true, mediumYears:5 },
+  '9L Foam':      { label:'9L Foam',        category:'default',  ptYears:5,    hasMass:true, mediumYears:5 },
   'Lithium':      { label:'Lithium (AVD)',  category:'default',  ptYears:5,    hasMass:true },
   'Trolley':      { label:'Trolley unit',   category:'default',  ptYears:5,    hasMass:true },
   'Hydrant':      { label:'Fire hydrant',   category:'hydrant',  ptYears:null },
@@ -4136,10 +4337,27 @@ function updateCo2Content(){
 function onCondemnedChange(){
   const yes = document.getElementById('eqCondemned').value === 'yes';
   document.getElementById('condemnWrap').style.display = yes ? 'block' : 'none';
+  document.getElementById('condemnClientResponseWrap').style.display = (yes && currentRole==='admin') ? 'block' : 'none';
   if(yes){
     if(!document.getElementById('eqCondemnedDate').value) document.getElementById('eqCondemnedDate').value = thisMonth();
     if(document.getElementById('eqStatus').value !== 'fail') document.getElementById('eqStatus').value = 'fail';
   }
+}
+// Shared by the equipment-form status line and the Audit "Condemned units summary"
+// report, so the wording/thresholds can't drift between the two.
+const CONDEMNED_ACTION_LABELS = { 'replace-company':'Replace via company', 'replace-privately':'Replace privately', 'other':'Other' };
+function condemnedResponseStatus(e){
+  if(!e.condemnedReportSentAt) return { text:'Report not yet sent to the client.', cls:'' };
+  const sentDate = e.condemnedReportSentAt.toDate ? e.condemnedReportSentAt.toDate() : new Date(e.condemnedReportSentAt);
+  const sentIso = toLocalISO(sentDate);
+  if(e.condemnedActionPlan){
+    const label = CONDEMNED_ACTION_LABELS[e.condemnedActionPlan] || e.condemnedActionPlan;
+    return { text:`Report sent ${sentIso}. Action plan: ${label}${e.condemnedActionPlanDate?(' (recorded '+e.condemnedActionPlanDate+')'):''}.`, cls:'pass' };
+  }
+  const daysSince = Math.floor((Date.now() - sentDate.getTime()) / 86400000);
+  const daysLeft = 7 - daysSince;
+  if(daysLeft < 0) return { text:`Report sent ${sentIso}. Response overdue — ${Math.abs(daysLeft)} day${Math.abs(daysLeft)===1?'':'s'} past the 7-day window.`, cls:'fail' };
+  return { text:`Report sent ${sentIso}. Awaiting response — ${daysLeft} day${daysLeft===1?'':'s'} left.`, cls:'due' };
 }
 // Equipment type drives which sections show and the auto-fill intervals.
 function applyTypeVisibility(type){
@@ -4232,6 +4450,13 @@ async function openEquipmentForm(id){
   document.getElementById('eqCondemnedReason').value  = e ? (e.condemnedReason||'') : '';
   document.getElementById('eqReplacedBy').value       = e ? (e.replacedBy||'')      : '';
   renderCheckboxList('condemnChecklistWrap', CONDEMN_CRITERIA, (e && e.condemnedCriteria) || {});
+  // Client response — populated regardless of role (the block is just hidden
+  // for non-admins via onCondemnedChange/CSS) so a technician's save can't
+  // clobber it with blanks.
+  document.getElementById('eqCondemnedActionPlan').value      = e ? (e.condemnedActionPlan||'') : '';
+  document.getElementById('eqCondemnedActionPlanNotes').value = e ? (e.condemnedActionPlanNotes||'') : '';
+  document.getElementById('eqCondemnedActionPlanDate').value  = e ? (e.condemnedActionPlanDate||'') : '';
+  document.getElementById('condemnResponseStatus').textContent = e ? condemnedResponseStatus(e).text : '';
   if(e && e.photoURL){
     currentPhotoURL = e.photoURL;
     const p = document.getElementById('eqPhotoPreview');
@@ -4303,6 +4528,14 @@ async function saveEquipment(){
   const meta = typeMeta(type);
   const inspectionDate = document.getElementById('eqInspDate').value || null;
   const val = id => document.getElementById(id).value.trim();
+  // Medium-replacement due date (SANS 1475-1 clause 4.4.2, Table 1) — computed
+  // silently here, never a visible/editable field on the form itself. Anchors
+  // on the most recent known recharge date (this save's, if any, else whatever
+  // was already on record), falling back to the service date if the unit has
+  // never been recharged. Surfaces only on the Due tab's "Medium replacement" chip.
+  const rechargeDateVal = rechargeRequired ? (document.getElementById('eqRechargeDate').value || null) : null;
+  const mediumAnchor = rechargeDateVal || (e && e.rechargeDate) || (document.getElementById('eqServiceDate').value || null);
+  const mediumReplaceDue = (meta.mediumYears && mediumAnchor) ? addYearsMonth(mediumAnchor, meta.mediumYears) : null;
   const payload = {
     type,
     make: document.getElementById('eqMake').value.trim(),
@@ -4332,8 +4565,17 @@ async function saveEquipment(){
     condemnedReason: condemned ? val('eqCondemnedReason') : '',
     condemnedCriteria: condemned ? collectCheckboxList('condemnChecklistWrap') : {},
     replacedBy: condemned ? val('eqReplacedBy') : '',
+    // Client response to the condemned-units report — admin-only in the UI
+    // (condemnClientResponseWrap), but always saved as-is so a technician's
+    // save (block hidden for them) can't blank it out. condemnedReportSentAt
+    // is NOT written here — only sendSiteEmail() stamps that, when the report
+    // actually goes out.
+    condemnedActionPlan: condemned ? document.getElementById('eqCondemnedActionPlan').value : '',
+    condemnedActionPlanNotes: condemned ? val('eqCondemnedActionPlanNotes') : '',
+    condemnedActionPlanDate: condemned ? (document.getElementById('eqCondemnedActionPlanDate').value || null) : null,
+    mediumReplaceDue,
     rechargeRequired,
-    rechargeDate: rechargeRequired ? (document.getElementById('eqRechargeDate').value || null) : null,
+    rechargeDate: rechargeDateVal,
     // Pressure test (hydrostatic) — captured when performed this service
     ptPerformed,
     ptPrevDate: ptPerformed ? (document.getElementById('eqPtPrevDate').value || null) : (e ? (e.ptPrevDate||null) : null),
@@ -4397,7 +4639,7 @@ async function saveEquipment(){
    state. Entries are write-once (see firestore.rules). */
 const SVC_FIELDS = ['serviceDate','inspectionDate','nextServiceDue','pressureTestDate','pressureTestDue',
   'weightCheckDate','hoseReplacedDate','rechargeDate','condemnedDate','status','serviceMass',
-  'ptPerformed','rechargeRequired','condemned'];
+  'ptPerformed','rechargeRequired','condemned','condemnedActionPlan'];
 function serviceFieldsChanged(payload, e){
   if(!e) return true;
   return SVC_FIELDS.some(k => (payload[k]||'') !== (e[k]||''));
@@ -4430,6 +4672,8 @@ async function logServiceEvent(equipmentId, p, e){
       rechargeChecklist: p.rechargeChecklist||{}, rechargeNotes: p.rechargeNotes||'',
       condemned: !!p.condemned, condemnedDate: p.condemnedDate||null, condemnedReason: p.condemnedReason||'',
       condemnedCriteria: p.condemnedCriteria||{}, replacedBy: p.replacedBy||'',
+      condemnedActionPlan: p.condemnedActionPlan||'', condemnedActionPlanNotes: p.condemnedActionPlanNotes||'',
+      condemnedActionPlanDate: p.condemnedActionPlanDate||null,
       status: p.status||'', checklist: p.checklist||{}, notes: p.notes||'',
       technicianName: p.technicianName||'', saqcc: p.saqcc||'',
       recordedBy: currentUser.uid, recordedByName: currentProfile.name||'',
@@ -6182,6 +6426,53 @@ async function openTrainingComplianceReport(){
     <div class="tablewrap"><table>
       <thead><tr><th>Topic</th><th>Name</th><th>Role</th><th>Last completed</th><th>Next due</th><th>Status</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
+    </table></div>`, 'view-audit');
+}
+
+/* ---------- Condemned units summary (audit record) ----------
+   Company-wide, every condemned unit past or present — not just the ones
+   still awaiting a response — so this stays the permanent record of what was
+   sent to each client and how they responded. Shares its status wording with
+   the equipment form's own status line via condemnedResponseStatus(), so the
+   two can never drift apart. */
+async function openCondemnedUnitsSummaryReport(){
+  toast('Building report…');
+  await loadCompanySettings();
+  let items = [];
+  try{
+    const snap = await db.collection('equipment').where('companyId','==',currentCompanyId).where('condemned','==',true).get();
+    items = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  }catch(e){ toast('Could not load: ' + e.message); return; }
+  const co = companySettings || {};
+  const today = toLocalISO(new Date());
+  const siteName = id => (sitesCache.find(s=>s.id===id)||{}).name || 'Unknown site';
+  items.sort((a,b)=> siteName(a.siteId).localeCompare(siteName(b.siteId)) || (a.condemnedDate||'').localeCompare(b.condemnedDate||''));
+  const unresolvedCount = items.filter(e=>e.condemnedReportSentAt && !e.condemnedActionPlan).length;
+  const notSentCount = items.filter(e=>!e.condemnedReportSentAt).length;
+  const rows = items.map(e=>{
+    const criteria = Object.entries(e.condemnedCriteria||{}).filter(([,v])=>v)
+      .map(([k])=>{ const c = CONDEMN_CRITERIA.find(c=>c[0]===k); return c ? c[1] : k; });
+    const reason = [e.condemnedReason||'', ...criteria].filter(Boolean).join('; ');
+    const st = condemnedResponseStatus(e);
+    return `<tr>
+      <td>${escapeHtml(siteName(e.siteId))}</td>
+      <td>${escapeHtml(typeLabel(e.type))}${e.serial?(' · '+escapeHtml(e.serial)):''}</td>
+      <td>${escapeHtml(ym(e.condemnedDate)||'')}</td>
+      <td>${escapeHtml(reason)}</td>
+      <td>${escapeHtml(st.text)}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="5">No condemned units on record.</td></tr>`;
+  showReport('Condemned units summary', `${letterheadHTML(co)}
+    <h2 style="margin-top:16px; font-size:1rem;">Condemned Units — Summary of Client Notices &amp; Responses</h2>
+    <div class="meta">
+      <strong>Generated:</strong> ${today}<br>
+      <strong>Total condemned units on record:</strong> ${items.length}<br>
+      <strong>Notice not yet sent:</strong> ${notSentCount}<br>
+      <strong>Awaiting / overdue client response:</strong> ${unresolvedCount}
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Site</th><th>Equipment</th><th>Condemned</th><th>Reason</th><th>Client notice &amp; response</th></tr></thead>
+      <tbody>${rows}</tbody>
     </table></div>`, 'view-audit');
 }
 
