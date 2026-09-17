@@ -1,38 +1,28 @@
 /**
  * One-time, local-only migration: backfills every existing company onto the
- * 4-plan (inspection/starter/growth/business) + à la carte add-ons pricing
- * model.
+ * Vigil Core + 4 feature modules (Client / Trainee / Workshop / Auditing)
+ * pricing model.
  *
- * What it does, for every companies/{id} doc that has no `addOns` field yet
- * (i.e. every company that existed before this pricing model shipped):
- *   1. Sets `plan: 'business'` (the most generous named plan) and
- *      `billingCycle: 'monthly'`.
+ * What it does, for every companies/{id} doc that has no `modules` field
+ * yet (i.e. every company that existed before this pricing model shipped):
+ *   1. Sets `modules: { clientModule: true, traineeModule: true,
+ *      workshopModule: true, auditingModule: true }` — every module on, so
+ *      nobody already using a module's features loses them the moment the
+ *      new plan-gating rules/functions go live.
  *   2. Sets a deliberately generous `addOns` object — far beyond what any
- *      real company should need — so nobody already using the app loses
- *      access to anything the moment the new plan-gating rules/functions
- *      go live. This is a one-time grandfathering gesture, not a real plan:
- *      { extraTechnicians: 50, extraAdmins: 10, traineeLogbooks: 50,
- *        auditPackWorkshops: 20 }
- *   3. Removes the old flat `seatLimit` field (superseded by plan +
- *      add-ons; nothing reads it any more).
- *   4. Mirrors `{ plan, addOns }` onto companyAddons/{id} — the doc each
+ *      real company should need — so seat/workshop counts don't suddenly
+ *      block anyone either. This is a one-time grandfathering gesture, not
+ *      a real plan: { extraTechnicians: 50, extraAdmins: 10,
+ *      extraTrainees: 50, extraWorkshops: 20 }
+ *   3. Removes old fields superseded by this model (`plan`, `billingCycle`,
+ *      `seatLimit`) — nothing reads them any more.
+ *   4. Mirrors `{ modules, addOns }` onto companyAddons/{id} — the doc each
  *      company's own signed-in users can actually read client-side (see
- *      firestore.rules' companyAddOns()/hasAuditAddon() and index.html's
- *      hasAuditPack()/brandingRemoved()).
+ *      firestore.rules' companyModules()/hasAuditAddon() and index.html's
+ *      hasClientModule()/hasTraineeModule()/hasWorkshopModule()/
+ *      hasAuditPack()).
  *
- * One real gap worth knowing about: the Business plan's built-in
- * `competentPersons` allowance is 0 (that role is deliberately
- * Inspection-plan-exclusive, with no add-on route to raise it elsewhere —
- * see functions/pricing.js). If a company already has an active Competent
- * Person account, this migration does NOT touch or deactivate it — existing
- * accounts keep working regardless of plan, since the limit is only checked
- * at account-*creation* time. It just means that company couldn't create a
- * *new* one, or reactivate a deactivated one, without a superadmin
- * switching it to the Inspection plan first (which would then conflict
- * with any technicians the same company has, since Inspection has none).
- * Flag this to whoever owns pricing if it's a real company, not just a demo.
- *
- * Safe to re-run: only companies missing `addOns` are touched, so running
+ * Safe to re-run: only companies missing `modules` are touched, so running
  * it twice is a no-op the second time.
  *
  * Usage:
@@ -54,18 +44,23 @@ admin.initializeApp({
 });
 const db = admin.firestore();
 
+const BACKFILL_MODULES = {
+  clientModule: true,
+  traineeModule: true,
+  workshopModule: true,
+  auditingModule: true,
+};
 const BACKFILL_ADDONS = {
   extraTechnicians: 50,
   extraAdmins: 10,
-  traineeLogbooks: 50,
-  auditPackWorkshops: 20,
+  extraTrainees: 50,
+  extraWorkshops: 20,
 };
-const BACKFILL_PLAN = "business";
 
 async function main() {
-  console.log("Migrating existing companies onto plan + add-ons pricing...");
+  console.log("Migrating existing companies onto Core + module pricing...");
   const snap = await db.collection("companies").get();
-  const toMigrate = snap.docs.filter((d) => !("addOns" in d.data()));
+  const toMigrate = snap.docs.filter((d) => !("modules" in d.data()));
   if (toMigrate.length === 0) {
     console.log(`  companies: nothing to do (${snap.size} companies, all already migrated)`);
     return;
@@ -75,14 +70,16 @@ async function main() {
     const batch = db.batch();
     toMigrate.slice(i, i + 450).forEach((d) => {
       batch.update(d.ref, {
-        plan: BACKFILL_PLAN,
-        billingCycle: "monthly",
+        modules: BACKFILL_MODULES,
         addOns: BACKFILL_ADDONS,
+        plan: admin.firestore.FieldValue.delete(),
+        billingCycle: admin.firestore.FieldValue.delete(),
         seatLimit: admin.firestore.FieldValue.delete(),
       });
       batch.set(db.collection("companyAddons").doc(d.id), {
-        plan: BACKFILL_PLAN,
+        modules: BACKFILL_MODULES,
         addOns: BACKFILL_ADDONS,
+        plan: admin.firestore.FieldValue.delete(),
       }, { merge: true });
     });
     await batch.commit();

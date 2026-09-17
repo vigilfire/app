@@ -134,15 +134,20 @@
         <div class="stat"><div class="n" id="statActive">—</div><div class="l">Active this month</div></div>
         <div class="stat"><div class="n" id="statMrr">—</div><div class="l">MRR</div></div>
       </div>
-      <div class="section-title"><h2>Companies</h2><button class="btn" onclick="openAddCompany()">+ Add company</button></div>
+      <div class="section-title"><h2>Companies</h2>
+        <div style="display:flex; gap:8px;">
+          <button class="btn secondary" style="width:auto;" onclick="openQuoteBuilder()">Build a quote</button>
+          <button class="btn" style="width:auto;" onclick="openAddCompany()">+ Add company</button>
+        </div>
+      </div>
       <div class="tabbar">
         <button id="tabActive" class="active" onclick="setCompaniesTab('active')">Active</button>
         <button id="tabCanceled" onclick="setCompaniesTab('canceled')">Canceled</button>
       </div>
       <div class="card" style="padding:0; overflow-x:auto;">
         <table>
-          <thead><tr><th>Name</th><th>Plan</th><th>Add-ons</th><th>Status</th><th>Monthly</th></tr></thead>
-          <tbody id="companiesBody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+          <thead><tr><th>Name</th><th>Modules</th><th>Status</th><th>Monthly</th></tr></thead>
+          <tbody id="companiesBody"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -153,26 +158,7 @@
       <div class="card">
         <div class="kv"><div class="k">Created</div><div class="v" id="detailCreated">—</div></div>
         <div class="kv"><div class="k">Monthly price</div><div class="v" id="detailMonthlyPrice">—</div></div>
-        <div class="kv"><div class="k">Billed</div><div class="v" id="detailBilledPrice">—</div></div>
-        <div class="row" style="margin-top:12px;">
-          <div>
-            <label style="margin-top:0;">Plan</label>
-            <select id="detailPlanSelect" onchange="onDetailPlanChange()">
-              <option value="inspection">Inspection</option>
-              <option value="starter">Starter</option>
-              <option value="growth">Growth</option>
-              <option value="business">Business</option>
-            </select>
-          </div>
-          <div>
-            <label style="margin-top:0;">Billing cycle</label>
-            <select id="detailBillingCycleSelect" onchange="onDetailPlanChange()">
-              <option value="monthly">Monthly</option>
-              <option value="annual">Annual (2 months free)</option>
-            </select>
-          </div>
-        </div>
-        <label>Status</label>
+        <label style="margin-top:12px;">Status</label>
         <select id="detailStatusSelect" onchange="onDetailStatusChange()">
           <option value="trialing">Trialing</option>
           <option value="active">Active</option>
@@ -183,7 +169,7 @@
         <textarea id="detailNotes" onblur="onDetailNotesBlur()" placeholder="Internal notes about this account…"></textarea>
       </div>
 
-      <div class="section-title"><h2>Add-ons</h2></div>
+      <div class="section-title"><h2>Modules &amp; add-ons</h2></div>
       <div class="card" id="addonsCard"></div>
 
       <div class="section-title"><h2>Technicians</h2></div>
@@ -208,17 +194,32 @@
     <input id="acAdminName" placeholder="e.g. Jane Dlamini">
     <label>Admin email</label>
     <input id="acAdminEmail" type="email" placeholder="jane@example.co.za">
-    <label>Plan</label>
-    <select id="acPlan">
-      <option value="inspection">Inspection</option>
-      <option value="starter" selected>Starter</option>
-      <option value="growth">Growth</option>
-      <option value="business">Business</option>
-    </select>
-    <div class="hint">Creates the company (no add-ons yet — set those from the company's detail page once it's created), the first admin account, and emails them a link to set their password.</div>
+    <div class="hint">Creates the company on Core (no modules/add-ons yet — set those from the company's detail page once it's created), the first admin account, and emails them a link to set their password.</div>
     <div class="row" style="margin-top:16px;">
       <button class="btn secondary" onclick="closeAddCompany()">Cancel</button>
       <button class="btn" id="acSubmitBtn" onclick="submitAddCompany()">Create</button>
+    </div>
+  </div>
+</div>
+
+<div id="quoteModal" class="modal-backdrop" hidden>
+  <div class="modal" style="max-width:560px;">
+    <h2>Build a quote</h2>
+    <label style="margin-top:0;">Company / prospect name</label>
+    <input id="qName" placeholder="e.g. Riverstone Fire Services">
+    <div id="quoteControls"></div>
+    <div class="card" style="margin-top:16px; padding:14px;">
+      <div id="quoteBreakdown" style="font-size:0.85rem; line-height:1.7;"></div>
+      <div class="kv" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--line);"><div class="k">Total</div><div class="v" id="quoteTotal" style="font-size:1.25rem;">—</div></div>
+    </div>
+    <label>Admin name <span style="text-transform:none; font-weight:500;">(only needed to create the company)</span></label>
+    <input id="qAdminName" placeholder="e.g. Jane Dlamini">
+    <label>Admin email</label>
+    <input id="qAdminEmail" type="email" placeholder="jane@example.co.za">
+    <div class="hint">Nothing here is saved until you click "Create company" — build the package with the prospect, then create the account with that exact package pre-applied.</div>
+    <div class="row" style="margin-top:16px;">
+      <button class="btn secondary" onclick="closeQuoteBuilder()">Close</button>
+      <button class="btn" id="qSubmitBtn" onclick="submitQuoteAsCompany()">Create company with this package</button>
     </div>
   </div>
 </div>
@@ -246,52 +247,56 @@ const db = firebase.firestore();
 // Keep in sync with functions/pricing.js and vigilfire.github.io's pricing
 // page — no shared build step exists between this static page, the Cloud
 // Functions source, and the marketing site, so all three must be updated
-// together when a price or limit changes.
-const PLAN_PRICES = { inspection: 249, starter: 499, growth: 1299, business: 2499 };
-const PLAN_LABEL = { inspection: 'Inspection', starter: 'Starter', growth: 'Growth', business: 'Business' };
-// competentPersons (the Competent Person / "inspector" role) is deliberately
-// Inspection-plan-exclusive — no add-on anywhere raises it for another plan.
-const PLAN_LIMITS = {
-  inspection: { admins: 1, technicians: 0, competentPersons: 1, traineeLogbooksIncluded: 0, removesBranding: false },
-  starter:    { admins: 1, technicians: 1, competentPersons: 0, traineeLogbooksIncluded: 0, removesBranding: false },
-  growth:     { admins: 2, technicians: 5, competentPersons: 0, traineeLogbooksIncluded: 0, removesBranding: true },
-  business:   { admins: 3, technicians: 10, competentPersons: 0, traineeLogbooksIncluded: 2, removesBranding: true },
-};
+// together when a price or allowance changes. Prices are placeholders (no
+// Rand figures were given for this pricing round) — replace before relying
+// on the MRR figure.
+const CORE_PRICE = 499;
+const CORE_INCLUDED_ADMINS = 1;
+const CORE_INCLUDED_TECHNICIANS = 3;
+const CLIENT_MODULE_PRICE = 349;
+const TRAINEE_MODULE_PRICE = 249;              // includes 2 trainees
+const TRAINEE_MODULE_INCLUDED_TRAINEES = 2;
+const WORKSHOP_MODULE_PRICE = 349;
+const AUDITING_MODULE_PRICE = 399;             // includes 1 workshop
+const AUDITING_MODULE_INCLUDED_WORKSHOPS = 1;
 const ADDON_PRICES = {
   extraTechnician: 249,
   extraAdmin: 149,
-  traineeLogbook: 149,
-  auditPack: 399,               // includes 1 workshop
-  auditPackExtraWorkshop: 279,
+  extraTrainee: 99,
+  extraWorkshop: 279,
 };
+const MODULE_LABEL = { clientModule: 'Client', traineeModule: 'Trainee', workshopModule: 'Workshop', auditingModule: 'Auditing' };
 const STATUS_LABEL = { trialing: 'Trialing', active: 'Active', past_due: 'Past due', canceled: 'Canceled' };
 
-// Always the monthly-equivalent, regardless of a company's billingCycle —
-// an annual biller is actually charged this × 10 (2 months free) as their
-// lump sum (see the detail view), but this function and the MRR stat both
-// stay in monthly terms so an annual customer doesn't distort the figure.
-// Matches functions/pricing.js exactly, since that's what actually enforces
-// the corresponding limits.
+// There's only one base tier (Core) now — every company independently buys
+// whichever of the 4 modules it needs. Matches functions/pricing.js
+// exactly, since that's what actually enforces the corresponding limits.
 function calculateMonthlyPrice(company){
-  const plan = (company && company.plan) || 'starter';
+  const m = (company && company.modules) || {};
   const a = (company && company.addOns) || {};
-  let total = (PLAN_PRICES[plan] || 0)
+  let total = CORE_PRICE
     + (a.extraTechnicians||0) * ADDON_PRICES.extraTechnician
-    + (a.extraAdmins||0) * ADDON_PRICES.extraAdmin
-    + (a.traineeLogbooks||0) * ADDON_PRICES.traineeLogbook;
-  if((a.auditPackWorkshops||0) > 0) total += ADDON_PRICES.auditPack + Math.max(0, (a.auditPackWorkshops||0) - 1) * ADDON_PRICES.auditPackExtraWorkshop;
+    + (a.extraAdmins||0) * ADDON_PRICES.extraAdmin;
+  if(m.clientModule) total += CLIENT_MODULE_PRICE;
+  if(m.traineeModule) total += TRAINEE_MODULE_PRICE + (a.extraTrainees||0) * ADDON_PRICES.extraTrainee;
+  if(m.workshopModule) total += WORKSHOP_MODULE_PRICE;
+  if(m.auditingModule) total += AUDITING_MODULE_PRICE + (a.extraWorkshops||0) * ADDON_PRICES.extraWorkshop;
   return total;
 }
-// Short "what's on top of the plan" summary for the companies list — not
-// the detail view (which shows the real editable controls).
-function addOnsSummary(company){
+// Short "what's bought" summary for the companies list — not the detail
+// view (which shows the real editable controls).
+function modulesSummary(company){
+  const m = (company && company.modules) || {};
   const a = (company && company.addOns) || {};
-  const bits = [];
-  if(a.extraTechnicians) bits.push(`+${a.extraTechnicians} tech`);
-  if(a.extraAdmins) bits.push(`+${a.extraAdmins} admin`);
-  if(a.traineeLogbooks) bits.push(`+${a.traineeLogbooks} trainee`);
-  if(a.auditPackWorkshops) bits.push(`Audit pack (${a.auditPackWorkshops} workshop${a.auditPackWorkshops===1?'':'s'})`);
-  return bits.length ? bits.join(', ') : 'No add-ons';
+  const bits = Object.keys(MODULE_LABEL).filter(k=>m[k]).map(k=>MODULE_LABEL[k]);
+  const extras = [];
+  if(a.extraTechnicians) extras.push(`+${a.extraTechnicians} tech`);
+  if(a.extraAdmins) extras.push(`+${a.extraAdmins} admin`);
+  if(a.extraTrainees) extras.push(`+${a.extraTrainees} trainee`);
+  if(a.extraWorkshops) extras.push(`+${a.extraWorkshops} workshop`);
+  const parts = [bits.length ? bits.join(' + ') : 'Core only'];
+  if(extras.length) parts.push(extras.join(', '));
+  return parts.join(' — ');
 }
 
 function escapeHtml(s){
@@ -415,13 +420,12 @@ async function paintCompaniesList(){
   const body = document.getElementById('companiesBody');
   const visible = companiesCache.filter(c => companiesTab === 'canceled' ? c.status === 'canceled' : c.status !== 'canceled');
   if(visible.length === 0){
-    body.innerHTML = `<tr><td colspan="5" class="empty">${companiesTab === 'canceled' ? 'No canceled companies.' : 'No companies yet.'}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="4" class="empty">${companiesTab === 'canceled' ? 'No canceled companies.' : 'No companies yet.'}</td></tr>`;
     return;
   }
   body.innerHTML = visible.map(c=>`<tr class="row-link" onclick="location.hash='#/companies/${c.id}'">
       <td>${escapeHtml(c.name)}</td>
-      <td>${escapeHtml(PLAN_LABEL[c.plan]||c.plan||'—')}</td>
-      <td>${escapeHtml(addOnsSummary(c))}</td>
+      <td>${escapeHtml(modulesSummary(c))}</td>
       <td><span class="badge status-${c.status}">${STATUS_LABEL[c.status]||c.status}</span></td>
       <td>R ${calculateMonthlyPrice(c).toLocaleString()}</td>
     </tr>`).join('');
@@ -430,7 +434,6 @@ async function paintCompaniesList(){
 /* ---------- Add company ---------- */
 function openAddCompany(){
   ['acName','acAdminName','acAdminEmail'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('acPlan').value = 'starter';
   document.getElementById('addCompanyModal').hidden = false;
 }
 function closeAddCompany(){ document.getElementById('addCompanyModal').hidden = true; }
@@ -438,13 +441,12 @@ async function submitAddCompany(){
   const name = document.getElementById('acName').value.trim();
   const adminName = document.getElementById('acAdminName').value.trim();
   const adminEmail = document.getElementById('acAdminEmail').value.trim();
-  const plan = document.getElementById('acPlan').value;
   if(!name || !adminName || !adminEmail){ toast('Fill in all fields'); return; }
   const btn = document.getElementById('acSubmitBtn');
   btn.disabled = true; btn.textContent = 'Creating…';
   try{
     const call = firebase.functions().httpsCallable('createCompany');
-    const result = await call({ name, adminName, adminEmail, plan });
+    const result = await call({ name, adminName, adminEmail });
     if(result.data.emailWarning){
       toast('Company created, but the invite email failed: ' + result.data.emailWarning);
     } else {
@@ -472,13 +474,11 @@ async function openCompanyDetail(companyId){
 
   document.getElementById('detailName').textContent = company.name || '(unnamed)';
   document.getElementById('detailCreated').textContent = fmtDate(company.createdAt);
-  paintDetailPrice(company);
-  document.getElementById('detailPlanSelect').value = company.plan || 'starter';
-  document.getElementById('detailBillingCycleSelect').value = company.billingCycle || 'monthly';
+  document.getElementById('detailMonthlyPrice').textContent = 'R ' + calculateMonthlyPrice(company).toLocaleString() + ' / mo';
   document.getElementById('detailStatusSelect').value = company.status || 'trialing';
   document.getElementById('detailNotes').value = company.notes || '';
 
-  renderAddOnsCard(company.addOns || {});
+  renderAddOnsCard(company.modules || {}, company.addOns || {});
 
   await Promise.all([
     paintDetailTechnicians(companyId),
@@ -486,35 +486,6 @@ async function openCompanyDetail(companyId){
   ]);
 }
 
-// Monthly price is always calculateMonthlyPrice()'s figure (the MRR-
-// consistent monthly-equivalent); "Billed" is what actually gets charged —
-// the same monthly amount for a monthly biller, or ×10 (2 months free) as
-// one annual lump sum.
-function paintDetailPrice(company){
-  const monthly = calculateMonthlyPrice(company);
-  document.getElementById('detailMonthlyPrice').textContent = 'R ' + monthly.toLocaleString() + ' / mo';
-  const billed = (company.billingCycle === 'annual') ? (monthly * 10) : monthly;
-  document.getElementById('detailBilledPrice').textContent = (company.billingCycle === 'annual')
-    ? `R ${billed.toLocaleString()} / yr`
-    : `R ${billed.toLocaleString()} / mo`;
-}
-
-async function onDetailPlanChange(){
-  if(!detailCompanyId) return;
-  const plan = document.getElementById('detailPlanSelect').value;
-  const billingCycle = document.getElementById('detailBillingCycleSelect').value;
-  try{
-    await db.collection('companies').doc(detailCompanyId).update({ plan, billingCycle, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
-    // Mirror the plan onto companyAddons — the doc a company's own admin
-    // can actually read (companies/{id} stays superadmin-only). See
-    // firestore.rules' companyAddOns()/hasAuditAddon() and index.html's
-    // client-side plan/pack checks, which read this mirror, not
-    // companies/{id} directly.
-    await db.collection('companyAddons').doc(detailCompanyId).set({ plan }, {merge:true});
-    toast('Plan updated');
-    paintDetailPrice({ plan, billingCycle, addOns: lastRenderedAddOns });
-  }catch(e){ toast('Error: ' + e.message); }
-}
 async function onDetailStatusChange(){
   if(!detailCompanyId) return;
   const status = document.getElementById('detailStatusSelect').value;
@@ -530,56 +501,151 @@ async function onDetailNotesBlur(){
     await db.collection('companies').doc(detailCompanyId).update({ notes });
   }catch(e){ toast('Error saving notes: ' + e.message); }
 }
-// The 4 add-ons, straight off companies/{companyId}.addOns — extraTechnicians/
-// extraAdmins/traineeLogbooks are each *extra* beyond what the plan already
-// includes (PLAN_LIMITS); auditPackWorkshops is the pack itself — 0 means
-// not purchased, 1+ is the total number of workshops it covers (not "+1").
-// Every change writes the whole `addOns` object in one go (simplest way to
-// keep it internally consistent) to BOTH companies/{id} (canonical — this
-// page's own source of truth) and companyAddons/{id} (the mirror
-// index.html's client actually reads, since companies/{id} stays
-// superadmin-only there — see firestore.rules).
-let lastRenderedAddOns = {};
-function renderAddOnsCard(addOns){
+// The 4 feature modules (each a flat monthly fee) plus their associated
+// per-unit add-ons, straight off companies/{companyId}.modules/.addOns.
+// extraTechnicians/extraAdmins are each *extra* beyond Core's included
+// allowance; extraTrainees/extraWorkshops are each *extra* beyond what
+// their module already includes (only meaningful once that module is on).
+// Every change writes both fields in one go to BOTH companies/{id}
+// (canonical — this page's own source of truth) and companyAddons/{id}
+// (the mirror index.html's client actually reads, since companies/{id}
+// stays superadmin-only there — see firestore.rules).
+// Shared by the company detail view (writes live to Firestore on every
+// change) and the quote builder (pure local calculator, nothing saved until
+// "Create company with this package") — `prefix` keeps their element ids
+// from colliding, `onChangeFn` is the name of whichever handler should fire.
+function moduleAddonControlsHTML(prefix, onChangeFn, modules, addOns){
+  modules = modules || {};
   addOns = addOns || {};
-  lastRenderedAddOns = addOns;
   const num = (k) => Number(addOns[k]) || 0;
-  document.getElementById('addonsCard').innerHTML = `
-    <label style="margin-top:0;">Extra technician seats <span style="text-transform:none; font-weight:500;">(beyond the plan's included allowance)</span></label>
-    <input type="number" min="0" step="1" id="addon-extraTechnicians" value="${num('extraTechnicians')}" onchange="onAddOnsChange()">
+  const oc = `onchange="${onChangeFn}()"`;
+  return `
+    <label style="margin-top:0;">Extra technician seats <span style="text-transform:none; font-weight:500;">(beyond Core's 3 included)</span></label>
+    <input type="number" min="0" step="1" id="${prefix}-addon-extraTechnicians" value="${num('extraTechnicians')}" ${oc}>
 
-    <label>Extra admin seats <span style="text-transform:none; font-weight:500;">(beyond the plan's included allowance)</span></label>
-    <input type="number" min="0" step="1" id="addon-extraAdmins" value="${num('extraAdmins')}" onchange="onAddOnsChange()">
-
-    <label>Extra trainee logbooks <span style="text-transform:none; font-weight:500;">(beyond the plan's included allowance)</span></label>
-    <input type="number" min="0" step="1" id="addon-traineeLogbooks" value="${num('traineeLogbooks')}" onchange="onAddOnsChange()">
+    <label>Extra admin seats <span style="text-transform:none; font-weight:500;">(beyond Core's 1 included)</span></label>
+    <input type="number" min="0" step="1" id="${prefix}-addon-extraAdmins" value="${num('extraAdmins')}" ${oc}>
 
     <div style="margin-top:16px; padding-top:16px; border-top:1px solid var(--line);">
-      <label style="margin-top:0;">Audit Compliance Pack workshops <span style="text-transform:none; font-weight:500;">(0 = pack not purchased; 1+ covers that many workshops)</span></label>
-      <input type="number" min="0" step="1" id="addon-auditPackWorkshops" value="${num('auditPackWorkshops')}" onchange="onAddOnsChange()">
-      <div class="hint">Gates the whole Audit section (Company Documents, Employees, Vehicles, Workshops, Calibration). R399/mo includes 1 workshop, +R279/mo per extra.</div>
+      <label style="margin-top:0; display:flex; align-items:center; gap:10px;">
+        <input type="checkbox" id="${prefix}-module-clientModule" style="width:auto;" ${modules.clientModule?'checked':''} ${oc}>
+        Client Module
+      </label>
+      <div class="hint">Certificate of Maintenance, Pressure Test Report, Recharge Report, Condemned Unit report, and emailing reports direct to a client.</div>
     </div>
 
-    <div class="kv" style="margin-top:16px; padding-top:12px; border-top:1px solid var(--line);"><div class="k">Add-ons total</div><div class="v" id="addonTotalDisplay">R ${(calculateMonthlyPrice({addOns}) - (PLAN_PRICES[document.getElementById('detailPlanSelect').value]||0)).toLocaleString()} / mo</div></div>`;
+    <div style="margin-top:16px; padding-top:16px; border-top:1px solid var(--line);">
+      <label style="margin-top:0; display:flex; align-items:center; gap:10px;">
+        <input type="checkbox" id="${prefix}-module-traineeModule" style="width:auto;" ${modules.traineeModule?'checked':''} ${oc}>
+        Trainee Module
+      </label>
+      <div class="hint">Trainee logbook and competency tracking. Includes 2 trainee logins.</div>
+      <label style="margin:10px 0 4px; text-transform:none; font-weight:500; font-size:0.8rem;">Extra trainees beyond the 2 included</label>
+      <input type="number" min="0" step="1" id="${prefix}-addon-extraTrainees" value="${num('extraTrainees')}" ${oc}>
+    </div>
+
+    <div style="margin-top:16px; padding-top:16px; border-top:1px solid var(--line);">
+      <label style="margin-top:0; display:flex; align-items:center; gap:10px;">
+        <input type="checkbox" id="${prefix}-module-workshopModule" style="width:auto;" ${modules.workshopModule?'checked':''} ${oc}>
+        Workshop Module
+      </label>
+      <div class="hint">Weekly verification, toolbox talks, and mandatory training functions and reports.</div>
+    </div>
+
+    <div style="margin-top:16px; padding-top:16px; border-top:1px solid var(--line);">
+      <label style="margin-top:0; display:flex; align-items:center; gap:10px;">
+        <input type="checkbox" id="${prefix}-module-auditingModule" style="width:auto;" ${modules.auditingModule?'checked':''} ${oc}>
+        Auditing Module
+      </label>
+      <div class="hint">Company Documents, Employees, Vehicles, Workshops, Calibration register, and technician/workshop tool registers. Includes 1 workshop.</div>
+      <label style="margin:10px 0 4px; text-transform:none; font-weight:500; font-size:0.8rem;">Extra workshops beyond the 1 included</label>
+      <input type="number" min="0" step="1" id="${prefix}-addon-extraWorkshops" value="${num('extraWorkshops')}" ${oc}>
+    </div>`;
+}
+// Reads the current state of a moduleAddonControlsHTML(prefix, ...) block
+// back out of the DOM — the one place both the detail view and the quote
+// builder agree on field ids, so a change to one never silently drifts from
+// the other.
+function readModuleAddonControls(prefix){
+  const modules = {
+    clientModule: document.getElementById(`${prefix}-module-clientModule`).checked,
+    traineeModule: document.getElementById(`${prefix}-module-traineeModule`).checked,
+    workshopModule: document.getElementById(`${prefix}-module-workshopModule`).checked,
+    auditingModule: document.getElementById(`${prefix}-module-auditingModule`).checked,
+  };
+  const addOns = {
+    extraTechnicians: Math.max(0, parseInt(document.getElementById(`${prefix}-addon-extraTechnicians`).value, 10) || 0),
+    extraAdmins: Math.max(0, parseInt(document.getElementById(`${prefix}-addon-extraAdmins`).value, 10) || 0),
+    extraTrainees: Math.max(0, parseInt(document.getElementById(`${prefix}-addon-extraTrainees`).value, 10) || 0),
+    extraWorkshops: Math.max(0, parseInt(document.getElementById(`${prefix}-addon-extraWorkshops`).value, 10) || 0),
+  };
+  return { modules, addOns };
+}
+
+function renderAddOnsCard(modules, addOns){
+  document.getElementById('addonsCard').innerHTML = moduleAddonControlsHTML('detail', 'onAddOnsChange', modules, addOns) +
+    `<div class="kv" style="margin-top:16px; padding-top:12px; border-top:1px solid var(--line);"><div class="k">Monthly price</div><div class="v" id="addonTotalDisplay">R ${calculateMonthlyPrice({modules, addOns}).toLocaleString()} / mo</div></div>`;
 }
 async function onAddOnsChange(){
   if(!detailCompanyId) return;
-  const addOns = {
-    extraTechnicians: Math.max(0, parseInt(document.getElementById('addon-extraTechnicians').value, 10) || 0),
-    extraAdmins: Math.max(0, parseInt(document.getElementById('addon-extraAdmins').value, 10) || 0),
-    traineeLogbooks: Math.max(0, parseInt(document.getElementById('addon-traineeLogbooks').value, 10) || 0),
-    auditPackWorkshops: Math.max(0, parseInt(document.getElementById('addon-auditPackWorkshops').value, 10) || 0),
-  };
-  lastRenderedAddOns = addOns;
+  const { modules, addOns } = readModuleAddonControls('detail');
   try{
-    await db.collection('companies').doc(detailCompanyId).update({ addOns, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
-    await db.collection('companyAddons').doc(detailCompanyId).set({ addOns }, {merge:true});
-    toast('Add-ons updated');
-    const plan = document.getElementById('detailPlanSelect').value;
-    const billingCycle = document.getElementById('detailBillingCycleSelect').value;
-    paintDetailPrice({ plan, billingCycle, addOns });
-    document.getElementById('addonTotalDisplay').textContent = 'R ' + (calculateMonthlyPrice({plan, addOns}) - (PLAN_PRICES[plan]||0)).toLocaleString() + ' / mo';
+    await db.collection('companies').doc(detailCompanyId).update({ modules, addOns, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    await db.collection('companyAddons').doc(detailCompanyId).set({ modules, addOns }, {merge:true});
+    toast('Modules & add-ons updated');
+    const price = calculateMonthlyPrice({modules, addOns});
+    document.getElementById('detailMonthlyPrice').textContent = 'R ' + price.toLocaleString() + ' / mo';
+    document.getElementById('addonTotalDisplay').textContent = 'R ' + price.toLocaleString() + ' / mo';
   }catch(e){ toast('Error: ' + e.message); }
+}
+
+/* ---------- Quote builder — a live calculator, nothing saved until you
+   explicitly create the company with this package. Sit with a prospect,
+   tick modules/add-ons, and the price updates instantly — no Firestore
+   write happens until "Create company with this package". ---------- */
+function openQuoteBuilder(){
+  ['qName','qAdminName','qAdminEmail'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('quoteControls').innerHTML = moduleAddonControlsHTML('quote', 'onQuoteChange', {}, {});
+  onQuoteChange();
+  document.getElementById('quoteModal').hidden = false;
+}
+function closeQuoteBuilder(){ document.getElementById('quoteModal').hidden = true; }
+function onQuoteChange(){
+  const { modules, addOns } = readModuleAddonControls('quote');
+  const lines = [`Vigil Core — R${CORE_PRICE}/mo (1 admin, 3 technicians, unlimited sites)`];
+  if(addOns.extraTechnicians) lines.push(`+${addOns.extraTechnicians} extra technician${addOns.extraTechnicians===1?'':'s'} — R${addOns.extraTechnicians*ADDON_PRICES.extraTechnician}/mo`);
+  if(addOns.extraAdmins) lines.push(`+${addOns.extraAdmins} extra admin${addOns.extraAdmins===1?'':'s'} — R${addOns.extraAdmins*ADDON_PRICES.extraAdmin}/mo`);
+  if(modules.clientModule) lines.push(`Client Module — R${CLIENT_MODULE_PRICE}/mo`);
+  if(modules.traineeModule){
+    lines.push(`Trainee Module — R${TRAINEE_MODULE_PRICE}/mo (2 trainees included)`);
+    if(addOns.extraTrainees) lines.push(`+${addOns.extraTrainees} extra trainee${addOns.extraTrainees===1?'':'s'} — R${addOns.extraTrainees*ADDON_PRICES.extraTrainee}/mo`);
+  }
+  if(modules.workshopModule) lines.push(`Workshop Module — R${WORKSHOP_MODULE_PRICE}/mo`);
+  if(modules.auditingModule){
+    lines.push(`Auditing Module — R${AUDITING_MODULE_PRICE}/mo (1 workshop included)`);
+    if(addOns.extraWorkshops) lines.push(`+${addOns.extraWorkshops} extra workshop${addOns.extraWorkshops===1?'':'s'} — R${addOns.extraWorkshops*ADDON_PRICES.extraWorkshop}/mo`);
+  }
+  document.getElementById('quoteBreakdown').innerHTML = lines.map(l=>`<div>${escapeHtml(l)}</div>`).join('');
+  document.getElementById('quoteTotal').textContent = 'R ' + calculateMonthlyPrice({modules, addOns}).toLocaleString() + ' / mo';
+}
+async function submitQuoteAsCompany(){
+  const name = document.getElementById('qName').value.trim();
+  const adminName = document.getElementById('qAdminName').value.trim();
+  const adminEmail = document.getElementById('qAdminEmail').value.trim();
+  if(!name || !adminName || !adminEmail){ toast('Fill in the company name and admin details first'); return; }
+  const { modules, addOns } = readModuleAddonControls('quote');
+  const btn = document.getElementById('qSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Creating…';
+  try{
+    const call = firebase.functions().httpsCallable('createCompany');
+    const result = await call({ name, adminName, adminEmail, modules, addOns });
+    toast(result.data.emailWarning ? ('Company created, but the invite email failed: ' + result.data.emailWarning) : 'Company created with this package — invite email sent');
+    closeQuoteBuilder();
+  }catch(e){
+    toast('Error: ' + e.message);
+  }finally{
+    btn.disabled = false; btn.textContent = 'Create company with this package';
+  }
 }
 
 async function paintDetailTechnicians(companyId){

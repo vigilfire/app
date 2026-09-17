@@ -155,55 +155,58 @@ The bottom-nav **Calib.** tab is now **Verify**, and the "Calibration register" 
 - `functions/index.js`: no change this round (the `ACTIVITY_COLLECTIONS` additions for `branches`/`vehicles`/`companyDocuments`/`calibrationCertificates` were already deployed).
 - No backfill needed — every company (new or existing) has no `companyAddons` doc until a superadmin ticks the checkbox for them, and a missing doc means "off."
 
-## Plan + add-ons pricing (Inspection / Starter / Growth / Business)
+## Vigil Core + module pricing (Client / Trainee / Workshop / Auditing)
 
-Every company is on one of 4 named plans, each with its own built-in
-allowances, plus optional add-ons purchased on top. `functions/pricing.js`
-(mirrored inline in `admin.html`, same "no shared build step" reasoning as
-everywhere else this pattern is used) is the source of truth:
+There's no named-plan tier any more — every company is on **Vigil Core**
+(seats + core servicing, described below) and independently buys whichever
+of 4 feature modules it needs. `functions/pricing.js` (mirrored inline in
+`admin.html`, same "no shared build step" reasoning as everywhere else this
+pattern is used) is the source of truth. Prices are placeholders (no Rand
+figures were given for this pricing round) — replace before relying on the
+MRR figure.
 
-| Plan | Price | Admins | Technicians | Competent Persons | Trainee logbooks | Branding removed |
-|---|---|---|---|---|---|---|
-| **Inspection** | R249/mo | 1 | 0 (no technician role) | 1 | 0 | No |
-| **Starter** | R499/mo | 1 | 1 | 0 | 0 | No |
-| **Growth** | R1,299/mo | 2 | 5 | 0 | 0 | Yes |
-| **Business** | R2,499/mo | 3 | 10 | 0 | 2 | Yes |
+**Vigil Core — R499/mo, included with every company:**
+1 admin login, 3 technician logins, unlimited sites, maintenance forms, the
+printable site register, and Vigil Fire's own branding on its outputs.
 
-The Competent Person ("inspector") role is **deliberately
-Inspection-plan-exclusive** — no add-on anywhere raises `competentPersons`
-for another plan; a company needing that role runs a separate Inspection
-account rather than adding it to a Growth/Business one.
+**The 4 modules, each an independent flat monthly add-on:**
 
-Add-ons stack on top of whichever plan a company is on:
+| Module | Price | Unlocks |
+|---|---|---|
+| **Client** | R349/mo | Certificate of Maintenance, Pressure Test Report, Recharge Report, Condemned Unit report (incl. the 7-day client response flow), and emailing any of these direct to a client. |
+| **Trainee** | R249/mo | Trainee logbook and competency tracking. Includes 2 trainee logins. |
+| **Workshop** | R349/mo | Weekly verification, toolbox talks, and mandatory training — functions and reports. |
+| **Auditing** | R399/mo | Everything under the Audit tab: Company Documents, Employees, Vehicles, Workshops, Calibration register, and technician/workshop tool registers. Includes 1 workshop. |
 
-- **Extra technician** — R249/mo each, beyond the plan's included count.
-- **Extra admin** — R149/mo each, beyond the plan's included count.
-- **Extra trainee logbook** — R149/mo each, beyond the plan's included count.
-- **Audit Compliance Pack** — R399/mo, includes 1 workshop; +R279/mo per
-  extra workshop. `auditPackWorkshops` is the *total* workshops covered
-  (0 = pack not bought), not "1 + extra" the way the seat add-ons are.
+The Competent Person role isn't part of this pricing model at all —
+account creation is completely ungated, same as before any pricing work
+touched this codebase (it predates the Client/Trainee/Workshop/Auditing
+split and doesn't map cleanly onto any one module).
 
-A company's `billingCycle` (`monthly` or `annual`) doesn't change
-`calculateMonthlyPrice()`'s return value — that's always the
-monthly-equivalent figure, so MRR reporting stays comparable across
-billing cycles. An annual biller's actual lump sum is that monthly figure
-× 10 (2 months free), computed only for display (admin.html's "Billed" row).
+Add-ons stack on top of Core and, where relevant, their module:
 
-### Where the plan/add-ons actually live
+- **Extra technician** — R249/mo each, beyond Core's 3 included.
+- **Extra admin** — R149/mo each, beyond Core's 1 included.
+- **Extra trainee** — R99/mo each, beyond the Trainee Module's 2 included
+  (only meaningful once that module is bought).
+- **Extra workshop** — R279/mo each, beyond the Auditing Module's 1
+  included (only meaningful once that module is bought).
 
-`companies/{companyId}.plan`/`.billingCycle`/`.addOns` are the superadmin's
-own fields (set in admin.html's company detail view) but **that doc stays
+### Where the modules/add-ons actually live
+
+`companies/{companyId}.modules`/`.addOns` are the superadmin's own fields
+(set in admin.html's company detail view) but **that doc stays
 superadmin-read-only** — a company's own admin, let alone a technician or
 trainee, can never read it (it also carries private notes/usage, and
-Firestore grants read access per document, not per field). So `{plan,
+Firestore grants read access per document, not per field). So `{modules,
 addOns}` is *mirrored* onto `companyAddons/{companyId}` — a lighter, safe-
 to-read doc — every time either changes:
 
-- `onDetailPlanChange()` (admin.html) writes plan/billingCycle onto
-  `companies/{id}` and mirrors `plan` onto `companyAddons/{id}`;
-  `onAddOnsChange()` does the same for `addOns`.
-- `createCompany` (functions/index.js) writes both at creation too, so a
-  brand-new company is gated correctly from day one.
+- `onAddOnsChange()` (admin.html) writes both onto `companies/{id}` and
+  mirrors both onto `companyAddons/{id}` in one go.
+- `createCompany` (functions/index.js) writes both at creation too (every
+  module off, every add-on at 0 — Core only), so a brand-new company is
+  gated correctly from day one.
 - `firestore.rules` and Cloud Functions never need the mirror — a rule's
   `get()`/`exists()` isn't subject to the target document's own read rule
   (the same trick `isCompanyAdmin()`/`myCompanyId()` already rely on), and
@@ -212,64 +215,74 @@ to-read doc — every time either changes:
   reads are actually blocked by that rule, which is the one place the
   mirror matters. `firestore.rules`' `companyAddons` read rule is any
   signed-in member of that company, not just its admin, since a
-  technician's/trainee's own client also needs it (e.g. to know whether the
-  PDFs it builds should carry Vigil Fire branding).
+  technician's/trainee's own client also needs it.
 
 ### Grandfathering existing companies
 
 Every company that existed before this pricing model shipped has no
-`addOns` field at all yet, and every enforcement point (Cloud Functions'
-`requireAddOnCapacity()`/`requireAuditPack()`, `firestore.rules`'
-`hasAuditAddon()`) would otherwise read that as zero allowances across the
-board. Rather than lock existing customers out, `scripts/migrate-to-addons-
-pricing.js` backfills every such company onto the Business plan with a
-deliberately generous `addOns` object (50 extra technicians, 10 extra
-admins, 50 extra trainee logbooks, a 20-workshop Audit pack) — a one-time
-grandfathering gesture, not a real plan — and mirrors the same onto
-`companyAddons/{id}`. Safe to re-run; it only touches companies still
-missing `addOns`. One flagged gap: Business's Competent Person allowance is
-0 (that role is Inspection-exclusive), so a migrated company with an
-already-active Competent Person account keeps it working (the limit is only
-checked at account-creation time) but couldn't create a new one without a
-superadmin switching it to Inspection first — worth a manual look if that
-ever applies to a real (non-demo) company.
+`modules` field at all yet, and every enforcement point (Cloud Functions'
+`requireCompanyModule()`/`requireAddOnCapacity()`, `firestore.rules`'
+`hasClientModule()`/`hasTraineeModule()`/`hasWorkshopModule()`/
+`hasAuditAddon()`) would otherwise read that as every module off. Rather
+than lock existing customers out, `scripts/migrate-to-addons-pricing.js`
+backfills every such company with all 4 modules on and a deliberately
+generous `addOns` object (50 extra technicians, 10 extra admins, 50 extra
+trainees, 20 extra workshops) — a one-time grandfathering gesture, not a
+real plan — and mirrors the same onto `companyAddons/{id}`. It also removes
+the old `plan`/`billingCycle`/`seatLimit` fields from the two previous
+pricing models this project went through before landing here. Safe to
+re-run; it only touches companies still missing `modules`.
 
 ### Enforced in two places, not just hidden in the UI
 
-- **`functions/index.js`**: seat/logbook/workshop counts can't be checked
+- **`functions/index.js`**: seat/trainee/workshop counts can't be checked
   reliably by a Firestore rule (it can restrict one write, not count how
   many documents already match a query), so a shared
   `requireAddOnCapacity(db, companyId, role)` — reused by `createTechnician`
   and `reactivateTechnician` — counts active accounts of that role and
-  throws `resource-exhausted` if adding one more would exceed the plan's
-  allowance plus add-ons. `inviteAdmin` (new — see below) uses the same
-  helper for the admin role. `addWorkshop` (new) does the equivalent count
-  against `auditPackWorkshops` before creating a `branches` doc.
-- **`firestore.rules`**: `hasAuditAddon(companyId)` now checks
-  `companyAddOns(companyId).auditPackWorkshops > 0` and still gates every
-  Audit-tab collection's read and write, same as before this pricing model.
-  Trainee logbooks/toolbox talks/weekly verification are **not** gated on
-  an ongoing basis in rules — their capacity is enforced once, at
-  account-creation time, same as technicians/admins.
-- **`index.html`**: `hasAuditPack()` reads the `companyAddons` mirror and
-  gates the Audit nav tab and `AUDIT_VIEWS` navigation guard, same pattern
-  as before. `brandingRemoved()` (new) reads the mirrored `plan` against a
-  local `PLAN_REMOVES_BRANDING` map and drops the "Generated by Vigil Fire"
-  credit line from the printable register's footer when true — the one
-  place that credit line appears on a client-facing document today.
+  throws `resource-exhausted` if adding one more would exceed Core's
+  allowance plus add-ons (and, for trainees, requires the Trainee Module to
+  be on at all). `inviteAdmin` uses the same helper for the admin role.
+  `addWorkshop` does the equivalent count against the Auditing Module's
+  workshop allowance before creating a `branches` doc. A separate
+  `requireCompanyModule(db, companyId, moduleKey, label)` helper is the live,
+  ongoing gate for each module's Cloud-Function-mediated actions
+  (`emailSiteDocuments` needs the Client Module; `createLogbookEntry`/
+  `signLogbookEntry` need the Trainee Module; `signToolboxTalk` needs the
+  Workshop Module) — a company that switches a module off loses that action
+  immediately, not just at the next seat check.
+- **`firestore.rules`**: `hasClientModule()`/`hasTraineeModule()`/
+  `hasWorkshopModule()` each gate their collections' read *and* write
+  (`traineeAssignments`/`traineeCompetencies`/`logbookEntries` for Trainee;
+  `calibrations`/`toolboxTalks`/`mandatoryTopics` for Workshop).
+  `hasAuditAddon(companyId)` now checks `companyModules(companyId
+  ).auditingModule == true` and still gates every Audit-tab collection
+  (including Tools — it stayed put rather than moving to the Workshop
+  Module, a deliberate call to avoid splitting the Audit tab's UI across
+  two module flags). Monthly checks (Competent Person) stay fully ungated,
+  consistent with that role sitting outside this pricing model entirely.
+- **`index.html`**: `hasClientModule()`/`hasTraineeModule()`/
+  `hasWorkshopModule()`/`hasAuditPack()` each read the `companyAddons`
+  mirror. The Client Module gates `openCertificate`/
+  `openPressureTestReport`/`openRechargeReport`/`openCondemnedReport`/
+  `openEmailSite` (toast-and-return guards, matching every other role gate
+  already in this codebase) — note the printable **site register stays a
+  Core feature**, ungated, even though the certificate right next to it in
+  the Reports tab needs the Client Module. The Trainee/Workshop Modules
+  gate their nav tabs and a `TRAINEE_VIEWS`/`WORKSHOP_VIEWS` navigation
+  guard in `showView()`, same pattern as `AUDIT_VIEWS`.
 
 ### Inviting a second admin
 
-`adminSeats` needed something to actually gate — this codebase had no way
-to add a second admin to an existing company before this feature (only the
-very first admin, created alongside the company itself, via `createCompany`).
-New: `inviteAdmin` (functions/index.js) mirrors `createCompany`'s own
-admin-creation sub-flow (temp password + a password-reset link emailed to
-them, never returned to the caller) but for an existing company, gated by
-the plan's included admin count plus `addOns.extraAdmins`. Entry point: a
-"+ Invite admin" button on the Technicians screen (`view-invite-admin`,
-admin-only, name + email only — no technician number, since admins log in
-by email).
+This codebase had no way to add a second admin to an existing company
+before a previous pricing round (only the very first admin, created
+alongside the company itself, via `createCompany`) — `inviteAdmin`
+(functions/index.js) mirrors `createCompany`'s own admin-creation sub-flow
+(temp password + a password-reset link emailed to them, never returned to
+the caller) but for an existing company, gated by Core's included admin
+count (1) plus `addOns.extraAdmins`. Entry point: a "+ Invite admin" button
+on the Technicians screen (`view-invite-admin`, admin-only, name + email
+only — no technician number, since admins log in by email).
 
 ### Deploying it
 
@@ -278,7 +291,7 @@ needs `firebase deploy --only firestore:rules,functions` in addition to the
 usual static-file push (`index.html`/`admin.html`/`sw.js` via GitHub
 Desktop). Run `scripts/migrate-to-addons-pricing.js` once, right after that
 deploy, so there's no window where an existing company is live against the
-new rules/functions without its backfilled `addOns` yet.
+new rules/functions without its backfilled `modules`/`addOns` yet.
 `firestore.indexes.json` and `storage.rules` are unchanged.
 
 ## Condemned units — client notice, response tracking, medium-replacement due

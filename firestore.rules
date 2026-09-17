@@ -46,38 +46,47 @@ service cloud.firestore {
       return isSignedIn() &&
         get(/databases/$(database)/documents/technicians/$(request.auth.uid)).data.canRunToolboxTalks == true;
     }
-    // 4 named plans (inspection/starter/growth/business) + à la carte
-    // add-ons. `addOns` (extraTechnicians, extraAdmins, traineeLogbooks,
-    // auditPackWorkshops — the fields functions/index.js's
-    // requireAddOnCapacity()/requireAuditPack() check) lives on
+    // Vigil Core + 4 feature modules (Client / Trainee / Workshop /
+    // Auditing), each independently bought on top. `modules` (the 4
+    // booleans) and `addOns` (extraTechnicians, extraAdmins, extraTrainees,
+    // extraWorkshops — the fields functions/index.js's
+    // requireAddOnCapacity()/requireCompanyModule() check) live on
     // companies/{companyId} — the canonical doc a superadmin edits in
     // admin.html. That doc stays deliberately superadmin-only (it also
     // carries private notes/usage), but get() inside a rule isn't subject
     // to the target document's own read rule — the same trick
     // isCompanyAdmin()/myCompanyId() already rely on above — so every rule
-    // here reads addOns straight off companies/{companyId} rather than
-    // needing a mirror. (index.html's browser-side reads ARE subject to
-    // that rule, which is why companyAddons/{companyId} still exists below
-    // as a client-readable mirror of the same plan/addOns — see
-    // admin.html's dual-write.) A company with no `addOns` field at all
-    // reads as every field being its default (0) — i.e. no add-ons bought.
-    // Existing companies get a one-time generous backfill via
-    // scripts/migrate-to-addons-pricing.js instead of being silently left
-    // at that default.
+    // here reads modules/addOns straight off companies/{companyId} rather
+    // than needing a mirror. (index.html's browser-side reads ARE subject
+    // to that rule, which is why companyAddons/{companyId} still exists
+    // below as a client-readable mirror of the same modules/addOns — see
+    // admin.html's dual-write.) A company with no `modules` field at all
+    // reads as every module being off. Existing companies get a one-time
+    // generous backfill via scripts/migrate-to-addons-pricing.js instead of
+    // being silently left at that default.
     // Always returns a map, never null — chaining a further field lookup
-    // (e.g. `.auditPackWorkshops`) straight off a possibly-null value is a
-    // rules evaluation error, not a graceful false, so this guards the
-    // "company exists but has no addOns field yet" case explicitly rather
-    // than relying on that.
-    function companyAddOns(companyId) {
+    // (e.g. `.clientModule`) straight off a possibly-null value is a rules
+    // evaluation error, not a graceful false, so this guards the "company
+    // exists but has no modules field yet" case explicitly rather than
+    // relying on that.
+    function companyModules(companyId) {
       let path = /databases/$(database)/documents/companies/$(companyId);
-      return (exists(path) && 'addOns' in get(path).data) ? get(path).data.addOns : {};
+      return (exists(path) && 'modules' in get(path).data) ? get(path).data.modules : {};
+    }
+    function hasClientModule(companyId) {
+      return isSuperadmin() || companyModules(companyId).clientModule == true;
+    }
+    function hasTraineeModule(companyId) {
+      return isSuperadmin() || companyModules(companyId).traineeModule == true;
+    }
+    function hasWorkshopModule(companyId) {
+      return isSuperadmin() || companyModules(companyId).workshopModule == true;
     }
     // Gates the Audit tab (Company Documents / Employees / Vehicles /
-    // Workshops / Calibration). Kept under its original name since it's
-    // referenced by every Audit-tab collection below.
+    // Workshops / Calibration / Tools). Kept under its original name since
+    // it's referenced by every Audit-tab collection below.
     function hasAuditAddon(companyId) {
-      return isSuperadmin() || companyAddOns(companyId).auditPackWorkshops > 0;
+      return isSuperadmin() || companyModules(companyId).auditingModule == true;
     }
 
     // Internal operator dashboard (separate admin.html, superadmin-only).
@@ -93,15 +102,13 @@ service cloud.firestore {
     // access per document, not per field, so a company admin reading their
     // own `companies` doc would see those too.
     match /companyAddons/{companyId} {
-      // Client-readable mirror of companies/{companyId}'s plan/addOns —
+      // Client-readable mirror of companies/{companyId}'s modules/addOns —
       // read by any signed-in member of the company (not just its admin),
-      // since every role's own client needs it: to hide/show the Audit tab
-      // (hasAuditPack() in index.html), to know whether PDFs it builds
-      // should carry Vigil Fire branding (the plan's removesBranding), and
-      // for the companies list's own display. Written by admin.html
-      // whenever a superadmin edits a company's plan/add-ons. Nothing on this
-      // doc is admin-only-sensitive the way companies/{id}'s notes/usage
-      // fields are.
+      // since every role's own client needs it: to hide/show the Client/
+      // Trainee/Workshop/Auditing module screens (hasClientModule() etc. in
+      // index.html). Written by admin.html whenever a superadmin edits a
+      // company's modules/add-ons. Nothing on this doc is admin-only-
+      // sensitive the way companies/{id}'s notes/usage fields are.
       allow read:  if isSuperadmin() || isCompanyAdmin(companyId) || (isSignedIn() && myCompanyId() == companyId);
       allow write: if isSuperadmin();
     }
@@ -169,11 +176,13 @@ service cloud.firestore {
     // resource-data read, with no query needed. Only an admin assigns or
     // reassigns; the trainee and their current supervisor may read it.
     match /traineeAssignments/{traineeId} {
-      allow read: if isCompanyAdmin(resource.data.companyId)
+      allow read: if hasTraineeModule(resource.data.companyId) && (
+        isCompanyAdmin(resource.data.companyId)
         || (isSignedIn() && request.auth.uid == traineeId)
-        || (isSignedIn() && resource.data.supervisorId == request.auth.uid);
-      allow create: if isCompanyAdmin(request.resource.data.companyId);
-      allow update, delete: if isCompanyAdmin(resource.data.companyId);
+        || (isSignedIn() && resource.data.supervisorId == request.auth.uid)
+      );
+      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasTraineeModule(request.resource.data.companyId);
+      allow update, delete: if isCompanyAdmin(resource.data.companyId) && hasTraineeModule(resource.data.companyId);
     }
 
     // A trainee's daily logbook entry (SAQCC Fire paper form, digitised). The
@@ -184,9 +193,11 @@ service cloud.firestore {
     // restricted to their own uid and to exactly the sign-off fields. Once
     // signed, nobody but an admin may touch it again.
     match /logbookEntries/{id} {
-      allow read: if isCompanyAdmin(resource.data.companyId)
+      allow read: if hasTraineeModule(resource.data.companyId) && (
+        isCompanyAdmin(resource.data.companyId)
         || (isSignedIn() && resource.data.traineeId == request.auth.uid)
-        || (isSignedIn() && resource.data.technicianId == request.auth.uid);
+        || (isSignedIn() && resource.data.technicianId == request.auth.uid)
+      );
 
       // A trainee's first save (create) and a technician's sign-off both go
       // through the `createLogbookEntry` / `signLogbookEntry` Cloud Functions
@@ -197,9 +208,10 @@ service cloud.firestore {
       // Both functions also require the actor to have completed their own
       // profile first (see `requireProfileComplete`), a check that likewise
       // has to live server-side.
-      allow create: if isCompanyAdmin(request.resource.data.companyId);
+      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasTraineeModule(request.resource.data.companyId);
 
-      allow update: if isCompanyAdmin(resource.data.companyId)
+      allow update: if hasTraineeModule(resource.data.companyId) && (
+        isCompanyAdmin(resource.data.companyId)
         || (
           isSignedIn() && resource.data.traineeId == request.auth.uid
           && resource.data.status == 'draft' && request.resource.data.status == 'draft'
@@ -210,10 +222,13 @@ service cloud.firestore {
           && request.resource.data.companyId == resource.data.companyId
           && get(/databases/$(database)/documents/technicians/$(request.resource.data.technicianId)).data.role == 'technician'
           && get(/databases/$(database)/documents/technicians/$(request.resource.data.technicianId)).data.companyId == resource.data.companyId
-        );
+        )
+      );
 
-      allow delete: if isCompanyAdmin(resource.data.companyId)
-        || (isSignedIn() && resource.data.traineeId == request.auth.uid && resource.data.status == 'draft');
+      allow delete: if hasTraineeModule(resource.data.companyId) && (
+        isCompanyAdmin(resource.data.companyId)
+        || (isSignedIn() && resource.data.traineeId == request.auth.uid && resource.data.status == 'draft')
+      );
     }
 
     // Progress against the SAQCC (Fire) "aspects to practice on-the-job"
@@ -222,11 +237,15 @@ service cloud.firestore {
     // call (or admin's) — unlike a daily logbook entry, this isn't something
     // any witnessing technician should be able to sign off.
     match /traineeCompetencies/{traineeId} {
-      allow read: if isCompanyAdmin(resource.data.companyId)
+      allow read: if hasTraineeModule(resource.data.companyId) && (
+        isCompanyAdmin(resource.data.companyId)
         || (isSignedIn() && request.auth.uid == traineeId)
-        || (isSignedIn() && get(/databases/$(database)/documents/traineeAssignments/$(traineeId)).data.supervisorId == request.auth.uid);
-      allow write: if isCompanyAdmin(request.resource.data.companyId)
-        || (isSignedIn() && get(/databases/$(database)/documents/traineeAssignments/$(traineeId)).data.supervisorId == request.auth.uid);
+        || (isSignedIn() && get(/databases/$(database)/documents/traineeAssignments/$(traineeId)).data.supervisorId == request.auth.uid)
+      );
+      allow write: if hasTraineeModule(request.resource.data.companyId) && (
+        isCompanyAdmin(request.resource.data.companyId)
+        || (isSignedIn() && get(/databases/$(database)/documents/traineeAssignments/$(traineeId)).data.supervisorId == request.auth.uid)
+      );
     }
 
     match /sites/{siteId} {
@@ -331,12 +350,14 @@ service cloud.firestore {
     // verification" (the real calibration register is `calibrationCertificates`
     // above). Entries are added by an admin or by a technician the admin has
     // granted the `canCalibrate` permission; only an admin may change or remove one.
-    // Training Compliance Pack feature.
+    // Workshop Module feature.
     match /calibrations/{id} {
-      allow read:   if isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && myCompanyId() == resource.data.companyId);
-      allow create: if isCompanyAdmin(request.resource.data.companyId)
-        || (canCalibrate() && myCompanyId() == request.resource.data.companyId);
-      allow update, delete: if isCompanyAdmin(resource.data.companyId);
+      allow read:   if hasWorkshopModule(resource.data.companyId) && (isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && myCompanyId() == resource.data.companyId));
+      allow create: if hasWorkshopModule(request.resource.data.companyId) && (
+        isCompanyAdmin(request.resource.data.companyId)
+        || (canCalibrate() && myCompanyId() == request.resource.data.companyId)
+      );
+      allow update, delete: if isCompanyAdmin(resource.data.companyId) && hasWorkshopModule(resource.data.companyId);
     }
 
     // Toolbox talks — short recorded safety briefings. Admin or a technician
@@ -344,14 +365,15 @@ service cloud.firestore {
     // (mirrors calibrations' create rule). Visible only to admin and
     // whoever the creator invited (invitedIds) — not the whole company —
     // so an uninvited technician or trainee can neither see nor sign a talk
-    // they weren't asked to attend. Free, core feature — not gated behind
-    // a plan or add-on.
+    // they weren't asked to attend. Workshop Module feature.
     match /toolboxTalks/{id} {
-      allow read:   if isSuperadmin() || isCompanyAdmin(resource.data.companyId)
-        || (isSignedIn() && myCompanyId() == resource.data.companyId && request.auth.uid in resource.data.invitedIds);
-      allow create: if isCompanyAdmin(request.resource.data.companyId)
-        || (canRunToolboxTalks() && myCompanyId() == request.resource.data.companyId);
-      allow update, delete: if isCompanyAdmin(resource.data.companyId);
+      allow read:   if hasWorkshopModule(resource.data.companyId) && (isSuperadmin() || isCompanyAdmin(resource.data.companyId)
+        || (isSignedIn() && myCompanyId() == resource.data.companyId && request.auth.uid in resource.data.invitedIds));
+      allow create: if hasWorkshopModule(request.resource.data.companyId) && (
+        isCompanyAdmin(request.resource.data.companyId)
+        || (canRunToolboxTalks() && myCompanyId() == request.resource.data.companyId)
+      );
+      allow update, delete: if isCompanyAdmin(resource.data.companyId) && hasWorkshopModule(resource.data.companyId);
 
       // Each attendee's own signed attendance record — doc id is their uid, so
       // "have I signed" is a free existence check. Written only by the
@@ -360,9 +382,9 @@ service cloud.firestore {
       // can't do, and where profile completion is enforced. companyId is
       // copied onto this doc from the parent talk so read needs no nested get().
       match /attendees/{uid} {
-        allow read:           if isCompanyAdmin(resource.data.companyId) || (isSignedIn() && myCompanyId() == resource.data.companyId);
+        allow read:           if hasWorkshopModule(resource.data.companyId) && (isCompanyAdmin(resource.data.companyId) || (isSignedIn() && myCompanyId() == resource.data.companyId));
         allow create, update: if false;
-        allow delete:         if isCompanyAdmin(resource.data.companyId);
+        allow delete:         if isCompanyAdmin(resource.data.companyId) && hasWorkshopModule(resource.data.companyId);
       }
     }
 
@@ -373,9 +395,9 @@ service cloud.firestore {
     // this list for its topic dropdown, and a technician permitted to create
     // a talk won't necessarily have visited any admin-only screen.
     match /mandatoryTopics/{id} {
-      allow read:   if isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && myCompanyId() == resource.data.companyId);
-      allow create: if isCompanyAdmin(request.resource.data.companyId);
-      allow update, delete: if isCompanyAdmin(resource.data.companyId);
+      allow read:   if hasWorkshopModule(resource.data.companyId) && (isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && myCompanyId() == resource.data.companyId));
+      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasWorkshopModule(request.resource.data.companyId);
+      allow update, delete: if isCompanyAdmin(resource.data.companyId) && hasWorkshopModule(resource.data.companyId);
     }
 
     // Monthly responsible-person inspection log (SANS 10105-1). One record per

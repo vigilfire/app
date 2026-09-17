@@ -1,60 +1,67 @@
 /**
- * Plan + add-on pricing — the source of truth for:
- *  - what each of the 4 named plans includes (seat/role allowances, whether
- *    client-facing PDFs carry Vigil Fire branding)
- *  - what each add-on costs on top of a plan
+ * Vigil Core + module pricing — the source of truth for:
+ *  - what Core includes (seat allowances) and what each of the 4 feature
+ *    modules unlocks and includes
+ *  - what each add-on costs on top
  *  - `calculateMonthlyPrice()`, used wherever a company's monthly bill needs
- *    computing (always the monthly-equivalent figure, even for an annual
- *    biller — see the comment on that function)
+ *    computing
  *
  * admin.html keeps its own copy of these same constants (there's no shared
  * build step to import this file from a static HTML page) — update both
- * files together whenever a price or limit changes.
+ * files together whenever a price or allowance changes.
+ *
+ * There is only one base tier (Core) now — no named plans. Every company
+ * starts on Core and independently buys whichever of the 4 modules it
+ * needs, each priced and gated on its own. Prices below are placeholders
+ * (no Rand figures were given for this pricing round) — replace with real
+ * pricing before relying on the MRR figure, same caveat every pricing
+ * constants file in this project has carried since the first one.
  */
-const PLAN_PRICES = { inspection: 249, starter: 499, growth: 1299, business: 2499 };
-const VALID_PLANS = Object.keys(PLAN_PRICES);
+const CORE_PRICE = 499;
+const CORE_INCLUDED_ADMINS = 1;
+const CORE_INCLUDED_TECHNICIANS = 3;
 
-// Per-plan built-in allowances. `competentPersons` (the Competent Person /
-// "inspector" role, SANS 10105-1 monthly site-control checks) is
-// deliberately Inspection-plan-exclusive — there is no add-on anywhere that
-// raises it for another plan, by design, not by omission.
-const PLAN_LIMITS = {
-  inspection: { admins: 1, technicians: 0, competentPersons: 1, traineeLogbooksIncluded: 0, removesBranding: false },
-  starter:    { admins: 1, technicians: 1, competentPersons: 0, traineeLogbooksIncluded: 0, removesBranding: false },
-  growth:     { admins: 2, technicians: 5, competentPersons: 0, traineeLogbooksIncluded: 0, removesBranding: true },
-  business:   { admins: 3, technicians: 10, competentPersons: 0, traineeLogbooksIncluded: 2, removesBranding: true },
-};
+const CLIENT_MODULE_PRICE = 349;
+
+const TRAINEE_MODULE_PRICE = 249;
+const TRAINEE_MODULE_INCLUDED_TRAINEES = 2;
+
+const WORKSHOP_MODULE_PRICE = 349;
+
+const AUDITING_MODULE_PRICE = 399;
+const AUDITING_MODULE_INCLUDED_WORKSHOPS = 1;
 
 const ADDON_PRICES = {
   extraTechnician: 249,
   extraAdmin: 149,
-  traineeLogbook: 149,
-  auditPack: 399,              // includes 1 workshop
-  auditPackExtraWorkshop: 279,
+  extraTrainee: 99,
+  extraWorkshop: 279,
 };
 
-// Always the monthly-equivalent, regardless of a company's billingCycle —
-// an annual biller is charged calculateMonthlyPrice(company) * 10 (2 months
-// free) as their actual lump sum, but MRR reporting and this function both
-// stay in monthly terms so an annual customer doesn't distort the figure.
 function calculateMonthlyPrice(company) {
-  const plan = (company && company.plan) || "starter";
+  const m = (company && company.modules) || {};
   const a = (company && company.addOns) || {};
   let total =
-    (PLAN_PRICES[plan] || 0) +
+    CORE_PRICE +
     (a.extraTechnicians || 0) * ADDON_PRICES.extraTechnician +
-    (a.extraAdmins || 0) * ADDON_PRICES.extraAdmin +
-    (a.traineeLogbooks || 0) * ADDON_PRICES.traineeLogbook;
-  if ((a.auditPackWorkshops || 0) > 0) {
-    total += ADDON_PRICES.auditPack + Math.max(0, (a.auditPackWorkshops || 0) - 1) * ADDON_PRICES.auditPackExtraWorkshop;
-  }
+    (a.extraAdmins || 0) * ADDON_PRICES.extraAdmin;
+  if (m.clientModule) total += CLIENT_MODULE_PRICE;
+  if (m.traineeModule) total += TRAINEE_MODULE_PRICE + (a.extraTrainees || 0) * ADDON_PRICES.extraTrainee;
+  if (m.workshopModule) total += WORKSHOP_MODULE_PRICE;
+  if (m.auditingModule) total += AUDITING_MODULE_PRICE + (a.extraWorkshops || 0) * ADDON_PRICES.extraWorkshop;
   return total;
 }
 
 module.exports = {
-  PLAN_PRICES,
-  VALID_PLANS,
-  PLAN_LIMITS,
+  CORE_PRICE,
+  CORE_INCLUDED_ADMINS,
+  CORE_INCLUDED_TECHNICIANS,
+  CLIENT_MODULE_PRICE,
+  TRAINEE_MODULE_PRICE,
+  TRAINEE_MODULE_INCLUDED_TRAINEES,
+  WORKSHOP_MODULE_PRICE,
+  AUDITING_MODULE_PRICE,
+  AUDITING_MODULE_INCLUDED_WORKSHOPS,
   ADDON_PRICES,
   calculateMonthlyPrice,
 };
