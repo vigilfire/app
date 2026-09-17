@@ -21,7 +21,7 @@ const { defineSecret } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
-const { PLAN_SEAT_LIMITS, VALID_PLANS } = require("./planConstants");
+const { VALID_PLANS, PLAN_LIMITS } = require("./pricing");
 
 // NB: @sparticuz/chromium, puppeteer-core and resend are require()d lazily
 // inside the handler, not here. Loading them at module scope pushes cold-start /
@@ -305,6 +305,7 @@ exports.createCompany = onCall({ secrets: [RESEND_API_KEY] }, async (request) =>
   const adminEmail = String(data.adminEmail || "").trim();
   const adminName = String(data.adminName || "").trim();
   const plan = String(data.plan || "starter").trim();
+  const billingCycle = data.billingCycle === "annual" ? "annual" : "monthly";
 
   if (!name) throw new HttpsError("invalid-argument", "Company name is required.");
   if (!isValidEmail(adminEmail)) {
@@ -340,12 +341,27 @@ exports.createCompany = onCall({ secrets: [RESEND_API_KEY] }, async (request) =>
   batch.set(companyRef, {
     name,
     plan,
-    seatLimit: PLAN_SEAT_LIMITS[plan],
+    billingCycle,
     status: "trialing",
+    // A brand-new company starts with no add-ons bought yet — every field
+    // defaults to 0 wherever it's read. That's different from an *existing*
+    // company migrating onto this model, which gets backfilled to generous
+    // access by scripts/migrate-to-addons-pricing.js instead — a fresh sale
+    // hasn't bought anything yet, so it shouldn't start with the same
+    // grandfathered capacity existing customers keep.
+    addOns: { extraTechnicians: 0, extraAdmins: 0, traineeLogbooks: 0, auditPackWorkshops: 0 },
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     notes: "",
     usage: { storageBytes: 0, emailsSentThisMonth: 0 },
     lastActivityAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  // Mirrors plan/addOns onto companyAddons — the doc a company's own
+  // signed-in users can actually read (companies/{id} stays superadmin-
+  // only). See firestore.rules' companyAddOns() and index.html's
+  // hasAuditPack()/brandingRemoved() client helpers.
+  batch.set(db.collection("companyAddons").doc(companyId), {
+    plan,
+    addOns: { extraTechnicians: 0, extraAdmins: 0, traineeLogbooks: 0, auditPackWorkshops: 0 },
   });
   batch.set(db.collection("technicians").doc(userRecord.uid), {
     name: adminName,
@@ -401,25 +417,70 @@ async function requireCompanyAdmin(db, uid) {
   return companyId;
 }
 
-// Shared seat-limit check — throws if the company has no free seat. Only
-// active technicians occupy a seat, so deactivating someone frees theirs
-// immediately; reactivating is charged against the limit exactly like
-// creating a new technician is.
-async function requireSeatAvailable(db, companyId) {
+// Counts how many active technicians/trainees/Competent Persons/admins of a
+// given role a company already has and throws if adding one more would
+// exceed what their plan + add-ons allow. This has to live here, not in a
+// Firestore rule: a rule can restrict a single write but can't reliably
+// count how many documents already match a query before allowing the next
+// one — same reasoning the old seat-limit check always used. `role` is the
+// role being added (or reactivated).
+async function requireAddOnCapacity(db, companyId, role) {
   const companySnap = await db.collection("companies").doc(companyId).get();
-  const seatLimit = companySnap.exists ? companySnap.data().seatLimit : undefined;
-  if (seatLimit === null || seatLimit === undefined) return;
-  const countSnap = await db
-    .collection("technicians")
-    .where("companyId", "==", companyId)
-    .where("active", "==", true)
-    .count()
-    .get();
-  if (countSnap.data().count >= seatLimit) {
-    throw new HttpsError(
-      "resource-exhausted",
-      `Seat limit reached (${seatLimit}). Upgrade the plan or deactivate a technician first.`
-    );
+  const company = companySnap.exists ? companySnap.data() : {};
+  const plan = company.plan || "starter";
+  const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.starter;
+  const addOns = company.addOns || {};
+  const countActive = async (r) => {
+    const snap = await db.collection("technicians")
+      .where("companyId", "==", companyId)
+      .where("role", "==", r)
+      .where("active", "==", true)
+      .count().get();
+    return snap.data().count;
+  };
+  if (role === "admin") {
+    const limit = limits.admins + (addOns.extraAdmins || 0);
+    if ((await countActive("admin")) >= limit) {
+      throw new HttpsError("resource-exhausted", `Admin seat limit reached (${limit}). Add admin seats first.`);
+    }
+  } else if (role === "technician") {
+    // The Inspection plan has no technician role at all, not just a zero
+    // limit — this reads clearer as its own explicit rejection than folding
+    // it into "0 + 0 extra >= 0" below, even though that'd reject it too.
+    if (plan === "inspection") {
+      throw new HttpsError("permission-denied", "The Inspection plan has no technician role.");
+    }
+    const limit = limits.technicians + (addOns.extraTechnicians || 0);
+    if ((await countActive("technician")) >= limit) {
+      throw new HttpsError("resource-exhausted", `Technician seat limit reached (${limit}). Add technician seats first.`);
+    }
+  } else if (role === "competent") {
+    // Deliberately Inspection-plan-exclusive — no add-on anywhere raises
+    // this for another plan.
+    const limit = limits.competentPersons;
+    if ((await countActive("competent")) >= limit) {
+      throw new HttpsError("resource-exhausted",
+        limit === 0
+          ? "Competent Person accounts are only available on the Inspection plan."
+          : `Competent Person seat limit reached (${limit}).`);
+    }
+  } else if (role === "trainee") {
+    const limit = limits.traineeLogbooksIncluded + (addOns.traineeLogbooks || 0);
+    if ((await countActive("trainee")) >= limit) {
+      throw new HttpsError("resource-exhausted", `Trainee logbook limit reached (${limit}). Add trainee logbooks first.`);
+    }
+  }
+}
+
+// The Audit section is a live, ongoing gate, not just a check at the moment
+// a workshop was created — a company that drops the pack (sets
+// auditPackWorkshops back to 0) loses the section immediately, same as
+// hasAuditPack() in firestore.rules and index.html.
+async function requireAuditPack(db, companyId) {
+  const companySnap = await db.collection("companies").doc(companyId).get();
+  const addOns = (companySnap.exists && companySnap.data().addOns) || {};
+  if (!((addOns.auditPackWorkshops || 0) > 0)) {
+    throw new HttpsError("permission-denied", "The Audit Compliance Pack isn't active for this company.");
   }
 }
 
@@ -466,10 +527,7 @@ exports.createTechnician = onCall(async (request) => {
     throw new HttpsError("already-exists", "That technician number is already in use.");
   }
 
-  // Seat-limit check. This has to live here, not in a Firestore rule: a rule
-  // can restrict a single write but can't reliably count how many
-  // technicians a company already has before allowing the next one.
-  await requireSeatAvailable(db, companyId);
+  await requireAddOnCapacity(db, companyId, role);
 
   const email = `tech${techNumber}@${TECH_EMAIL_DOMAIN}`;
   let userRecord;
@@ -526,9 +584,130 @@ exports.reactivateTechnician = onCall(async (request) => {
   // Reactivating occupies a seat exactly like creating a new technician does
   // — this is why firestore.rules blocks the active:false→true transition
   // for a plain client update and routes it here instead.
-  await requireSeatAvailable(db, companyId);
+  await requireAddOnCapacity(db, companyId, targetSnap.data().role);
   await targetRef.update({ active: true });
   return { reactivated: true };
+});
+
+// A company admin inviting a second (or third, ...) admin — mirrors
+// createCompany's own admin-creation sub-flow (temp password, a password-
+// reset link emailed to them, never returned to the caller) but for an
+// *existing* company instead of a brand-new one, gated by the plan's
+// included admin count plus addOns.extraAdmins rather than the one admin
+// every company starts with for free.
+exports.inviteAdmin = onCall({ secrets: [RESEND_API_KEY] }, async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "Sign in first.");
+  }
+  const db = admin.firestore();
+  const companyId = await requireCompanyAdmin(db, uid);
+
+  const data = request.data || {};
+  const name = String(data.name || "").trim();
+  const email = String(data.email || "").trim();
+  if (!name) throw new HttpsError("invalid-argument", "Name is required.");
+  if (!isValidEmail(email)) throw new HttpsError("invalid-argument", "A valid email is required.");
+
+  await requireAddOnCapacity(db, companyId, "admin");
+
+  const companySnap = await db.collection("companies").doc(companyId).get();
+  const companyName = (companySnap.exists && companySnap.data().name) || "Vigil Fire";
+
+  const tempPassword = crypto.randomBytes(24).toString("base64url");
+  let userRecord;
+  try {
+    userRecord = await admin.auth().createUser({ email, password: tempPassword, displayName: name });
+  } catch (e) {
+    throw new HttpsError(
+      "already-exists",
+      e.message || "Could not create the admin account — that email may already be in use."
+    );
+  }
+  await admin.auth().setCustomUserClaims(userRecord.uid, { companyId, role: "admin" });
+  await db.collection("technicians").doc(userRecord.uid).set({
+    name,
+    email,
+    role: "admin",
+    companyId,
+    active: true,
+    canCalibrate: false,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  let emailWarning = null;
+  try {
+    const resetLink = await admin.auth().generatePasswordResetLink(email);
+    const { Resend } = require("resend");
+    const resend = new Resend(RESEND_API_KEY.value());
+    const sendRes = await resend.emails.send({
+      from: emailFrom(),
+      to: [email],
+      subject: `You're set up on Vigil Fire — ${companyName}`,
+      text: [
+        `Hi ${name},`,
+        "",
+        `You've been added as an administrator for "${companyName}" on Vigil Fire.`,
+        "Set your password here, then sign in at the app with this email address:",
+        resetLink,
+      ].join("\n"),
+    });
+    if (sendRes.error) emailWarning = sendRes.error.message || String(sendRes.error);
+  } catch (e) {
+    emailWarning = e.message || String(e);
+    logger.error("inviteAdmin: could not email the new admin", e);
+  }
+
+  return { uid: userRecord.uid, emailWarning };
+});
+
+// Workshop ("branches") creation, count-checked against the Audit
+// Compliance Pack the same way createTechnician checks technician seats —
+// a Firestore rule can gate the write itself but can't reliably count how
+// many workshops a company already has first. Editing an existing workshop
+// stays a direct client write (firestore.rules' hasAuditPack still gates
+// that) since it doesn't change the count.
+exports.addWorkshop = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "Sign in first.");
+  }
+  const db = admin.firestore();
+  const companyId = await requireCompanyAdmin(db, uid);
+
+  const data = request.data || {};
+  const name = String(data.name || "").trim();
+  if (!name) throw new HttpsError("invalid-argument", "Give the workshop a name.");
+
+  await requireAuditPack(db, companyId);
+
+  const companySnap = await db.collection("companies").doc(companyId).get();
+  const addOns = (companySnap.exists && companySnap.data().addOns) || {};
+  const limit = addOns.auditPackWorkshops || 0; // the count itself, not "+1" — auditPackWorkshops IS the total covered
+  const countSnap = await db.collection("branches")
+    .where("companyId", "==", companyId)
+    .where("active", "==", true)
+    .count().get();
+  if (countSnap.data().count >= limit) {
+    throw new HttpsError("resource-exhausted", `Workshop limit reached (${limit}). Add workshop capacity first.`);
+  }
+
+  const ref = db.collection("branches").doc();
+  await ref.set({
+    companyId,
+    name,
+    address: String(data.address || "").trim(),
+    phone: String(data.phone || "").trim(),
+    markPermitNo: String(data.markPermitNo || "").trim(),
+    markPermitIssueDate: String(data.markPermitIssueDate || ""),
+    markPermitExpiryDate: String(data.markPermitExpiryDate || ""),
+    notes: String(data.notes || "").trim(),
+    markPermitFileURL: "",
+    active: true,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { id: ref.id };
 });
 
 // The caller's real IP/user-agent — only trustworthy read here, server-side

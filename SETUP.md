@@ -137,11 +137,11 @@ An **expiry banner** on the tab (and the badge on the Company Documents chip) ro
 The whole Audit tab is gated behind a per-company **`audit` add-on**, off by default for every company (existing ones included) until a superadmin switches it on:
 
 - New `companyAddons/{companyId}` collection — one boolean/number field per add-on (e.g. `audit: true`), plus an optional `${key}Price` override per add-on, `updatedAt`. Kept **separate from `companies/{companyId}`** on purpose: that doc also carries the superadmin's private notes and usage figures, and Firestore grants read access per document, not per field, so letting a company's own admin read `companies` to check an add-on flag would hand them those private fields too. `firestore.rules`: read = superadmin or that company's own admin; write = superadmin only.
-- `admin.html` → a company's detail view has a generic **Add-ons** card, data-driven off an `ADDONS` catalog (`{key, label, description, kind: 'boolean'|'quantity', price, unit, includedByPlan}`, defined next to `PLAN_MONTHLY_PRICE`, prices kept in sync with vigilfire.github.io's pricing page) — one row per entry (a checkbox for `boolean`, a quantity + per-unit price for `quantity`), rendered by `renderAddonsCard()` and saved by a single generic `onAddonChange(key)` (same direct-Firestore-write-then-toast pattern as Plan/Status). Each company can override an add-on's default price via its own `${key}Price` field (a negotiated rate). A `quantity` add-on can also carry `includedByPlan` (a per-plan free count, e.g. Business includes 2 trainees free — Starter/Growth include none) — the stored quantity is always the company's real total; `billableQuantity()` subtracts what that plan includes before pricing kicks in, and the card shows the included/billable breakdown live. A future add-on is just one more `ADDONS` entry — it appears in every company's detail view, the Monthly column, and the MRR stat automatically; no other admin.html change needed for the billing side. **The feature side is separate and must still be built per add-on** — right now only `audit` is actually enforced (gates the Audit tab + its `firestore.rules`/`storage.rules`); `trainees`, `removeBranding`, `extraTechnicians` and `extraAdminLogins` are billing-tracking only, nothing in `index.html` checks them yet.
+- `admin.html` → a company's detail view has a generic **Add-ons** card, data-driven off an `ADDONS` catalog (`{key, label, description, kind: 'boolean'|'quantity', price, unit, includedByPlan}`, defined next to `PLAN_MONTHLY_PRICE`, prices kept in sync with vigilfire.github.io's pricing page) — one row per entry (a checkbox for `boolean`, a quantity + per-unit price for `quantity`), rendered by `renderAddonsCard()` and saved by a single generic `onAddonChange(key)` (same direct-Firestore-write-then-toast pattern as Plan/Status). Each company can override an add-on's default price via its own `${key}Price` field (a negotiated rate). A `quantity` add-on can also carry `includedByPlan` (a per-plan free count, e.g. Business includes 2 trainees free, Pro includes 5 — Basic/Growth include none) — the stored quantity is always the company's real total; `billableQuantity()` subtracts what that plan includes before pricing kicks in, and the card shows the included/billable breakdown live. A future add-on is just one more `ADDONS` entry — it appears in every company's detail view, the Monthly column, and the MRR stat automatically; no other admin.html change needed for the billing side. **The feature side is separate and must still be built per add-on/plan bucket** — `audit` and the four-tier plan (below) are enforced; `removeBranding`, `extraTechnicians` and `extraAdminLogins` are still billing-tracking only, nothing in `index.html` checks them yet.
 - The companies **list** now has a **Monthly** column (plan price + that company's add-on total) and the **MRR** stat includes add-on revenue for active/past-due companies — both fed by a second collection-wide listener, `startCompanyAddonsListener()` (superadmin can list the whole `companyAddons` collection unfiltered, same as `companies`), cached in `companyAddonsCache` keyed by companyId. `addonMonthlyCharge(addons, plan)` is the one function that turns a company's `companyAddons` doc into a Rand figure (the `plan` argument only matters for an `includedByPlan` add-on) — used by the detail view, the list, and the MRR stat alike. Changing a company's plan (`onDetailPlanChange`) re-renders its Add-ons card, since that can change how many of a quantity add-on come included free.
 - **Future**: a Zoho Books (or similar) sync is expected to read this pricing data eventually — `addonMonthlyCharge()` plus `PLAN_MONTHLY_PRICE[company.plan]` is the intended source of truth for what to invoice a company each month.
-- The main app fetches `companyAddons/{currentCompanyId}` once at login (only when the signed-in user is an admin — the rule denies it to anyone else) into `currentCompanyAddons`; `setupRoleUI()` uses it to show/hide the Audit nav button, and `showView()` has a belt-and-suspenders redirect if the Audit views are reached while the add-on is off.
-- **Enforced server-side, not just hidden in the UI**: a new `hasAuditAddon(companyId)` rule helper is ANDed onto every verb of `branches`, `vehicles`, `companyDocuments`, `calibrationCertificates`, `tools` and `toolChecks`, and onto the `company-files/{companyId}/{path=**}` Storage write rule — so a company without the add-on can't write to any of these even via a direct API call. Read of files already uploaded stays available if the add-on is later switched off, so historical evidence doesn't go dark.
+- The main app fetches `companyAddons/{currentCompanyId}` once at login (any signed-in user of that company, not just its admin — see "Four-tier plan gating" below for why that read was widened) into `currentCompanyAddons`; `setupRoleUI()` uses it to show/hide the Audit nav button, and `showView()` has a belt-and-suspenders redirect if the Audit views are reached while neither the add-on nor the Business/Pro plan applies.
+- **Enforced server-side, not just hidden in the UI**: a `hasAuditAddon(companyId)` rule helper is ANDed onto every verb of `branches`, `vehicles`, `companyDocuments`, `calibrationCertificates`, `tools` and `toolChecks`, and onto the `company-files/{companyId}/{path=**}` Storage write rule — so a company without the add-on (and below Business plan) can't write to any of these even via a direct API call. Read of files already uploaded stays available if the add-on is later switched off, so historical evidence doesn't go dark.
 
 ### "Calibration" renamed to "Weekly verification"
 
@@ -154,6 +154,132 @@ The bottom-nav **Calib.** tab is now **Verify**, and the "Calibration register" 
 - `firestore.indexes.json`: no change.
 - `functions/index.js`: no change this round (the `ACTIVITY_COLLECTIONS` additions for `branches`/`vehicles`/`companyDocuments`/`calibrationCertificates` were already deployed).
 - No backfill needed — every company (new or existing) has no `companyAddons` doc until a superadmin ticks the checkbox for them, and a missing doc means "off."
+
+## Plan + add-ons pricing (Inspection / Starter / Growth / Business)
+
+Every company is on one of 4 named plans, each with its own built-in
+allowances, plus optional add-ons purchased on top. `functions/pricing.js`
+(mirrored inline in `admin.html`, same "no shared build step" reasoning as
+everywhere else this pattern is used) is the source of truth:
+
+| Plan | Price | Admins | Technicians | Competent Persons | Trainee logbooks | Branding removed |
+|---|---|---|---|---|---|---|
+| **Inspection** | R249/mo | 1 | 0 (no technician role) | 1 | 0 | No |
+| **Starter** | R499/mo | 1 | 1 | 0 | 0 | No |
+| **Growth** | R1,299/mo | 2 | 5 | 0 | 0 | Yes |
+| **Business** | R2,499/mo | 3 | 10 | 0 | 2 | Yes |
+
+The Competent Person ("inspector") role is **deliberately
+Inspection-plan-exclusive** — no add-on anywhere raises `competentPersons`
+for another plan; a company needing that role runs a separate Inspection
+account rather than adding it to a Growth/Business one.
+
+Add-ons stack on top of whichever plan a company is on:
+
+- **Extra technician** — R249/mo each, beyond the plan's included count.
+- **Extra admin** — R149/mo each, beyond the plan's included count.
+- **Extra trainee logbook** — R149/mo each, beyond the plan's included count.
+- **Audit Compliance Pack** — R399/mo, includes 1 workshop; +R279/mo per
+  extra workshop. `auditPackWorkshops` is the *total* workshops covered
+  (0 = pack not bought), not "1 + extra" the way the seat add-ons are.
+
+A company's `billingCycle` (`monthly` or `annual`) doesn't change
+`calculateMonthlyPrice()`'s return value — that's always the
+monthly-equivalent figure, so MRR reporting stays comparable across
+billing cycles. An annual biller's actual lump sum is that monthly figure
+× 10 (2 months free), computed only for display (admin.html's "Billed" row).
+
+### Where the plan/add-ons actually live
+
+`companies/{companyId}.plan`/`.billingCycle`/`.addOns` are the superadmin's
+own fields (set in admin.html's company detail view) but **that doc stays
+superadmin-read-only** — a company's own admin, let alone a technician or
+trainee, can never read it (it also carries private notes/usage, and
+Firestore grants read access per document, not per field). So `{plan,
+addOns}` is *mirrored* onto `companyAddons/{companyId}` — a lighter, safe-
+to-read doc — every time either changes:
+
+- `onDetailPlanChange()` (admin.html) writes plan/billingCycle onto
+  `companies/{id}` and mirrors `plan` onto `companyAddons/{id}`;
+  `onAddOnsChange()` does the same for `addOns`.
+- `createCompany` (functions/index.js) writes both at creation too, so a
+  brand-new company is gated correctly from day one.
+- `firestore.rules` and Cloud Functions never need the mirror — a rule's
+  `get()`/`exists()` isn't subject to the target document's own read rule
+  (the same trick `isCompanyAdmin()`/`myCompanyId()` already rely on), and
+  Cloud Functions use the Admin SDK, which skips rules entirely — so both
+  read `companies/{companyId}` directly. Only `index.html`'s browser-side
+  reads are actually blocked by that rule, which is the one place the
+  mirror matters. `firestore.rules`' `companyAddons` read rule is any
+  signed-in member of that company, not just its admin, since a
+  technician's/trainee's own client also needs it (e.g. to know whether the
+  PDFs it builds should carry Vigil Fire branding).
+
+### Grandfathering existing companies
+
+Every company that existed before this pricing model shipped has no
+`addOns` field at all yet, and every enforcement point (Cloud Functions'
+`requireAddOnCapacity()`/`requireAuditPack()`, `firestore.rules`'
+`hasAuditAddon()`) would otherwise read that as zero allowances across the
+board. Rather than lock existing customers out, `scripts/migrate-to-addons-
+pricing.js` backfills every such company onto the Business plan with a
+deliberately generous `addOns` object (50 extra technicians, 10 extra
+admins, 50 extra trainee logbooks, a 20-workshop Audit pack) — a one-time
+grandfathering gesture, not a real plan — and mirrors the same onto
+`companyAddons/{id}`. Safe to re-run; it only touches companies still
+missing `addOns`. One flagged gap: Business's Competent Person allowance is
+0 (that role is Inspection-exclusive), so a migrated company with an
+already-active Competent Person account keeps it working (the limit is only
+checked at account-creation time) but couldn't create a new one without a
+superadmin switching it to Inspection first — worth a manual look if that
+ever applies to a real (non-demo) company.
+
+### Enforced in two places, not just hidden in the UI
+
+- **`functions/index.js`**: seat/logbook/workshop counts can't be checked
+  reliably by a Firestore rule (it can restrict one write, not count how
+  many documents already match a query), so a shared
+  `requireAddOnCapacity(db, companyId, role)` — reused by `createTechnician`
+  and `reactivateTechnician` — counts active accounts of that role and
+  throws `resource-exhausted` if adding one more would exceed the plan's
+  allowance plus add-ons. `inviteAdmin` (new — see below) uses the same
+  helper for the admin role. `addWorkshop` (new) does the equivalent count
+  against `auditPackWorkshops` before creating a `branches` doc.
+- **`firestore.rules`**: `hasAuditAddon(companyId)` now checks
+  `companyAddOns(companyId).auditPackWorkshops > 0` and still gates every
+  Audit-tab collection's read and write, same as before this pricing model.
+  Trainee logbooks/toolbox talks/weekly verification are **not** gated on
+  an ongoing basis in rules — their capacity is enforced once, at
+  account-creation time, same as technicians/admins.
+- **`index.html`**: `hasAuditPack()` reads the `companyAddons` mirror and
+  gates the Audit nav tab and `AUDIT_VIEWS` navigation guard, same pattern
+  as before. `brandingRemoved()` (new) reads the mirrored `plan` against a
+  local `PLAN_REMOVES_BRANDING` map and drops the "Generated by Vigil Fire"
+  credit line from the printable register's footer when true — the one
+  place that credit line appears on a client-facing document today.
+
+### Inviting a second admin
+
+`adminSeats` needed something to actually gate — this codebase had no way
+to add a second admin to an existing company before this feature (only the
+very first admin, created alongside the company itself, via `createCompany`).
+New: `inviteAdmin` (functions/index.js) mirrors `createCompany`'s own
+admin-creation sub-flow (temp password + a password-reset link emailed to
+them, never returned to the caller) but for an existing company, gated by
+the plan's included admin count plus `addOns.extraAdmins`. Entry point: a
+"+ Invite admin" button on the Technicians screen (`view-invite-admin`,
+admin-only, name + email only — no technician number, since admins log in
+by email).
+
+### Deploying it
+
+This touches both `firestore.rules` **and** `functions/index.js`, so it
+needs `firebase deploy --only firestore:rules,functions` in addition to the
+usual static-file push (`index.html`/`admin.html`/`sw.js` via GitHub
+Desktop). Run `scripts/migrate-to-addons-pricing.js` once, right after that
+deploy, so there's no window where an existing company is live against the
+new rules/functions without its backfilled `addOns` yet.
+`firestore.indexes.json` and `storage.rules` are unchanged.
 
 ## Condemned units — client notice, response tracking, medium-replacement due
 

@@ -46,16 +46,38 @@ service cloud.firestore {
       return isSignedIn() &&
         get(/databases/$(database)/documents/technicians/$(request.auth.uid)).data.canRunToolboxTalks == true;
     }
-    // Whether this company has been granted the Audit add-on (Company
-    // Documents / Employees / Vehicles / Workshops / Calibration) by a
-    // superadmin in admin.html. A missing companyAddons doc means "no
-    // add-on" — exists() is checked explicitly rather than relying on a
-    // failed get() to deny, so that intent reads clearly here.
+    // 4 named plans (inspection/starter/growth/business) + à la carte
+    // add-ons. `addOns` (extraTechnicians, extraAdmins, traineeLogbooks,
+    // auditPackWorkshops — the fields functions/index.js's
+    // requireAddOnCapacity()/requireAuditPack() check) lives on
+    // companies/{companyId} — the canonical doc a superadmin edits in
+    // admin.html. That doc stays deliberately superadmin-only (it also
+    // carries private notes/usage), but get() inside a rule isn't subject
+    // to the target document's own read rule — the same trick
+    // isCompanyAdmin()/myCompanyId() already rely on above — so every rule
+    // here reads addOns straight off companies/{companyId} rather than
+    // needing a mirror. (index.html's browser-side reads ARE subject to
+    // that rule, which is why companyAddons/{companyId} still exists below
+    // as a client-readable mirror of the same plan/addOns — see
+    // admin.html's dual-write.) A company with no `addOns` field at all
+    // reads as every field being its default (0) — i.e. no add-ons bought.
+    // Existing companies get a one-time generous backfill via
+    // scripts/migrate-to-addons-pricing.js instead of being silently left
+    // at that default.
+    // Always returns a map, never null — chaining a further field lookup
+    // (e.g. `.auditPackWorkshops`) straight off a possibly-null value is a
+    // rules evaluation error, not a graceful false, so this guards the
+    // "company exists but has no addOns field yet" case explicitly rather
+    // than relying on that.
+    function companyAddOns(companyId) {
+      let path = /databases/$(database)/documents/companies/$(companyId);
+      return (exists(path) && 'addOns' in get(path).data) ? get(path).data.addOns : {};
+    }
+    // Gates the Audit tab (Company Documents / Employees / Vehicles /
+    // Workshops / Calibration). Kept under its original name since it's
+    // referenced by every Audit-tab collection below.
     function hasAuditAddon(companyId) {
-      return isSuperadmin() || (
-        exists(/databases/$(database)/documents/companyAddons/$(companyId)) &&
-        get(/databases/$(database)/documents/companyAddons/$(companyId)).data.audit == true
-      );
+      return isSuperadmin() || companyAddOns(companyId).auditPackWorkshops > 0;
     }
 
     // Internal operator dashboard (separate admin.html, superadmin-only).
@@ -71,7 +93,16 @@ service cloud.firestore {
     // access per document, not per field, so a company admin reading their
     // own `companies` doc would see those too.
     match /companyAddons/{companyId} {
-      allow read:  if isSuperadmin() || isCompanyAdmin(companyId);
+      // Client-readable mirror of companies/{companyId}'s plan/addOns —
+      // read by any signed-in member of the company (not just its admin),
+      // since every role's own client needs it: to hide/show the Audit tab
+      // (hasAuditPack() in index.html), to know whether PDFs it builds
+      // should carry Vigil Fire branding (the plan's removesBranding), and
+      // for the companies list's own display. Written by admin.html
+      // whenever a superadmin edits a company's plan/add-ons. Nothing on this
+      // doc is admin-only-sensitive the way companies/{id}'s notes/usage
+      // fields are.
+      allow read:  if isSuperadmin() || isCompanyAdmin(companyId) || (isSignedIn() && myCompanyId() == companyId);
       allow write: if isSuperadmin();
     }
 
@@ -300,6 +331,7 @@ service cloud.firestore {
     // verification" (the real calibration register is `calibrationCertificates`
     // above). Entries are added by an admin or by a technician the admin has
     // granted the `canCalibrate` permission; only an admin may change or remove one.
+    // Training Compliance Pack feature.
     match /calibrations/{id} {
       allow read:   if isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && myCompanyId() == resource.data.companyId);
       allow create: if isCompanyAdmin(request.resource.data.companyId)
@@ -309,11 +341,11 @@ service cloud.firestore {
 
     // Toolbox talks — short recorded safety briefings. Admin or a technician
     // the admin has granted the canRunToolboxTalks permission may log one
-    // (mirrors calibrations' create rule, gated the way weekly verification
-    // is). Visible only to admin and whoever the creator invited
-    // (invitedIds) — not the whole company — so an uninvited technician or
-    // trainee can neither see nor sign a talk they weren't asked to attend.
-    // Free, core feature — not gated behind an add-on.
+    // (mirrors calibrations' create rule). Visible only to admin and
+    // whoever the creator invited (invitedIds) — not the whole company —
+    // so an uninvited technician or trainee can neither see nor sign a talk
+    // they weren't asked to attend. Free, core feature — not gated behind
+    // a plan or add-on.
     match /toolboxTalks/{id} {
       allow read:   if isSuperadmin() || isCompanyAdmin(resource.data.companyId)
         || (isSignedIn() && myCompanyId() == resource.data.companyId && request.auth.uid in resource.data.invitedIds);

@@ -66,9 +66,6 @@
   tr.row-link{cursor:pointer;}
   tr.row-link:hover{background:var(--paper-dim);}
   .badge{display:inline-block; font-size:0.7rem; font-weight:700; padding:3px 9px; border-radius:12px; text-transform:uppercase; letter-spacing:0.03em;}
-  .badge.plan-starter{background:var(--gray-bg); color:var(--ink-soft);}
-  .badge.plan-growth{background:#DCEBFA; color:#1A5A96;}
-  .badge.plan-business{background:#EBE1FA; color:#5A2D9C;}
   .badge.status-active{background:var(--green-bg); color:var(--green);}
   .badge.status-trialing{background:var(--amber-bg); color:var(--amber);}
   .badge.status-past_due{background:#FBE1E4; color:var(--red-dark);}
@@ -144,7 +141,7 @@
       </div>
       <div class="card" style="padding:0; overflow-x:auto;">
         <table>
-          <thead><tr><th>Name</th><th>Plan</th><th>Seats</th><th>Status</th><th>Monthly</th></tr></thead>
+          <thead><tr><th>Name</th><th>Plan</th><th>Add-ons</th><th>Status</th><th>Monthly</th></tr></thead>
           <tbody id="companiesBody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
         </table>
       </div>
@@ -155,26 +152,33 @@
       <div class="backbar"><button onclick="location.hash='#/'">←</button><h2 id="detailName">Company</h2></div>
       <div class="card">
         <div class="kv"><div class="k">Created</div><div class="v" id="detailCreated">—</div></div>
-        <div class="kv"><div class="k">Seats</div><div class="v" id="detailSeats">—</div></div>
+        <div class="kv"><div class="k">Monthly price</div><div class="v" id="detailMonthlyPrice">—</div></div>
+        <div class="kv"><div class="k">Billed</div><div class="v" id="detailBilledPrice">—</div></div>
         <div class="row" style="margin-top:12px;">
           <div>
             <label style="margin-top:0;">Plan</label>
             <select id="detailPlanSelect" onchange="onDetailPlanChange()">
+              <option value="inspection">Inspection</option>
               <option value="starter">Starter</option>
               <option value="growth">Growth</option>
               <option value="business">Business</option>
             </select>
           </div>
           <div>
-            <label style="margin-top:0;">Status</label>
-            <select id="detailStatusSelect" onchange="onDetailStatusChange()">
-              <option value="trialing">Trialing</option>
-              <option value="active">Active</option>
-              <option value="past_due">Past due</option>
-              <option value="canceled">Canceled</option>
+            <label style="margin-top:0;">Billing cycle</label>
+            <select id="detailBillingCycleSelect" onchange="onDetailPlanChange()">
+              <option value="monthly">Monthly</option>
+              <option value="annual">Annual (2 months free)</option>
             </select>
           </div>
         </div>
+        <label>Status</label>
+        <select id="detailStatusSelect" onchange="onDetailStatusChange()">
+          <option value="trialing">Trialing</option>
+          <option value="active">Active</option>
+          <option value="past_due">Past due</option>
+          <option value="canceled">Canceled</option>
+        </select>
         <label>Notes <span style="text-transform:none; font-weight:500;">(admin-only, saves when you click away)</span></label>
         <textarea id="detailNotes" onblur="onDetailNotesBlur()" placeholder="Internal notes about this account…"></textarea>
       </div>
@@ -204,13 +208,14 @@
     <input id="acAdminName" placeholder="e.g. Jane Dlamini">
     <label>Admin email</label>
     <input id="acAdminEmail" type="email" placeholder="jane@example.co.za">
-    <label>Starting plan</label>
+    <label>Plan</label>
     <select id="acPlan">
-      <option value="starter">Starter</option>
+      <option value="inspection">Inspection</option>
+      <option value="starter" selected>Starter</option>
       <option value="growth">Growth</option>
       <option value="business">Business</option>
     </select>
-    <div class="hint">Creates the company, the first admin account, and emails them a link to set their password.</div>
+    <div class="hint">Creates the company (no add-ons yet — set those from the company's detail page once it's created), the first admin account, and emails them a link to set their password.</div>
     <div class="row" style="margin-top:16px;">
       <button class="btn secondary" onclick="closeAddCompany()">Cancel</button>
       <button class="btn" id="acSubmitBtn" onclick="submitAddCompany()">Create</button>
@@ -238,60 +243,55 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// Keep in sync with functions/planConstants.js and vigilfire.github.io's
-// pricing page — no shared build step exists between this static page, the
-// Cloud Functions source, and the marketing site, so all three must be
-// updated together when a price or seat default changes.
-const PLAN_SEAT_LIMITS = { starter: 3, growth: 10, business: null };
-const PLAN_MONTHLY_PRICE = { starter: 499, growth: 1299, business: 2999 };
-const PLAN_LABEL = { starter: 'Starter', growth: 'Growth', business: 'Business' };
+// Keep in sync with functions/pricing.js and vigilfire.github.io's pricing
+// page — no shared build step exists between this static page, the Cloud
+// Functions source, and the marketing site, so all three must be updated
+// together when a price or limit changes.
+const PLAN_PRICES = { inspection: 249, starter: 499, growth: 1299, business: 2499 };
+const PLAN_LABEL = { inspection: 'Inspection', starter: 'Starter', growth: 'Growth', business: 'Business' };
+// competentPersons (the Competent Person / "inspector" role) is deliberately
+// Inspection-plan-exclusive — no add-on anywhere raises it for another plan.
+const PLAN_LIMITS = {
+  inspection: { admins: 1, technicians: 0, competentPersons: 1, traineeLogbooksIncluded: 0, removesBranding: false },
+  starter:    { admins: 1, technicians: 1, competentPersons: 0, traineeLogbooksIncluded: 0, removesBranding: false },
+  growth:     { admins: 2, technicians: 5, competentPersons: 0, traineeLogbooksIncluded: 0, removesBranding: true },
+  business:   { admins: 3, technicians: 10, competentPersons: 0, traineeLogbooksIncluded: 2, removesBranding: true },
+};
+const ADDON_PRICES = {
+  extraTechnician: 249,
+  extraAdmin: 149,
+  traineeLogbook: 149,
+  auditPack: 399,               // includes 1 workshop
+  auditPackExtraWorkshop: 279,
+};
 const STATUS_LABEL = { trialing: 'Trialing', active: 'Active', past_due: 'Past due', canceled: 'Canceled' };
 
-// Every add-on Vigil Fire offers, priced to match vigilfire.github.io. `kind:
-// 'boolean'` is a plain on/off switch; `kind: 'quantity'` stores a count (e.g.
-// how many trainees, or extra seats bought on top of the plan's included
-// limit). `price` is the catalog rate in Rand/month shown as the default —
-// each company can carry its own override (a negotiated rate isn't unusual),
-// stored as `${key}Price` on that company's companyAddons doc. A `quantity`
-// add-on can also carry `includedByPlan` — a per-plan count that's free
-// before billing kicks in (e.g. Business includes 2 trainees free); the
-// stored quantity is always the company's real total, and billing only
-// charges for the amount above what that plan includes.
-//
-// IMPORTANT: adding a company here does NOT, by itself, change what that
-// company can do in the app — this only tracks what to charge. `audit` is
-// the one add-on actually enforced today (gates the Audit tab and its
-// Firestore/Storage rules, see hasAuditAddon). `trainees`, `removeBranding`,
-// `extraTechnicians` and `extraAdminLogins` are billing-tracking only for
-// now — nothing in index.html or firestore.rules checks them yet.
-const ADDONS = [
-  { key: 'audit', label: 'Audit tab', kind: 'boolean', price: 0,
-    description: 'Workshop compliance file — Company Documents, Employees, Vehicles, Workshops, Calibration. Not on the public pricing page yet — set a price if you start charging for it. Enforced: gates the Audit tab and its data.' },
-  { key: 'trainees', label: 'SAQCC Trainee Logbooks', kind: 'quantity', price: 149, unit: 'trainee',
-    includedByPlan: { starter: 0, growth: 0, business: 2 },
-    description: 'Trainee registration, digital daily logbooks, and competency tracking — billed per trainee. Business includes 2 free; Starter/Growth include none. Billing-tracking only — not yet gated in the app.' },
-  { key: 'removeBranding', label: 'Remove Vigil Fire branding', kind: 'boolean', price: 0,
-    description: 'Strips Vigil Fire branding from client-facing PDFs. Bundled free with Growth and above on the pricing page. Billing-tracking only — not yet wired into the PDF letterhead.' },
-  { key: 'extraTechnicians', label: 'Additional technicians', kind: 'quantity', price: 249, unit: 'technician',
-    description: "Extra seats beyond the plan's included seat limit. Billing-tracking only — doesn't yet raise the enforced seat limit." },
-  { key: 'extraAdminLogins', label: 'Extra admin logins', kind: 'quantity', price: 149, unit: 'login',
-    description: 'Additional administrator accounts beyond the plan default. Billing-tracking only — nothing enforces a login limit today.' },
-];
-// `plan` matters only for a quantity add-on with `includedByPlan` (currently
-// just trainees) — everything else prices the same regardless of plan.
-function billableQuantity(addon, addons, plan){
-  const qty = Number(addons[addon.key]) || 0;
-  const included = addon.includedByPlan ? (addon.includedByPlan[plan] || 0) : 0;
-  return Math.max(0, qty - included);
-}
-function addonMonthlyCharge(addons, plan){
-  addons = addons || {};
-  let total = 0;
-  ADDONS.forEach(a=>{
-    const price = (typeof addons[a.key+'Price'] === 'number') ? addons[a.key+'Price'] : a.price;
-    total += (a.kind === 'quantity') ? billableQuantity(a, addons, plan) * price : (addons[a.key] ? price : 0);
-  });
+// Always the monthly-equivalent, regardless of a company's billingCycle —
+// an annual biller is actually charged this × 10 (2 months free) as their
+// lump sum (see the detail view), but this function and the MRR stat both
+// stay in monthly terms so an annual customer doesn't distort the figure.
+// Matches functions/pricing.js exactly, since that's what actually enforces
+// the corresponding limits.
+function calculateMonthlyPrice(company){
+  const plan = (company && company.plan) || 'starter';
+  const a = (company && company.addOns) || {};
+  let total = (PLAN_PRICES[plan] || 0)
+    + (a.extraTechnicians||0) * ADDON_PRICES.extraTechnician
+    + (a.extraAdmins||0) * ADDON_PRICES.extraAdmin
+    + (a.traineeLogbooks||0) * ADDON_PRICES.traineeLogbook;
+  if((a.auditPackWorkshops||0) > 0) total += ADDON_PRICES.auditPack + Math.max(0, (a.auditPackWorkshops||0) - 1) * ADDON_PRICES.auditPackExtraWorkshop;
   return total;
+}
+// Short "what's on top of the plan" summary for the companies list — not
+// the detail view (which shows the real editable controls).
+function addOnsSummary(company){
+  const a = (company && company.addOns) || {};
+  const bits = [];
+  if(a.extraTechnicians) bits.push(`+${a.extraTechnicians} tech`);
+  if(a.extraAdmins) bits.push(`+${a.extraAdmins} admin`);
+  if(a.traineeLogbooks) bits.push(`+${a.traineeLogbooks} trainee`);
+  if(a.auditPackWorkshops) bits.push(`Audit pack (${a.auditPackWorkshops} workshop${a.auditPackWorkshops===1?'':'s'})`);
+  return bits.length ? bits.join(', ') : 'No add-ons';
 }
 
 function escapeHtml(s){
@@ -314,8 +314,6 @@ function fmtDate(ts){
 /* ---------- Auth + the superadmin claim ---------- */
 let companiesCache = [];
 let unsubCompanies = null;
-let companyAddonsCache = {};   // companyId -> companyAddons doc data, for MRR + the list's Monthly column
-let unsubCompanyAddons = null;
 
 function doLogin(){
   const email = document.getElementById('loginEmail').value.trim();
@@ -344,7 +342,6 @@ async function tryGrantSuperadmin(){
 
 auth.onAuthStateChanged(async (user)=>{
   if(unsubCompanies){ unsubCompanies(); unsubCompanies = null; }
-  if(unsubCompanyAddons){ unsubCompanyAddons(); unsubCompanyAddons = null; }
   document.getElementById('loginScreen').style.display = user ? 'none' : 'flex';
   document.getElementById('accessDenied').hidden = true;
   document.getElementById('app').hidden = true;
@@ -364,7 +361,6 @@ async function routeAfterAuth(){
   document.getElementById('accessDenied').hidden = true;
   document.getElementById('app').hidden = false;
   startCompaniesListener();
-  startCompanyAddonsListener();
   onHashChange();
 }
 
@@ -399,43 +395,18 @@ function startCompaniesListener(){
     await paintCompaniesList();
   }, err=>{ toast('Could not load companies: ' + err.message); });
 }
-// Superadmin can read every companyAddons doc (firestore.rules: isSuperadmin()
-// doesn't depend on resource.data, so an unfiltered list is provable) — one
-// collection-wide listener feeds both the MRR stat and each row's Monthly
-// column, same shape as the companies listener above.
-function startCompanyAddonsListener(){
-  if(unsubCompanyAddons) return;
-  unsubCompanyAddons = db.collection('companyAddons').onSnapshot(async snap=>{
-    companyAddonsCache = {};
-    snap.docs.forEach(d=>{ companyAddonsCache[d.id] = d.data(); });
-    await paintCompaniesList();
-  }, err=>{ toast('Could not load add-ons: ' + err.message); });
-}
-
-function formatSeatLimit(limit){
-  return (limit===null || limit===undefined) ? '∞' : limit;
-}
-async function seatCountFor(companyId){
-  // Only active technicians occupy a seat — matches the enforcement in the
-  // createTechnician Cloud Function, so this dashboard number and the actual
-  // limit a company hits never disagree.
-  try{
-    const countSnap = await db.collection('technicians').where('companyId','==',companyId).where('active','==',true).count().get();
-    return countSnap.data().count;
-  }catch(e){ return null; }
-}
-
 async function paintCompaniesList(){
   const now = Date.now();
   const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
   let activeThisMonth = 0;
   // MRR counts only companies currently being billed — trialing and
-  // canceled accounts contribute nothing.
+  // canceled accounts contribute nothing. `addOns` lives right on each
+  // company doc now, so calculateMonthlyPrice(c) needs nothing else fetched.
   let mrr = 0;
   companiesCache.forEach(c=>{
     const last = c.lastActivityAt && (c.lastActivityAt.toDate ? c.lastActivityAt.toDate().getTime() : new Date(c.lastActivityAt).getTime());
     if(last && (now - last) <= THIRTY_DAYS) activeThisMonth++;
-    if(c.status === 'active' || c.status === 'past_due') mrr += (PLAN_MONTHLY_PRICE[c.plan] || 0) + addonMonthlyCharge(companyAddonsCache[c.id], c.plan);
+    if(c.status === 'active' || c.status === 'past_due') mrr += calculateMonthlyPrice(c);
   });
   document.getElementById('statTotal').textContent = companiesCache.length;
   document.getElementById('statActive').textContent = activeThisMonth;
@@ -447,19 +418,13 @@ async function paintCompaniesList(){
     body.innerHTML = `<tr><td colspan="5" class="empty">${companiesTab === 'canceled' ? 'No canceled companies.' : 'No companies yet.'}</td></tr>`;
     return;
   }
-  const seatCounts = await Promise.all(visible.map(c=>seatCountFor(c.id)));
-  body.innerHTML = visible.map((c,i)=>{
-    const limit = formatSeatLimit(c.seatLimit);
-    const used = seatCounts[i] === null ? '?' : seatCounts[i];
-    const monthly = (PLAN_MONTHLY_PRICE[c.plan] || 0) + addonMonthlyCharge(companyAddonsCache[c.id], c.plan);
-    return `<tr class="row-link" onclick="location.hash='#/companies/${c.id}'">
+  body.innerHTML = visible.map(c=>`<tr class="row-link" onclick="location.hash='#/companies/${c.id}'">
       <td>${escapeHtml(c.name)}</td>
-      <td><span class="badge plan-${c.plan}">${PLAN_LABEL[c.plan]||c.plan}</span></td>
-      <td>${used} / ${limit}</td>
+      <td>${escapeHtml(PLAN_LABEL[c.plan]||c.plan||'—')}</td>
+      <td>${escapeHtml(addOnsSummary(c))}</td>
       <td><span class="badge status-${c.status}">${STATUS_LABEL[c.status]||c.status}</span></td>
-      <td>R ${monthly.toLocaleString()}</td>
-    </tr>`;
-  }).join('');
+      <td>R ${calculateMonthlyPrice(c).toLocaleString()}</td>
+    </tr>`).join('');
 }
 
 /* ---------- Add company ---------- */
@@ -495,7 +460,6 @@ async function submitAddCompany(){
 
 /* ---------- Company detail ---------- */
 let detailCompanyId = null;
-let detailCompanyPlan = 'starter';   // needed alongside detailCompanyId wherever a quantity add-on's included-by-plan count matters
 async function openCompanyDetail(companyId){
   detailCompanyId = companyId;
   document.getElementById('detailName').textContent = 'Loading…';
@@ -506,40 +470,49 @@ async function openCompanyDetail(companyId){
     company = snap.data();
   }catch(e){ toast('Error: ' + e.message); return; }
 
-  detailCompanyPlan = company.plan || 'starter';
   document.getElementById('detailName').textContent = company.name || '(unnamed)';
   document.getElementById('detailCreated').textContent = fmtDate(company.createdAt);
+  paintDetailPrice(company);
   document.getElementById('detailPlanSelect').value = company.plan || 'starter';
+  document.getElementById('detailBillingCycleSelect').value = company.billingCycle || 'monthly';
   document.getElementById('detailStatusSelect').value = company.status || 'trialing';
   document.getElementById('detailNotes').value = company.notes || '';
 
-  let addons = {};
-  try{
-    const addonsSnap = await db.collection('companyAddons').doc(companyId).get();
-    addons = addonsSnap.exists ? addonsSnap.data() : {};
-  }catch(e){ addons = {}; }
-  renderAddonsCard(addons, detailCompanyPlan);
+  renderAddOnsCard(company.addOns || {});
 
-  const [used] = await Promise.all([
-    seatCountFor(companyId),
+  await Promise.all([
     paintDetailTechnicians(companyId),
     paintDetailSites(companyId)
   ]);
-  const limit = formatSeatLimit(company.seatLimit);
-  document.getElementById('detailSeats').textContent = `${used===null?'?':used} / ${limit}`;
+}
+
+// Monthly price is always calculateMonthlyPrice()'s figure (the MRR-
+// consistent monthly-equivalent); "Billed" is what actually gets charged —
+// the same monthly amount for a monthly biller, or ×10 (2 months free) as
+// one annual lump sum.
+function paintDetailPrice(company){
+  const monthly = calculateMonthlyPrice(company);
+  document.getElementById('detailMonthlyPrice').textContent = 'R ' + monthly.toLocaleString() + ' / mo';
+  const billed = (company.billingCycle === 'annual') ? (monthly * 10) : monthly;
+  document.getElementById('detailBilledPrice').textContent = (company.billingCycle === 'annual')
+    ? `R ${billed.toLocaleString()} / yr`
+    : `R ${billed.toLocaleString()} / mo`;
 }
 
 async function onDetailPlanChange(){
   if(!detailCompanyId) return;
   const plan = document.getElementById('detailPlanSelect').value;
+  const billingCycle = document.getElementById('detailBillingCycleSelect').value;
   try{
-    await db.collection('companies').doc(detailCompanyId).update({ plan });
+    await db.collection('companies').doc(detailCompanyId).update({ plan, billingCycle, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    // Mirror the plan onto companyAddons — the doc a company's own admin
+    // can actually read (companies/{id} stays superadmin-only). See
+    // firestore.rules' companyAddOns()/hasAuditAddon() and index.html's
+    // client-side plan/pack checks, which read this mirror, not
+    // companies/{id} directly.
+    await db.collection('companyAddons').doc(detailCompanyId).set({ plan }, {merge:true});
     toast('Plan updated');
-    detailCompanyPlan = plan;
-    // A plan change can change how many of a quantity add-on (e.g. trainees)
-    // come included free, so the add-ons card's breakdown/total needs a repaint.
-    const addonsSnap = await db.collection('companyAddons').doc(detailCompanyId).get();
-    renderAddonsCard(addonsSnap.exists ? addonsSnap.data() : {}, detailCompanyPlan);
+    paintDetailPrice({ plan, billingCycle, addOns: lastRenderedAddOns });
   }catch(e){ toast('Error: ' + e.message); }
 }
 async function onDetailStatusChange(){
@@ -557,62 +530,55 @@ async function onDetailNotesBlur(){
     await db.collection('companies').doc(detailCompanyId).update({ notes });
   }catch(e){ toast('Error saving notes: ' + e.message); }
 }
-// Add-ons are gated per company via companyAddons/{companyId} (firestore.rules:
-// superadmin-write, that company's own admin can read). The ADDONS catalog
-// itself (key/label/description/kind/price) lives up near PLAN_MONTHLY_PRICE.
-// Add a new entry there and it appears here and in the Monthly column
-// automatically — no other admin.html change needed for the billing side.
-function renderAddonsCard(addons, plan){
-  addons = addons || {};
-  const rows = ADDONS.map((a,i)=>{
-    const price = (typeof addons[a.key+'Price'] === 'number') ? addons[a.key+'Price'] : a.price;
-    const border = i>0 ? 'margin-top:16px; padding-top:16px; border-top:1px solid var(--line);' : '';
-    if(a.kind === 'quantity'){
-      const qty = Number(addons[a.key]) || 0;
-      const included = a.includedByPlan ? (a.includedByPlan[plan] || 0) : 0;
-      const billable = billableQuantity(a, addons, plan);
-      const breakdown = included > 0
-        ? `${included} included free with the ${escapeHtml(PLAN_LABEL[plan]||plan)} plan — ${billable} billable &times; R${price} = R${(billable*price).toLocaleString()}/mo`
-        : `${billable} &times; R${price} = R${(billable*price).toLocaleString()}/mo`;
-      return `<div style="${border}">
-        <label style="margin-top:0;">${escapeHtml(a.label)}</label>
-        <div class="row">
-          <div><label style="margin:0 0 4px; text-transform:none; font-weight:500; font-size:0.8rem;">Quantity (${escapeHtml(a.unit||'unit')}s)</label>
-            <input type="number" min="0" step="1" id="addon-${a.key}" value="${qty}" onchange="onAddonChange('${a.key}')"></div>
-          <div><label style="margin:0 0 4px; text-transform:none; font-weight:500; font-size:0.8rem;">R / mo each</label>
-            <input type="number" min="0" step="1" id="addon-${a.key}-price" value="${price}" onchange="onAddonChange('${a.key}')"></div>
-        </div>
-        <div class="hint" style="margin-top:4px;">${escapeHtml(a.description)}</div>
-        <div class="hint" style="margin-top:2px; font-weight:700; text-transform:none;">${breakdown}</div>
-      </div>`;
-    }
-    return `<div style="${border}">
-      <label style="margin-top:0;">${escapeHtml(a.label)}</label>
-      <div style="display:flex; align-items:center; gap:10px;">
-        <input type="checkbox" id="addon-${a.key}" style="width:auto;" ${addons[a.key]?'checked':''} onchange="onAddonChange('${a.key}')">
-        <span style="font-size:0.85rem;">R</span>
-        <input type="number" min="0" step="1" id="addon-${a.key}-price" value="${price}" style="width:100px;" onchange="onAddonChange('${a.key}')">
-        <span style="font-size:0.8rem; color:var(--grey); text-transform:none; font-weight:500;">/ mo</span>
-      </div>
-      <div class="hint" style="margin-top:4px;">${escapeHtml(a.description)}</div>
-    </div>`;
-  }).join('');
-  document.getElementById('addonsCard').innerHTML = rows +
-    `<div class="kv" style="margin-top:16px; padding-top:12px; border-top:1px solid var(--line);"><div class="k">Add-on total</div><div class="v" id="addonTotalDisplay">R ${addonMonthlyCharge(addons, plan).toLocaleString()} / mo</div></div>`;
+// The 4 add-ons, straight off companies/{companyId}.addOns — extraTechnicians/
+// extraAdmins/traineeLogbooks are each *extra* beyond what the plan already
+// includes (PLAN_LIMITS); auditPackWorkshops is the pack itself — 0 means
+// not purchased, 1+ is the total number of workshops it covers (not "+1").
+// Every change writes the whole `addOns` object in one go (simplest way to
+// keep it internally consistent) to BOTH companies/{id} (canonical — this
+// page's own source of truth) and companyAddons/{id} (the mirror
+// index.html's client actually reads, since companies/{id} stays
+// superadmin-only there — see firestore.rules).
+let lastRenderedAddOns = {};
+function renderAddOnsCard(addOns){
+  addOns = addOns || {};
+  lastRenderedAddOns = addOns;
+  const num = (k) => Number(addOns[k]) || 0;
+  document.getElementById('addonsCard').innerHTML = `
+    <label style="margin-top:0;">Extra technician seats <span style="text-transform:none; font-weight:500;">(beyond the plan's included allowance)</span></label>
+    <input type="number" min="0" step="1" id="addon-extraTechnicians" value="${num('extraTechnicians')}" onchange="onAddOnsChange()">
+
+    <label>Extra admin seats <span style="text-transform:none; font-weight:500;">(beyond the plan's included allowance)</span></label>
+    <input type="number" min="0" step="1" id="addon-extraAdmins" value="${num('extraAdmins')}" onchange="onAddOnsChange()">
+
+    <label>Extra trainee logbooks <span style="text-transform:none; font-weight:500;">(beyond the plan's included allowance)</span></label>
+    <input type="number" min="0" step="1" id="addon-traineeLogbooks" value="${num('traineeLogbooks')}" onchange="onAddOnsChange()">
+
+    <div style="margin-top:16px; padding-top:16px; border-top:1px solid var(--line);">
+      <label style="margin-top:0;">Audit Compliance Pack workshops <span style="text-transform:none; font-weight:500;">(0 = pack not purchased; 1+ covers that many workshops)</span></label>
+      <input type="number" min="0" step="1" id="addon-auditPackWorkshops" value="${num('auditPackWorkshops')}" onchange="onAddOnsChange()">
+      <div class="hint">Gates the whole Audit section (Company Documents, Employees, Vehicles, Workshops, Calibration). R399/mo includes 1 workshop, +R279/mo per extra.</div>
+    </div>
+
+    <div class="kv" style="margin-top:16px; padding-top:12px; border-top:1px solid var(--line);"><div class="k">Add-ons total</div><div class="v" id="addonTotalDisplay">R ${(calculateMonthlyPrice({addOns}) - (PLAN_PRICES[document.getElementById('detailPlanSelect').value]||0)).toLocaleString()} / mo</div></div>`;
 }
-async function onAddonChange(key){
+async function onAddOnsChange(){
   if(!detailCompanyId) return;
-  const addon = ADDONS.find(a=>a.key===key);
-  const update = { updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
-  update[key] = (addon.kind === 'quantity')
-    ? Math.max(0, parseInt(document.getElementById('addon-'+key).value, 10) || 0)
-    : document.getElementById('addon-'+key).checked;
-  update[key+'Price'] = Math.max(0, parseFloat(document.getElementById('addon-'+key+'-price').value) || 0);
+  const addOns = {
+    extraTechnicians: Math.max(0, parseInt(document.getElementById('addon-extraTechnicians').value, 10) || 0),
+    extraAdmins: Math.max(0, parseInt(document.getElementById('addon-extraAdmins').value, 10) || 0),
+    traineeLogbooks: Math.max(0, parseInt(document.getElementById('addon-traineeLogbooks').value, 10) || 0),
+    auditPackWorkshops: Math.max(0, parseInt(document.getElementById('addon-auditPackWorkshops').value, 10) || 0),
+  };
+  lastRenderedAddOns = addOns;
   try{
-    await db.collection('companyAddons').doc(detailCompanyId).set(update, {merge:true});
-    toast('Add-on updated');
-    const fresh = await db.collection('companyAddons').doc(detailCompanyId).get();
-    renderAddonsCard(fresh.exists ? fresh.data() : {}, detailCompanyPlan);
+    await db.collection('companies').doc(detailCompanyId).update({ addOns, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    await db.collection('companyAddons').doc(detailCompanyId).set({ addOns }, {merge:true});
+    toast('Add-ons updated');
+    const plan = document.getElementById('detailPlanSelect').value;
+    const billingCycle = document.getElementById('detailBillingCycleSelect').value;
+    paintDetailPrice({ plan, billingCycle, addOns });
+    document.getElementById('addonTotalDisplay').textContent = 'R ' + (calculateMonthlyPrice({plan, addOns}) - (PLAN_PRICES[plan]||0)).toLocaleString() + ' / mo';
   }catch(e){ toast('Error: ' + e.message); }
 }
 
