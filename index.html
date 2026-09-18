@@ -1211,6 +1211,17 @@
           <option value="na">Not applicable — we don't offer or handle this</option>
         </select>
         <div class="hint">Compliance against this clause is judged by your SAQCC/SABS auditor, not recorded here — this only marks whether the clause is in scope for your business. Use Notes and Evidence below to keep the paper trail ready for them.</div>
+        <div id="sans1475LinksSection" style="display:none;">
+          <div class="divider"></div>
+          <label style="margin-top:0;">Related</label>
+          <div id="sans1475LinksHint" class="hint" style="margin:0 0 10px;"></div>
+          <div id="sans1475LinksButtons" class="row"></div>
+        </div>
+        <div id="sans1475ChecklistSection" style="display:none;">
+          <div class="divider"></div>
+          <label style="margin-top:0;">Checklist</label>
+          <div id="sans1475ChecklistWrap"></div>
+        </div>
         <label>Notes</label><textarea id="sans1475Notes" rows="3" placeholder="Evidence reference, procedure summary, etc."></textarea>
         <label>Evidence (PDF or photo)</label>
         <input id="sans1475FileInput" type="file" accept="application/pdf,image/*" onchange="handleWorkshopFilePick(event,'sans1475')">
@@ -1226,9 +1237,41 @@
         <label style="margin-top:0;" id="sans1475RegisterTitle">Register</label>
         <p class="hint" id="sans1475RegisterHint" style="margin:0 0 10px;"></p>
         <div id="sans1475RegisterFields"></div>
+        <div id="sans1475EntryFileWrap" style="display:none;">
+          <label>Evidence (PDF or photo)</label>
+          <input id="sans1475EntryFileInput" type="file" accept="application/pdf,image/*" onchange="handleWorkshopFilePick(event,'sans1475entry')">
+          <div class="hint">Max 15 MB.</div>
+        </div>
         <button class="btn secondary" style="margin-top:12px;" onclick="addSans1475RegisterEntry()">Add entry</button>
         <div class="section-title"><h2>Logged entries</h2></div>
         <div id="sans1475RegisterList"></div>
+      </div>
+      <div id="sans1475ReconSection" class="card" style="display:none;">
+        <label style="margin-top:0;" id="reconJobFormTitle">New reconditioning job</label>
+        <label>Extinguisher serial / asset tag</label><input id="reconSerial" placeholder="e.g. FW-0231">
+        <label>Equipment type</label><select id="reconEquipType"><option value="">Select type…</option></select>
+        <label>Assigned technician</label><select id="reconTechnician"></select>
+        <div class="row">
+          <div><label>Received</label><input id="reconReceivedDate" type="date"></div>
+          <div><label>Completed</label><input id="reconCompletedDate" type="date"></div>
+        </div>
+        <label>Status</label>
+        <select id="reconStatus">
+          <option value="received">Received</option>
+          <option value="in-progress">In progress</option>
+          <option value="complete">Complete</option>
+        </select>
+        <label>Extent of reconditioning</label>
+        <div id="reconChecklistWrap"></div>
+        <label>Notes</label><textarea id="reconNotes" rows="2"></textarea>
+        <div class="row" style="margin-top:16px;">
+          <button class="btn secondary" onclick="resetReconditioningJobForm()">New job</button>
+          <button class="btn" onclick="saveReconditioningJob()">Save job</button>
+        </div>
+        <button class="btn ghost" id="reconDeleteBtn" style="margin-top:10px; display:none;" onclick="deleteReconditioningJob()">Delete this job</button>
+        <div class="section-title"><h2>Reconditioning jobs</h2></div>
+        <div id="reconJobsList"></div>
+        <button class="btn secondary" style="margin-top:12px;" onclick="openReconditioningReport()">Print reconditioning register</button>
       </div>
     </section>
 
@@ -1269,6 +1312,10 @@
           <div><label>SAQCC registration expiry</label><input id="empSaqccExpiry" type="date"></div>
           <div><label>Medical certificate expiry</label><input id="empMedicalExpiry" type="date"></div>
         </div>
+        <label>Designation</label><input id="empDesignation" placeholder="e.g. Workshop Supervisor">
+        <label>Appointments / authorities held</label><input id="empAppointments" placeholder="e.g. Responsible Person, SHE Rep">
+        <label>Delegate (covers this person's duties when absent)</label>
+        <select id="empDelegate"></select>
         <label>ID document (photo or PDF)</label>
         <input id="empIdFileInput" type="file" accept="application/pdf,image/*" onchange="handleWorkshopFilePick(event,'empId')">
         <a id="empIdFileLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:0.85rem; font-weight:600;">View current file &#8599;</a>
@@ -1920,7 +1967,7 @@ function showView(id){
 let unsubSites = null, unsubEquipment = null, unsubInspections = null, unsubTechs = null, unsubCompetent = null, unsubCal = null, unsubTrainees = null;
 let unsubBranches = null, unsubVehicles = null, unsubCompanyDocs = null, unsubAllStaff = null, unsubCalCerts = null;
 let unsubTools = null, unsubToolChecks = null;
-let unsubSans1475 = null, unsubSans1475Register = null;
+let unsubSans1475 = null, unsubSans1475Register = null, unsubReconditioningJobs = null;
 let unsubTalks = null;
 function detachAllListeners(){
   if(unsubSites){ unsubSites(); unsubSites=null; }
@@ -1940,6 +1987,7 @@ function detachAllListeners(){
   if(unsubToolChecks){ unsubToolChecks(); unsubToolChecks=null; }
   if(unsubSans1475){ unsubSans1475(); unsubSans1475=null; }
   if(unsubSans1475Register){ unsubSans1475Register(); unsubSans1475Register=null; }
+  if(unsubReconditioningJobs){ unsubReconditioningJobs(); unsubReconditioningJobs=null; }
 }
 
 /* ---------- Sites ---------- */
@@ -2256,21 +2304,84 @@ const ROLE_LABEL = { admin:'Administrator', technician:'Technician', trainee:'Tr
 
 // SANS 1475 Part 1:2025 clause register — one evidence record per clause,
 // stored in `sans1475Checklist` (doc id `${companyId}_${clause with dots as underscores}`).
+// Each entry is [clause, title] or [clause, title, {checklist:[[key,label],...]}].
+// The checklist (when present) renders/collects via the same
+// renderCheckboxList/collectCheckboxList/checklistUL helpers the equipment
+// form's Pressure Test and Recharge sections already use (see PT_CHECKLIST/
+// RC_CHECKLIST below) — content drafted from SANS 1475 Part 1 and general
+// workshop H&S practice, editable in place.
 const SANS1475_CLAUSES = [
-  ['4.1','Facilities'],
+  ['4.1','Facilities',{checklist:[
+    ['intake','Designated intake / receiving area for extinguishers arriving for service'],
+    ['emptying','Designated emptying / discharge area'],
+    ['inprocess','Designated in-process area — strip-down, inspection and repair'],
+    ['pressuretest','Pressure-test area physically separated and shielded from other work areas'],
+    ['filling','Designated charging / filling area'],
+    ['dispatch','Designated finished-goods / dispatch area'],
+    ['walkways','Walkways between areas clearly demarcated'],
+    ['ventilation','Each area adequately ventilated and lit']
+  ]}],
   ['4.2','Training and registration of staff'],
-  ['4.3','Pressurizing and pressure test areas'],
+  ['4.3','Pressurizing and pressure test areas',{checklist:[
+    ['shielded','Pressure-test area shielded or screened from other work areas'],
+    ['operator','Operator position remote from, or protected against, the item under test'],
+    ['relief','Test rig fitted with a pressure-relief device'],
+    ['cordoned','Area cordoned off while testing is in progress'],
+    ['signage','Warning signage posted at the test area'],
+    ['cylinders','Gas cylinders secured / chained in an upright position'],
+    ['ignition','No smoking or ignition sources permitted in the area']
+  ]}],
   ['4.4','Quality of extinguishing mediums'],
-  ['4.5','Gas supply (propellants) and pressure control system'],
+  ['4.5','Gas supply (propellants) and pressure control system',{checklist:[
+    ['secured','Propellant gas cylinders stored chained and upright'],
+    ['regulators','Pressure regulators fitted and in test'],
+    ['nonreturn','Non-return valves fitted where required'],
+    ['hoses','Hoses correctly rated and visually inspected before use'],
+    ['ventilated','Storage/control area adequately ventilated'],
+    ['shutoff','Emergency shut-off valve accessible and known to staff']
+  ]}],
   ['4.6','Removal of extinguishers from a building'],
-  ['4.7','Storage area or receptacles for powder'],
-  ['4.7.2','Discarded powder'],
+  ['4.7','Storage area or receptacles for powder',{checklist:[
+    ['dry','Powder stored in a dedicated dry area'],
+    ['sealed','Stock held in sealed receptacles'],
+    ['contamination','Different powder types kept separated to prevent cross-contamination'],
+    ['fifo','Stock rotated on a first-in-first-out basis'],
+    ['spill','Spill-containment provision in place']
+  ]}],
+  ['4.7.2','Discarded powder',{checklist:[
+    ['segregated','Discarded powder segregated from usable stock'],
+    ['checked','Powder checked for moisture/contamination before a disposal decision is made'],
+    ['guidance','Disposed of per manufacturer and environmental guidance'],
+    ['recorded','Disposal recorded in the extinguishing medium log (clause 4.4)']
+  ]}],
   ['4.8','Charging of extinguishers'],
-  ['4.8.1','Filling area of permanent workshops'],
-  ['4.8.2','Carbon dioxide (CO2) extinguishers'],
-  ['4.8.3','Foam extinguishers'],
-  ['4.8.4','Dry chemical powder extinguishers'],
-  ['4.8.5','Wet chemical extinguishers'],
+  ['4.8.1','Filling area of permanent workshops',{checklist:[
+    ['cage','Filling point enclosed by a cage or screen'],
+    ['ppe','PPE required and available in the filling area'],
+    ['spill','Spill containment in place'],
+    ['extraction','Ventilation / extraction provided']
+  ]}],
+  ['4.8.2','Carbon dioxide (CO2) extinguishers',{checklist:[
+    ['weighed','Cylinder weighed before and after filling'],
+    ['noflame','No naked flames or ignition sources present'],
+    ['secured','Cylinder secured during filling'],
+    ['ratio','Correct fill ratio applied per SANS 10105 tables']
+  ]}],
+  ['4.8.3','Foam extinguishers',{checklist:[
+    ['premix','Correct premix ratio used'],
+    ['contamination','No cross-contamination with other extinguishing mediums'],
+    ['sealed','Container correctly sealed after filling']
+  ]}],
+  ['4.8.4','Dry chemical powder extinguishers',{checklist:[
+    ['correcttype','Correct powder type used for the cylinder’s rating'],
+    ['moisture','Moisture excluded from the powder during filling'],
+    ['purged','Cylinder purged of air before sealing']
+  ]}],
+  ['4.8.5','Wet chemical extinguishers',{checklist:[
+    ['concentrate','Correct concentrate ratio used'],
+    ['contamination','No cross-contamination with other extinguishing mediums'],
+    ['stockrotation','Expiry-dated stock used first']
+  ]}],
   ['4.9','Protection of workmen'],
   ['4.10','People'],
   ['5','Requirements for reconditioning'],
@@ -2284,14 +2395,49 @@ const SANS1475_CLAUSES = [
   ['5.1.7','Maintenance procedures for fire extinguishers'],
   ['5.1.8','Re-coating of aluminum cylinders'],
   ['5.2','Safe working practices'],
-  ['5.2.1','General procedure applicable to all types of extinguishers'],
-  ['5.2.2','Water and water-based extinguishers'],
-  ['5.2.3','Carbon dioxide (CO2) extinguishers'],
-  ['5.2.4','Clean Agent (Halon) extinguishers'],
-  ['5.2.5','Dry-powder extinguishers'],
-  ['5.2.6','Internal cartridge-operated extinguishers'],
-  ['5.2.7','Rejection of the cylinder'],
-  ['5.2.8','Rendering cylinder unserviceable'],
+  ['5.2.1','General procedure applicable to all types of extinguishers',{checklist:[
+    ['depressurise','Extinguisher fully depressurised before any work begins'],
+    ['ppe','Correct PPE worn for the task'],
+    ['stable','Extinguisher secured / stable on the workbench before work starts'],
+    ['areaclear','Work area clear of bystanders and other hazards']
+  ]}],
+  ['5.2.2','Water and water-based extinguishers',{checklist:[
+    ['depressurise','Extinguisher fully depressurised before opening'],
+    ['drain','Contents drained into an approved container'],
+    ['inspect','Cylinder internally inspected for corrosion before refill']
+  ]}],
+  ['5.2.3','Carbon dioxide (CO2) extinguishers',{checklist:[
+    ['depressurise','Cylinder fully depressurised before disassembly'],
+    ['valveaway','Valve pointed away from the operator when releasing pressure'],
+    ['noignition','No work carried out near ignition sources'],
+    ['weighed','Cylinder weighed to confirm full discharge before opening']
+  ]}],
+  ['5.2.4','Clean Agent (Halon) extinguishers',{checklist:[
+    ['depressurise','Cylinder fully depressurised before opening'],
+    ['recovery','Agent recovered into an approved recovery system where required'],
+    ['ventilation','Work carried out in a ventilated area']
+  ]}],
+  ['5.2.5','Dry-powder extinguishers',{checklist:[
+    ['depressurise','Extinguisher fully depressurised before opening'],
+    ['dustmask','Respiratory protection worn when discharging residual powder'],
+    ['dispose','Residual powder handled per the storage/disposal checklist (4.7 / 4.7.2)']
+  ]}],
+  ['5.2.6','Internal cartridge-operated extinguishers',{checklist:[
+    ['cartridgeremoved','Gas cartridge removed and rendered safe before further disassembly'],
+    ['depressurise','Extinguisher body depressurised before opening'],
+    ['inspectcartridge','Cartridge inspected and weighed before reuse or disposal']
+  ]}],
+  ['5.2.7','Rejection of the cylinder',{checklist:[
+    ['corrosion','Checked for corrosion, pitting or mechanical damage beyond acceptable limits'],
+    ['dents','Checked for dents, bulges or distortion'],
+    ['threaddamage','Checked for damaged threads or fittings'],
+    ['agecriteria','Checked against the manufacturer’s maximum service life']
+  ]}],
+  ['5.2.8','Rendering cylinder unserviceable',{checklist:[
+    ['depressurise','Cylinder fully depressurised and emptied before disposal'],
+    ['holed','Cylinder rendered unusable (e.g. holed or crushed) so it cannot be refilled'],
+    ['recordremoved','Removal from service recorded (see Condemned units summary)']
+  ]}],
   ['5.3','Pressure testing (all types of extinguishers)'],
   ['5.3.1','General'],
   ['5.3.2','Frequency of pressure testing'],
@@ -2310,6 +2456,10 @@ const SANS1475_CLAUSES = [
   ['6.1','Maintenance labels'],
   ['6.2','Pressure test labels']
 ];
+function sans1475ClauseChecklist(key){
+  const c = SANS1475_CLAUSES.find(x=>x[0]===key);
+  return (c && c[2] && c[2].checklist) || null;
+}
 // Compliance verdicts (compliant/non-conformance) are the auditor's call, not
 // recorded here — the only self-declarable state is scope/applicability.
 const SANS1475_STATUS_LABEL = { na:'Not applicable' };
@@ -2324,30 +2474,19 @@ function sans1475DocId(clause){ return `${currentCompanyId}_${sans1475SafeKey(cl
 const SANS1475_REGISTERS = {
   '4.4': {
     title: 'Extinguishing medium log',
-    hint: 'Log each batch or delivery of extinguishing medium taken into stock — type, standard, supplier and batch/certificate reference (clause 4.4, see also 5.5.2).',
+    hint: 'Log every purchase/restock, replacement or disposal of extinguishing medium — type, standard, supplier/batch reference, and the agreement, delivery note or disposal certificate as evidence (clause 4.4, see also 4.7.2 and 5.5.2).',
+    entryFile: true,
     fields: [
+      { id:'entryType', label:'Entry type', type:'select', options:['Purchase / restock','Replacement','Disposal'] },
       { id:'medType', label:'Medium type', type:'select', options:['DCP','Foam','Water','CO2','Wet chemical','Clean agent','Other'] },
       { id:'standardRef', label:'Standard / specification', placeholder:'e.g. SANS 1910' },
       { id:'supplier', label:'Supplier' },
       { id:'batchNo', label:'Batch / lot number' },
       { id:'certRef', label:'Certificate of conformance / test report ref' },
-      { id:'testDate', label:'Test / delivery date', type:'date' },
+      { id:'testDate', label:'Date', type:'date' },
       { id:'notes', label:'Notes', type:'textarea' }
     ],
-    format(e){ return { date:e.testDate, title:`${e.medType||'Medium'} — batch ${e.batchNo||'—'}`, sub:[e.standardRef, e.supplier, e.certRef?('cert '+e.certRef):''].filter(Boolean).join(' · ') }; }
-  },
-  '5.1': {
-    title: 'Reconditioning register',
-    hint: 'Log each reconditioning job — the extinguisher reconditioned, the extent of work performed and who did it (clause 5.1, records kept per 5.4).',
-    fields: [
-      { id:'serial', label:'Extinguisher serial / asset tag' },
-      { id:'extentText', label:'Extent of reconditioning', type:'textarea', placeholder:'e.g. full strip-down, internal/external inspection, recharge, reassembly' },
-      { id:'reconDate', label:'Date', type:'date' },
-      { id:'technician', label:'Technician' },
-      { id:'saqcc', label:'SAQCC no.' },
-      { id:'notes', label:'Notes', type:'textarea' }
-    ],
-    format(e){ return { date:e.reconDate, title:`${e.serial||'Extinguisher'} — reconditioned`, sub:[e.technician, e.saqcc, e.extentText].filter(Boolean).join(' · ') }; }
+    format(e){ return { date:e.testDate, title:`${e.medType||'Medium'} — ${e.entryType||'entry'}`, sub:[e.batchNo?('batch '+e.batchNo):'', e.standardRef, e.supplier, e.certRef?('cert '+e.certRef):''].filter(Boolean).join(' · ') }; }
   },
   '5.1.6': {
     title: 'Conversion & modification register',
@@ -2364,11 +2503,50 @@ const SANS1475_REGISTERS = {
       { id:'notes', label:'Notes', type:'textarea' }
     ],
     format(e){ return { date:e.workDate, title:`${e.serial||'Extinguisher'} — ${e.workType||'Modification'}`, sub:[e.fromType&&e.toType?(e.fromType+' → '+e.toType):'', e.technician, e.approvedBy?('approved by '+e.approvedBy):''].filter(Boolean).join(' · ') }; }
+  },
+  '4.9': {
+    title: 'PPE register',
+    hint: 'Log each item of personal protective equipment issued, and its condition checks (clause 4.9, protection of workmen).',
+    fields: [
+      { id:'staffId', label:'Issued to', type:'staffSelect' },
+      { id:'itemType', label:'Item', type:'select', options:['Gloves','Goggles / face shield','Apron','Respirator / dust mask','Ear protection','Safety boots','Other'] },
+      { id:'issueDate', label:'Issue / check date', type:'date' },
+      { id:'condition', label:'Condition', type:'select', options:['Good','Needs replacement'] },
+      { id:'replaceBy', label:'Replace by', type:'date' },
+      { id:'notes', label:'Notes', type:'textarea' }
+    ],
+    format(e){
+      const staff = allStaffCache.find(s=>s.id===e.staffId);
+      return { date:e.issueDate, title:`${e.itemType||'PPE item'} — ${staff ? staff.name : 'Unassigned'}`, sub:[e.condition, e.replaceBy?('replace by '+e.replaceBy):''].filter(Boolean).join(' · ') };
+    }
+  },
+  '6.1': {
+    title: 'Maintenance label photos',
+    hint: 'Upload dated photo examples of the maintenance labels used, for clause 6.1.',
+    entryFile: true,
+    fields: [
+      { id:'description', label:'Description', placeholder:'e.g. Standard maintenance label, 2026 stock' },
+      { id:'photoDate', label:'Date', type:'date' },
+      { id:'notes', label:'Notes', type:'textarea' }
+    ],
+    format(e){ return { date:e.photoDate, title:e.description||'Maintenance label', sub:e.notes||'' }; }
+  },
+  '6.2': {
+    title: 'Pressure test label photos',
+    hint: 'Upload dated photo examples of the pressure-test labels used, for clause 6.2.',
+    entryFile: true,
+    fields: [
+      { id:'description', label:'Description', placeholder:'e.g. Pressure test label, current design' },
+      { id:'photoDate', label:'Date', type:'date' },
+      { id:'notes', label:'Notes', type:'textarea' }
+    ],
+    format(e){ return { date:e.photoDate, title:e.description||'Pressure test label', sub:e.notes||'' }; }
   }
 };
 function sans1475RegisterFieldHtml(f){
   const id = `s1475rf_${f.id}`;
   if(f.type==='select') return `<label>${escapeHtml(f.label)}</label><select id="${id}">${f.options.map(o=>`<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('')}</select>`;
+  if(f.type==='staffSelect') return `<label>${escapeHtml(f.label)}</label><select id="${id}"></select>`;
   if(f.type==='textarea') return `<label>${escapeHtml(f.label)}</label><textarea id="${id}" rows="2" placeholder="${escapeHtml(f.placeholder||'')}"></textarea>`;
   if(f.type==='date') return `<label>${escapeHtml(f.label)}</label><input id="${id}" type="date">`;
   return `<label>${escapeHtml(f.label)}</label><input id="${id}" placeholder="${escapeHtml(f.placeholder||'')}">`;
@@ -2428,6 +2606,13 @@ function startWorkshopFileListeners(){
     paintCompanyTab();
     if(editingSans1475Clause && SANS1475_REGISTERS[editingSans1475Clause]) renderSans1475RegisterList();
   }, err=>{ toast('Could not load SANS 1475 registers: ' + err.message); });
+
+  if(unsubReconditioningJobs) unsubReconditioningJobs();
+  unsubReconditioningJobs = db.collection('reconditioningJobs').where('companyId','==',currentCompanyId).onSnapshot(snap=>{
+    reconditioningJobsCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    paintCompanyTab();
+    if(editingSans1475Clause==='5.1') renderReconditioningJobs();
+  }, err=>{ toast('Could not load reconditioning jobs: ' + err.message); });
 
   if(unsubToolChecks) unsubToolChecks();
   unsubToolChecks = db.collection('toolChecks').where('companyId','==',currentCompanyId).onSnapshot(snap=>{
@@ -2704,9 +2889,227 @@ async function deleteCompanyDoc(){
 // verdict, which this app never records; see the hint on the clause form.
 function sans1475IsDocumented(key, rec){
   if(rec && (rec.notes || rec.fileURL)) return true;
+  if(rec && rec.checklist && Object.keys(rec.checklist).length) return true;
   if(SANS1475_REGISTERS[key] && sans1475RegisterCache.some(e=>e.clause===key)) return true;
+  if(key==='5.1' && reconditioningJobsCache.length) return true;
   return false;
 }
+// Clauses that just point at evidence recorded elsewhere in the app, rather
+// than capturing anything new here — see SANS1475_LINKS below.
+const SANS1475_LINKS = {
+  '4.2': { hint:'Training and toolbox-talk records already live in their own tabs — open them directly rather than duplicating them here.', buttons:[
+      { label:'Open toolbox talks', onclick:"showView('view-talks')" },
+      { label:'Print training compliance report', onclick:"openTrainingComplianceReport()" }
+    ] },
+  '4.6': { hint:'Evidence of how extinguishers are transported to and from site lives on each service vehicle’s record.', buttons:[
+      { label:'View service vehicles', onclick:"showView('view-audit'); setCompanyTab('vehicles')" }
+    ] },
+  '4.10': { hint:'Designation, appointments/authorities and delegate (who covers this person when absent) are set on each employee’s record under the Employees tab.', buttons:[
+      { label:'View employees', onclick:"showView('view-audit'); setCompanyTab('employees')" },
+      { label:'Print employee summary', onclick:"openEmployeeSummaryReport()" }
+    ] },
+  '5.4': { hint:'Reconditioning records are kept under clause 5.1 (Reconditioning), including the printable Reconditioning register.', buttons:[
+      { label:'Go to clause 5.1', onclick:"openSans1475Form('5.1')" },
+      { label:'Print reconditioning register', onclick:"openReconditioningReport()" }
+    ] },
+  '5.3': { hint:'This is an analysis pulled from pressure-test due dates across all sites and the weekly gauge/master verification log, rather than a separate manual record.', buttons:[
+      { label:'Print pressure-test analysis', onclick:"openPressureTestAnalysisReport()" }
+    ] },
+  '5.5': { hint:'Recharging is recorded under clause 4.8 (Charging of extinguishers).', buttons:[
+      { label:'Go to clause 4.8', onclick:"openSans1475Form('4.8')" }
+    ] }
+};
+
+/* ---- Reconditioning Jobs (clause 5.1, records kept per 5.4) ----
+   In-workshop reconditioning is its own job, separate from a site
+   maintenance visit — surfaced inside clause 5.1's page (not a separate
+   Audit tab), patterned on the Tools/ToolChecks module: a roster of jobs,
+   each assigned to a technician, tracked through to completion. */
+const RECON_CHECKLIST = [
+  ['stripped','Extinguisher fully stripped down'],
+  ['inspectcylinder','Cylinder inspected internally and externally'],
+  ['inspectvalve','Valve and siphon tube inspected'],
+  ['seals','O-rings and seals renewed'],
+  ['recharged','Recharged with the correct extinguishing medium'],
+  ['tested','Pressure and leak tested'],
+  ['reassembled','Reassembled and relabelled']
+];
+let reconditioningJobsCache = [];
+let editingReconJobId = null;
+function fillReconSelects(){
+  const typeSel = document.getElementById('reconEquipType');
+  if(typeSel && !typeSel.dataset.populated){
+    typeSel.insertAdjacentHTML('beforeend', Object.entries(EQUIPMENT_TYPES).map(([code,t])=>`<option value="${escapeHtml(code)}">${escapeHtml(t.label)}</option>`).join(''));
+    typeSel.dataset.populated = '1';
+  }
+  const techSel = document.getElementById('reconTechnician');
+  if(techSel){
+    techSel.innerHTML = '<option value="">— none —</option>' + allStaffCache
+      .filter(s=>s.role==='technician' && s.active!==false)
+      .sort((a,b)=>(a.name||'').localeCompare(b.name||''))
+      .map(s=>`<option value="${s.id}">${escapeHtml(s.name||'')}</option>`).join('');
+  }
+}
+function reconStatusLabel(s){ return s==='complete' ? 'Complete' : (s==='in-progress' ? 'In progress' : 'Received'); }
+function resetReconditioningJobForm(){
+  editingReconJobId = null;
+  document.getElementById('reconJobFormTitle').textContent = 'New reconditioning job';
+  document.getElementById('reconSerial').value = '';
+  fillReconSelects();
+  document.getElementById('reconEquipType').value = '';
+  document.getElementById('reconTechnician').value = '';
+  document.getElementById('reconReceivedDate').value = toLocalISO(new Date());
+  document.getElementById('reconCompletedDate').value = '';
+  document.getElementById('reconStatus').value = 'received';
+  renderCheckboxList('reconChecklistWrap', RECON_CHECKLIST, {});
+  document.getElementById('reconNotes').value = '';
+  document.getElementById('reconDeleteBtn').style.display = 'none';
+}
+function openReconditioningJobForm(id){
+  const job = reconditioningJobsCache.find(j=>j.id===id);
+  if(!job) return;
+  editingReconJobId = id;
+  document.getElementById('reconJobFormTitle').textContent = `${job.serial||'Job'} — ${reconStatusLabel(job.status)}`;
+  document.getElementById('reconSerial').value = job.serial || '';
+  fillReconSelects();
+  document.getElementById('reconEquipType').value = job.equipmentType || '';
+  document.getElementById('reconTechnician').value = job.assignedTechnicianId || '';
+  document.getElementById('reconReceivedDate').value = job.receivedDate || '';
+  document.getElementById('reconCompletedDate').value = job.completedDate || '';
+  document.getElementById('reconStatus').value = job.status || 'received';
+  renderCheckboxList('reconChecklistWrap', RECON_CHECKLIST, job.checklist || {});
+  document.getElementById('reconNotes').value = job.notes || '';
+  document.getElementById('reconDeleteBtn').style.display = 'block';
+}
+function renderReconditioningJobs(){
+  fillReconSelects();
+  if(!editingReconJobId) resetReconditioningJobForm();
+  const wrap = document.getElementById('reconJobsList');
+  if(!wrap) return;
+  if(reconditioningJobsCache.length===0){ wrap.innerHTML = `<div class="empty">No reconditioning jobs yet.</div>`; return; }
+  const sorted = [...reconditioningJobsCache].sort((a,b)=>(b.receivedDate||'').localeCompare(a.receivedDate||''));
+  wrap.innerHTML = sorted.map(j=>{
+    const tech = allStaffCache.find(s=>s.id===j.assignedTechnicianId);
+    return `<div class="card tech-card" onclick="openReconditioningJobForm('${j.id}')" style="cursor:pointer;">
+      <div>
+        <div class="name">${escapeHtml(j.serial||'Extinguisher')}${j.equipmentType?(' — '+escapeHtml(typeLabel(j.equipmentType))):''}</div>
+        <div class="meta">${escapeHtml(j.receivedDate||'')}${tech?(' &middot; '+escapeHtml(tech.name)):''}</div>
+      </div>
+      <span class="pill ${j.status==='complete'?'pass':(j.status==='in-progress'?'due':'')}" style="margin:0;">${escapeHtml(reconStatusLabel(j.status))}</span>
+    </div>`;
+  }).join('');
+}
+async function saveReconditioningJob(){
+  const serial = document.getElementById('reconSerial').value.trim();
+  if(!serial){ toast('Give the job an extinguisher serial / asset tag'); return; }
+  const payload = {
+    companyId: currentCompanyId,
+    serial,
+    equipmentType: document.getElementById('reconEquipType').value || '',
+    assignedTechnicianId: document.getElementById('reconTechnician').value || '',
+    receivedDate: document.getElementById('reconReceivedDate').value || '',
+    completedDate: document.getElementById('reconCompletedDate').value || '',
+    status: document.getElementById('reconStatus').value,
+    checklist: collectCheckboxList('reconChecklistWrap'),
+    notes: document.getElementById('reconNotes').value.trim(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  try{
+    const ref = editingReconJobId ? db.collection('reconditioningJobs').doc(editingReconJobId) : db.collection('reconditioningJobs').doc();
+    if(!editingReconJobId) payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    await ref.set(payload, {merge:true});
+    toast('Job saved');
+    resetReconditioningJobForm();
+  }catch(e){ toast('Error: ' + e.message); }
+}
+async function deleteReconditioningJob(){
+  if(!editingReconJobId) return;
+  if(!confirm('Delete this reconditioning job?')) return;
+  try{
+    await db.collection('reconditioningJobs').doc(editingReconJobId).delete();
+    toast('Deleted');
+    resetReconditioningJobForm();
+  }catch(e){ toast('Error: ' + e.message); }
+}
+async function openReconditioningReport(){
+  toast('Building report…');
+  await loadCompanySettings();
+  const co = companySettings || {};
+  const today = toLocalISO(new Date());
+  const sorted = [...reconditioningJobsCache].sort((a,b)=>(b.receivedDate||'').localeCompare(a.receivedDate||''));
+  const blocks = sorted.length ? sorted.map(j=>{
+    const tech = allStaffCache.find(s=>s.id===j.assignedTechnicianId);
+    return `<div class="rep-item">
+      <h3>${escapeHtml(j.serial||'Extinguisher')}${j.equipmentType?(' · '+escapeHtml(typeLabel(j.equipmentType))):''}</h3>
+      <div class="kv"><span class="k">Status</span><span class="v">${escapeHtml(reconStatusLabel(j.status))}</span></div>
+      <div class="kv"><span class="k">Received</span><span class="v">${escapeHtml(j.receivedDate||'—')}</span></div>
+      <div class="kv"><span class="k">Completed</span><span class="v">${escapeHtml(j.completedDate||'—')}</span></div>
+      <div class="kv"><span class="k">Assigned technician</span><span class="v">${tech?escapeHtml(tech.name):'—'}</span></div>
+      ${j.notes?`<div class="kv"><span class="k">Notes</span><span class="v">${escapeHtml(j.notes)}</span></div>`:''}
+      <div class="rep-check"><strong>Extent of reconditioning</strong>${checklistUL(RECON_CHECKLIST, j.checklist)}</div>
+    </div>`;
+  }).join('') : `<div class="meta">No reconditioning jobs recorded yet.</div>`;
+  showReport('Reconditioning register', `${letterheadHTML(co)}
+    <h2 style="margin-top:16px; font-size:1rem;">Reconditioning Register (clauses 5.1 &amp; 5.4)</h2>
+    <div class="meta"><strong>Generated:</strong> ${today}<br><strong>Jobs on record:</strong> ${reconditioningJobsCache.length}</div>
+    ${blocks}`, 'view-audit');
+}
+
+// SANS 1475 clause 5.3 — an analysis, not a manual record: pulls pressure-test
+// due dates across every site's equipment plus the weekly gauge/master
+// verification log (see the Weekly verification tab / `calibrations`
+// collection), rather than duplicating either as separate data entry.
+async function openPressureTestAnalysisReport(){
+  if(!hasClientModule()){ toast('The Client Module isn\'t included on your company\'s account'); return; }
+  toast('Building report…');
+  await loadCompanySettings();
+  const co = companySettings || {};
+  const today = toLocalISO(new Date());
+  const cm = thisMonth();
+  const soonHorizon = addMonths(cm, 2);
+  let items = [];
+  try{
+    const snap = await db.collection('equipment').where('companyId','==',currentCompanyId).get();
+    items = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(e=>!e.condemned && e.pressureTestDue);
+  }catch(e){ toast('Could not load equipment: ' + e.message); return; }
+  const overdue = items.filter(e=>ym(e.pressureTestDue) < cm);
+  const dueSoon = items.filter(e=>ym(e.pressureTestDue) >= cm && ym(e.pressureTestDue) <= soonHorizon);
+  const failed = items.filter(e=>e.ptPerformed && e.ptResult==='fail');
+  const siteName = (id)=>{ const s = sitesCache.find(x=>x.id===id); return s ? s.name||'' : ''; };
+  const rowsFor = (list)=> list.length ? list.map(e=>`<tr>
+      <td>${escapeHtml(typeLabel(e.type))}</td>
+      <td>${escapeHtml(e.serial||'—')}</td>
+      <td>${escapeHtml(siteName(e.siteId))}</td>
+      <td>${escapeHtml(e.location||'—')}</td>
+      <td>${escapeHtml(ym(e.pressureTestDue)||'—')}</td>
+    </tr>`).join('') : `<tr><td colspan="5">None.</td></tr>`;
+
+  let gaugeChecks = [];
+  try{
+    const snap = await db.collection('calibrations').where('companyId','==',currentCompanyId).get();
+    gaugeChecks = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(c=>c.type==='gauge' || c.type==='master');
+  }catch(e){ /* non-fatal — the analysis is still useful without this part */ }
+  gaugeChecks.sort((a,b)=>(b.checkDate||'').localeCompare(a.checkDate||''));
+  const lastGaugeCheck = gaugeChecks[0];
+  const failedGaugeChecks = gaugeChecks.filter(c=>c.result==='fail');
+
+  showReport('Pressure test analysis', `${letterheadHTML(co)}
+    <h2 style="margin-top:16px; font-size:1rem;">Pressure Test &amp; Weekly Verification Analysis (clause 5.3)</h2>
+    <div class="meta">
+      <strong>Generated:</strong> ${today}<br>
+      <strong>Units with a pressure-test due date on record:</strong> ${items.length}<br>
+      <strong>Overdue:</strong> ${overdue.length} &middot; <strong>Due within 2 months:</strong> ${dueSoon.length} &middot; <strong>Failed at last test:</strong> ${failed.length}<br>
+      <strong>Last weekly gauge/master verification:</strong> ${lastGaugeCheck ? escapeHtml(lastGaugeCheck.checkDate||'') + ' (' + (lastGaugeCheck.result==='fail'?'Fail':'Pass') + ')' : 'None recorded'}<br>
+      <strong>Failed weekly gauge/master verifications:</strong> ${failedGaugeChecks.length}
+    </div>
+    <h3 style="margin-top:18px; font-size:0.95rem;">Overdue pressure tests</h3>
+    <div class="tablewrap"><table><thead><tr><th>Type</th><th>Serial</th><th>Site</th><th>Location</th><th>Due</th></tr></thead><tbody>${rowsFor(overdue)}</tbody></table></div>
+    <h3 style="margin-top:18px; font-size:0.95rem;">Due within 2 months</h3>
+    <div class="tablewrap"><table><thead><tr><th>Type</th><th>Serial</th><th>Site</th><th>Location</th><th>Due</th></tr></thead><tbody>${rowsFor(dueSoon)}</tbody></table></div>
+    <h3 style="margin-top:18px; font-size:0.95rem;">Failed at last test</h3>
+    <div class="tablewrap"><table><thead><tr><th>Type</th><th>Serial</th><th>Site</th><th>Location</th><th>Due</th></tr></thead><tbody>${rowsFor(failed)}</tbody></table></div>`, 'view-audit');
+}
+
 function renderSans1475(){
   const wrap = document.getElementById('sans1475List');
   if(!wrap) return;
@@ -2722,9 +3125,17 @@ function renderSans1475(){
     const metaBits = [];
     if(rec && rec.fileURL) metaBits.push('evidence attached');
     if(rec && rec.notes) metaBits.push(rec.notes);
+    const checklistDef = sans1475ClauseChecklist(key);
+    if(checklistDef){
+      const checked = (rec && rec.checklist) ? Object.keys(rec.checklist).filter(k=>rec.checklist[k]).length : 0;
+      metaBits.push(`${checked}/${checklistDef.length} checklist items`);
+    }
     if(SANS1475_REGISTERS[key]){
       const n = sans1475RegisterCache.filter(e=>e.clause===key).length;
       metaBits.push(`${n} ${n===1?'entry':'entries'} logged`);
+    }
+    if(key==='5.1'){
+      metaBits.push(`${reconditioningJobsCache.length} reconditioning ${reconditioningJobsCache.length===1?'job':'jobs'}`);
     }
     return `<div class="card tech-card" onclick="openSans1475Form('${key}')" style="cursor:pointer; margin-left:${depth*14}px;">
       <div>
@@ -2747,16 +3158,46 @@ function openSans1475Form(clause){
   document.getElementById('sans1475FileInput').value = '';
   setFileLink('sans1475FileLink', rec && rec.fileURL);
   document.getElementById('sans1475ClearBtn').style.display = rec ? 'block' : 'none';
+
+  const linksConfig = SANS1475_LINKS[clause];
+  const linksSection = document.getElementById('sans1475LinksSection');
+  if(linksConfig){
+    document.getElementById('sans1475LinksHint').textContent = linksConfig.hint;
+    document.getElementById('sans1475LinksButtons').innerHTML = linksConfig.buttons.map(b=>`<button class="btn secondary" onclick="${b.onclick}">${escapeHtml(b.label)}</button>`).join('');
+    linksSection.style.display = 'block';
+  } else {
+    linksSection.style.display = 'none';
+  }
+
+  const checklistDef = sans1475ClauseChecklist(clause);
+  const checklistSection = document.getElementById('sans1475ChecklistSection');
+  if(checklistDef){
+    renderCheckboxList('sans1475ChecklistWrap', checklistDef, (rec && rec.checklist) || {});
+    checklistSection.style.display = 'block';
+  } else {
+    checklistSection.style.display = 'none';
+  }
+
   const regConfig = SANS1475_REGISTERS[clause];
   const regSection = document.getElementById('sans1475RegisterSection');
   if(regConfig){
     document.getElementById('sans1475RegisterTitle').textContent = regConfig.title;
     document.getElementById('sans1475RegisterHint').textContent = regConfig.hint;
     document.getElementById('sans1475RegisterFields').innerHTML = regConfig.fields.map(sans1475RegisterFieldHtml).join('');
+    sans1475FillStaffSelects(regConfig);
+    document.getElementById('sans1475EntryFileWrap').style.display = regConfig.entryFile ? 'block' : 'none';
+    const entryFileInput = document.getElementById('sans1475EntryFileInput');
+    if(entryFileInput) entryFileInput.value = '';
     regSection.style.display = 'block';
     renderSans1475RegisterList();
   } else {
     regSection.style.display = 'none';
+  }
+
+  const reconSection = document.getElementById('sans1475ReconSection');
+  if(reconSection){
+    reconSection.style.display = clause==='5.1' ? 'block' : 'none';
+    if(clause==='5.1'){ editingReconJobId = null; renderReconditioningJobs(); }
   }
   showView('view-sans1475-form');
 }
@@ -2769,6 +3210,7 @@ async function saveSans1475(){
     notes: document.getElementById('sans1475Notes').value.trim(),
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
+  if(sans1475ClauseChecklist(editingSans1475Clause)) payload.checklist = collectCheckboxList('sans1475ChecklistWrap');
   try{
     const ref = db.collection('sans1475Checklist').doc(sans1475DocId(editingSans1475Clause));
     if(workshopPendingFiles.sans1475){
@@ -2798,11 +3240,23 @@ function renderSans1475RegisterList(){
   if(entries.length===0){ wrap.innerHTML = `<div class="empty">No entries logged yet.</div>`; return; }
   wrap.innerHTML = entries.map(e=>{
     const f = config.format(e);
+    const fileLink = e.fileURL ? ` · <a href="${e.fileURL}" target="_blank" rel="noopener">view file &#8599;</a>` : '';
     return `<div class="insp-row" style="cursor:default;">
       <div class="top"><span class="date">${escapeHtml(f.date||'—')}${f.title?(' · '+escapeHtml(f.title)):''}</span></div>
-      <div class="sub">${escapeHtml(f.sub||'')} <span onclick="deleteSans1475RegisterEntry('${e.id}')" style="color:var(--red-dark); cursor:pointer; font-weight:700;">delete</span></div>
+      <div class="sub">${escapeHtml(f.sub||'')}${fileLink} <span onclick="deleteSans1475RegisterEntry('${e.id}')" style="color:var(--red-dark); cursor:pointer; font-weight:700;">delete</span></div>
     </div>`;
   }).join('');
+}
+function sans1475FillStaffSelects(regConfig){
+  regConfig.fields.forEach(f=>{
+    if(f.type!=='staffSelect') return;
+    const sel = document.getElementById(`s1475rf_${f.id}`);
+    if(!sel) return;
+    sel.innerHTML = '<option value="">— none —</option>' + allStaffCache
+      .filter(s=>s.active!==false)
+      .sort((a,b)=>(a.name||'').localeCompare(b.name||''))
+      .map(s=>`<option value="${s.id}">${escapeHtml(s.name||'')}</option>`).join('');
+  });
 }
 async function addSans1475RegisterEntry(){
   const clause = editingSans1475Clause;
@@ -2816,10 +3270,17 @@ async function addSans1475RegisterEntry(){
     payload[f.id] = v;
     if(v) hasValue = true;
   });
+  if(config.entryFile && workshopPendingFiles.sans1475entry) hasValue = true;
   if(!hasValue){ toast('Fill in at least one field'); return; }
   try{
-    await db.collection('sans1475RegisterEntries').add(payload);
-    config.fields.forEach(f=>{ const el = document.getElementById(`s1475rf_${f.id}`); if(el && f.type!=='select') el.value = ''; });
+    const ref = db.collection('sans1475RegisterEntries').doc();
+    if(config.entryFile && workshopPendingFiles.sans1475entry){
+      toast('Uploading…');
+      payload.fileURL = await uploadWorkshopFile(workshopPendingFiles.sans1475entry, `company-files/${currentCompanyId}/sans1475/${sans1475SafeKey(clause)}/${ref.id}.${fileExt(workshopPendingFiles.sans1475entry)}`);
+    }
+    await ref.set(payload);
+    config.fields.forEach(f=>{ const el = document.getElementById(`s1475rf_${f.id}`); if(el && f.type!=='select' && f.type!=='staffSelect') el.value = ''; });
+    if(config.entryFile){ const fi = document.getElementById('sans1475EntryFileInput'); if(fi) fi.value=''; delete workshopPendingFiles.sans1475entry; }
     toast('Entry added');
   }catch(e){ toast('Error: ' + e.message); }
 }
@@ -3002,6 +3463,14 @@ function openEmployeeCompliance(id){
   fillBranchSelect('empBranch', s.branchId);
   document.getElementById('empSaqccExpiry').value = s.saqccRegExpiry || '';
   document.getElementById('empMedicalExpiry').value = s.medicalCertExpiry || '';
+  document.getElementById('empDesignation').value = s.designation || '';
+  document.getElementById('empAppointments').value = s.appointments || '';
+  const delegateSel = document.getElementById('empDelegate');
+  delegateSel.innerHTML = '<option value="">— none —</option>' + allStaffCache
+    .filter(x=>x.id!==id && x.active!==false)
+    .sort((a,b)=>(a.name||'').localeCompare(b.name||''))
+    .map(x=>`<option value="${x.id}">${escapeHtml(x.name||'')}</option>`).join('');
+  delegateSel.value = s.delegateId || '';
   ['empIdFileInput','empMedicalFileInput','empContractFileInput'].forEach(x=> document.getElementById(x).value = '');
   setFileLink('empIdFileLink', s.idDocumentPhotoURL);
   setFileLink('empMedicalFileLink', s.medicalCertPhotoURL);
@@ -3017,7 +3486,10 @@ async function saveEmployeeCompliance(){
   const update = {
     branchId: document.getElementById('empBranch').value || '',
     saqccRegExpiry: document.getElementById('empSaqccExpiry').value || '',
-    medicalCertExpiry: document.getElementById('empMedicalExpiry').value || ''
+    medicalCertExpiry: document.getElementById('empMedicalExpiry').value || '',
+    designation: document.getElementById('empDesignation').value.trim(),
+    appointments: document.getElementById('empAppointments').value.trim(),
+    delegateId: document.getElementById('empDelegate').value || ''
   };
   try{
     const base = `company-files/${currentCompanyId}/employees/${editingEmployeeId}`;
@@ -3035,6 +3507,37 @@ async function saveEmployeeCompliance(){
     toast('Saved');
     showView('view-audit');
   }catch(e){ toast('Error: ' + e.message); }
+}
+// SANS 1475 clause 4.10 "People" — a point-in-time roster of who holds what
+// designation/authority and who covers them when absent, printed the same
+// way as the other Audit reports (see showReport/letterheadHTML).
+async function openEmployeeSummaryReport(){
+  toast('Building report…');
+  await loadCompanySettings();
+  const co = companySettings || {};
+  const today = toLocalISO(new Date());
+  const roleOrder = ['admin','technician','competent','trainee'];
+  const staff = [...allStaffCache].filter(s=>s.active!==false)
+    .sort((a,b)=> roleOrder.indexOf(a.role)-roleOrder.indexOf(b.role) || (a.name||'').localeCompare(b.name||''));
+  const rows = staff.length ? staff.map(s=>{
+    const delegate = allStaffCache.find(x=>x.id===s.delegateId);
+    return `<tr>
+      <td>${escapeHtml(s.name||'')}</td>
+      <td>${escapeHtml(ROLE_LABEL[s.role]||s.role||'')}</td>
+      <td>${escapeHtml(s.designation||'—')}</td>
+      <td>${escapeHtml(s.appointments||'—')}</td>
+      <td>${escapeHtml(delegate ? delegate.name : '—')}</td>
+      <td>${escapeHtml(s.saqccRegExpiry||'—')}</td>
+      <td>${escapeHtml(s.medicalCertExpiry||'—')}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="7">No active employees recorded.</td></tr>`;
+  showReport('Employee summary', `${letterheadHTML(co)}
+    <h2 style="margin-top:16px; font-size:1rem;">Employee Summary — Designations, Authorities &amp; Delegation (clause 4.10)</h2>
+    <div class="meta"><strong>Generated:</strong> ${today}<br><strong>Active employees:</strong> ${staff.length}</div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Name</th><th>Role</th><th>Designation</th><th>Appointments / authorities</th><th>Delegate (when absent)</th><th>SAQCC expiry</th><th>Medical expiry</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`, 'view-audit');
 }
 
 /* ---- Calibration register (annual, SANAS-accredited) ---- */
@@ -3329,9 +3832,9 @@ async function deleteToolCheck(id){
 async function openCompliancePack(){
   toast('Building pack…');
   await loadCompanySettings();
-  let branches = [], vehicles = [], docs = [], staff = [], certs = [], training = { topics:[], roster:[], rows:[] }, tools = [], toolChecks = [], sans1475 = [], sans1475Registers = [];
+  let branches = [], vehicles = [], docs = [], staff = [], certs = [], training = { topics:[], roster:[], rows:[] }, tools = [], toolChecks = [], sans1475 = [], sans1475Registers = [], reconJobs = [];
   try{
-    const [b, v, d, s, cc, tc, tl, tk, sc, sr] = await Promise.all([
+    const [b, v, d, s, cc, tc, tl, tk, sc, sr, rj] = await Promise.all([
       db.collection('branches').where('companyId','==',currentCompanyId).get(),
       db.collection('vehicles').where('companyId','==',currentCompanyId).get(),
       db.collection('companyDocuments').where('companyId','==',currentCompanyId).get(),
@@ -3341,7 +3844,8 @@ async function openCompliancePack(){
       db.collection('tools').where('companyId','==',currentCompanyId).get(),
       db.collection('toolChecks').where('companyId','==',currentCompanyId).get(),
       db.collection('sans1475Checklist').where('companyId','==',currentCompanyId).get(),
-      db.collection('sans1475RegisterEntries').where('companyId','==',currentCompanyId).get()
+      db.collection('sans1475RegisterEntries').where('companyId','==',currentCompanyId).get(),
+      db.collection('reconditioningJobs').where('companyId','==',currentCompanyId).get()
     ]);
     branches = b.docs.map(x=>({id:x.id, ...x.data()}));
     vehicles = v.docs.map(x=>({id:x.id, ...x.data()}));
@@ -3353,6 +3857,7 @@ async function openCompliancePack(){
     toolChecks = tk.docs.map(x=>({id:x.id, ...x.data()}));
     sans1475 = sc.docs.map(x=>({id:x.id, ...x.data()}));
     sans1475Registers = sr.docs.map(x=>({id:x.id, ...x.data()}));
+    reconJobs = rj.docs.map(x=>({id:x.id, ...x.data()}));
   }catch(e){ toast('Could not load: ' + e.message); return; }
   const co = companySettings || {};
   const today = toLocalISO(new Date());
@@ -3475,7 +3980,9 @@ async function openCompliancePack(){
     const rec = sans1475.find(x=>x.clause===key);
     const applicability = rec && rec.status==='na' ? 'Not applicable' : 'Applicable';
     const hasRegisterEntries = !!(SANS1475_REGISTERS[key] && sans1475Registers.some(x=>x.clause===key));
-    const documented = !!(rec && (rec.notes || rec.fileURL)) || hasRegisterEntries;
+    const checklistDef = sans1475ClauseChecklist(key);
+    const checklistHtml = checklistDef ? checklistUL(checklistDef, (rec && rec.checklist) || {}) : '—';
+    const documented = !!(rec && (rec.notes || rec.fileURL || (rec.checklist && Object.keys(rec.checklist).length))) || hasRegisterEntries;
     return `<tr>
       <td>${escapeHtml(key)}</td>
       <td>${escapeHtml(title)}</td>
@@ -3483,6 +3990,7 @@ async function openCompliancePack(){
       <td>${escapeHtml((rec && rec.notes) || '—')}</td>
       <td>${rec && rec.fileURL ? 'Yes' : 'No'}</td>
       <td>${documented ? 'Yes' : 'No'}</td>
+      <td>${checklistHtml}</td>
     </tr>`;
   }).join('');
 
@@ -3491,11 +3999,11 @@ async function openCompliancePack(){
       .sort((a,b)=>((b.createdAt&&b.createdAt.seconds)||0)-((a.createdAt&&a.createdAt.seconds)||0));
     const rows = entries.length ? entries.map(x=>{
       const f = config.format(x);
-      return `<tr><td>${escapeHtml(f.date||'—')}</td><td>${escapeHtml(f.title||'')}</td><td>${escapeHtml(f.sub||'')}</td></tr>`;
-    }).join('') : `<tr><td colspan="3">No entries logged.</td></tr>`;
+      return `<tr><td>${escapeHtml(f.date||'—')}</td><td>${escapeHtml(f.title||'')}</td><td>${escapeHtml(f.sub||'')}</td><td>${x.fileURL ? 'Yes' : 'No'}</td></tr>`;
+    }).join('') : `<tr><td colspan="4">No entries logged.</td></tr>`;
     return `<h3 style="margin-top:18px; font-size:0.95rem;">${escapeHtml(config.title)} (clause ${escapeHtml(clause)})</h3>
     <div class="tablewrap"><table>
-      <thead><tr><th>Date</th><th>Entry</th><th>Detail</th></tr></thead>
+      <thead><tr><th>Date</th><th>Entry</th><th>Detail</th><th>Evidence on file</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
   }).join('');
@@ -3543,10 +4051,18 @@ async function openCompliancePack(){
     <h3 style="margin-top:18px; font-size:0.95rem;">SANS 1475 Part 1:2025 clause evidence register</h3>
     <div class="meta" style="margin-top:0;">Applicability is self-declared by the business; compliance against each clause is determined by the SAQCC/SABS auditor, not recorded here.</div>
     <div class="tablewrap"><table>
-      <thead><tr><th>Clause</th><th>Requirement</th><th>Applicability</th><th>Notes</th><th>Evidence on file</th><th>Documented</th></tr></thead>
+      <thead><tr><th>Clause</th><th>Requirement</th><th>Applicability</th><th>Notes</th><th>Evidence on file</th><th>Documented</th><th>Checklist</th></tr></thead>
       <tbody>${sans1475Rows}</tbody>
     </table></div>
-    ${sans1475RegisterSections}`, 'view-audit');
+    ${sans1475RegisterSections}
+    <h3 style="margin-top:18px; font-size:0.95rem;">Reconditioning jobs (clauses 5.1 &amp; 5.4)</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Serial</th><th>Type</th><th>Status</th><th>Received</th><th>Completed</th><th>Technician</th></tr></thead>
+      <tbody>${reconJobs.length ? reconJobs.map(j=>{
+        const tech = staff.find(s=>s.id===j.assignedTechnicianId);
+        return `<tr><td>${escapeHtml(j.serial||'')}</td><td>${escapeHtml(typeLabel(j.equipmentType||''))}</td><td>${escapeHtml(reconStatusLabel(j.status))}</td><td>${escapeHtml(j.receivedDate||'—')}</td><td>${escapeHtml(j.completedDate||'—')}</td><td>${tech?escapeHtml(tech.name):'—'}</td></tr>`;
+      }).join('') : '<tr><td colspan="6">No reconditioning jobs recorded.</td></tr>'}</tbody>
+    </table></div>`, 'view-audit');
 }
 
 function renderCompanyLogoPreview(){

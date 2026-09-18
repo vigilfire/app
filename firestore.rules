@@ -356,10 +356,21 @@ service cloud.firestore {
       allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
     }
     // Repeatable dated logs for specific SANS 1475 clauses (extinguishing
-    // medium 4.4, reconditioning 5.1, conversion/modification 5.1.6) — an
-    // add-only register per clause, entries never edited after the fact.
-    // Same admin-only, Audit-add-on-gated pattern as sans1475Checklist above.
+    // medium 4.4, PPE 4.9, conversion/modification 5.1.6, label photos 6.1/
+    // 6.2) — an add-only register per clause, entries never edited after the
+    // fact. Same admin-only, Audit-add-on-gated pattern as sans1475Checklist
+    // above.
     match /sans1475RegisterEntries/{id} {
+      allow read:   if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
+      allow update: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+    }
+    // In-workshop reconditioning jobs (clause 5.1, records kept per 5.4) —
+    // each job assigned to a technician and tracked through to completion,
+    // surfaced inside the SANS 1475 checklist's clause 5.1 page. Same
+    // admin-only, Audit-add-on-gated pattern as the rest of the Audit tab.
+    match /reconditioningJobs/{id} {
       allow read:   if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
       allow create: if isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
       allow update: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
