@@ -1056,7 +1056,7 @@
         <div id="toolChecksList"></div>
       </div>
       <div id="companyTab-sans1475" style="display:none;">
-        <p class="hint" style="margin:0 0 10px;">SANS 1475 Part 1:2025 clause-by-clause evidence register. Mark each clause Compliant, Not applicable or Non-conformance, with notes and — where you have it — supporting evidence attached. Tap a clause to update it.</p>
+        <p class="hint" style="margin:0 0 10px;">SANS 1475 Part 1:2025 clause-by-clause evidence register — notes and supporting evidence for your SAQCC/SABS auditor to review. Compliance against each clause is the auditor's call, not recorded here; mark a clause Not applicable only if it's out of scope for your business. Tap a clause to update it.</p>
         <div id="sans1475List"></div>
       </div>
     </section>
@@ -1205,14 +1205,13 @@
     <section id="view-sans1475-form" class="view">
       <div class="backbar"><button onclick="showView('view-audit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="sans1475FormTitle">Clause</h2></div>
       <div class="card">
-        <label style="margin-top:0;">Status</label>
+        <label style="margin-top:0;">Applies to this business?</label>
         <select id="sans1475Status">
-          <option value="">Not reviewed</option>
-          <option value="compliant">Compliant</option>
-          <option value="na">Not applicable</option>
-          <option value="nonconformance">Non-conformance</option>
+          <option value="">Applicable</option>
+          <option value="na">Not applicable — we don't offer or handle this</option>
         </select>
-        <label>Notes</label><textarea id="sans1475Notes" rows="3" placeholder="Evidence reference, corrective action, etc."></textarea>
+        <div class="hint">Compliance against this clause is judged by your SAQCC/SABS auditor, not recorded here — this only marks whether the clause is in scope for your business. Use Notes and Evidence below to keep the paper trail ready for them.</div>
+        <label>Notes</label><textarea id="sans1475Notes" rows="3" placeholder="Evidence reference, procedure summary, etc."></textarea>
         <label>Evidence (PDF or photo)</label>
         <input id="sans1475FileInput" type="file" accept="application/pdf,image/*" onchange="handleWorkshopFilePick(event,'sans1475')">
         <div class="hint">Max 15 MB.</div>
@@ -1221,7 +1220,7 @@
           <button class="btn secondary" onclick="showView('view-audit')">Cancel</button>
           <button class="btn" onclick="saveSans1475()">Save</button>
         </div>
-        <button class="btn ghost" id="sans1475ClearBtn" style="margin-top:10px; display:none;" onclick="clearSans1475()">Reset this clause</button>
+        <button class="btn ghost" id="sans1475ClearBtn" style="margin-top:10px; display:none;" onclick="clearSans1475()">Clear this clause's notes/evidence</button>
       </div>
       <div id="sans1475RegisterSection" class="card" style="display:none;">
         <label style="margin-top:0;" id="sans1475RegisterTitle">Register</label>
@@ -2311,7 +2310,9 @@ const SANS1475_CLAUSES = [
   ['6.1','Maintenance labels'],
   ['6.2','Pressure test labels']
 ];
-const SANS1475_STATUS_LABEL = { compliant:'Compliant', na:'Not applicable', nonconformance:'Non-conformance' };
+// Compliance verdicts (compliant/non-conformance) are the auditor's call, not
+// recorded here — the only self-declarable state is scope/applicability.
+const SANS1475_STATUS_LABEL = { na:'Not applicable' };
 function sans1475SafeKey(clause){ return clause.replace(/\./g,'_'); }
 function sans1475DocId(clause){ return `${currentCompanyId}_${sans1475SafeKey(clause)}`; }
 
@@ -2448,7 +2449,7 @@ function paintCompanyTab(){
     ['workshops', `Workshops (${branchesCache.length})`],
     ['calibration', `Calibration (${calCertsCache.length})`],
     ['tools', `Tools (${toolsCache.length})`],
-    ['sans1475', `SANS 1475 (${sans1475Cache.filter(c=>c.status).length}/${SANS1475_CLAUSES.length})`]
+    ['sans1475', `SANS 1475 (${SANS1475_CLAUSES.filter(([key])=>sans1475IsDocumented(key, sans1475Cache.find(c=>c.clause===key))).length}/${SANS1475_CLAUSES.length})`]
   ];
   chips.innerHTML = tabs.map(([k,label])=>`<button class="chip ${companyTab===k?'active':''}" onclick="setCompanyTab('${k}')">${escapeHtml(label)}${k==='documents'&&expiredCount?' <span style="color:var(--red-dark);">&#9679;</span>':''}</button>`).join('');
   ['documents','employees','vehicles','workshops','calibration','tools','sans1475'].forEach(k=>{
@@ -2698,16 +2699,26 @@ async function deleteCompanyDoc(){
 }
 
 /* ---- SANS 1475 Part 1:2025 clause checklist ---- */
+// "Documented" means there's something on file for the auditor to review
+// (notes, an evidence file, or a logged register entry) — not a compliance
+// verdict, which this app never records; see the hint on the clause form.
+function sans1475IsDocumented(key, rec){
+  if(rec && (rec.notes || rec.fileURL)) return true;
+  if(SANS1475_REGISTERS[key] && sans1475RegisterCache.some(e=>e.clause===key)) return true;
+  return false;
+}
 function renderSans1475(){
   const wrap = document.getElementById('sans1475List');
   if(!wrap) return;
   wrap.innerHTML = SANS1475_CLAUSES.map(([key,title])=>{
     const rec = sans1475Cache.find(c=>c.clause===key);
     const depth = (key.match(/\./g)||[]).length;
-    const status = rec && rec.status;
-    const pill = status
-      ? `<span class="pill ${status==='compliant'?'pass':(status==='nonconformance'?'fail':'')}" style="margin:0;">${SANS1475_STATUS_LABEL[status]}</span>`
-      : `<span class="pill due" style="margin:0;">Not reviewed</span>`;
+    const na = rec && rec.status==='na';
+    const pill = na
+      ? `<span class="pill" style="margin:0;">Not applicable</span>`
+      : (sans1475IsDocumented(key, rec)
+        ? `<span class="pill pass" style="margin:0;">Documented</span>`
+        : `<span class="pill due" style="margin:0;">No evidence yet</span>`);
     const metaBits = [];
     if(rec && rec.fileURL) metaBits.push('evidence attached');
     if(rec && rec.notes) metaBits.push(rec.notes);
@@ -3462,13 +3473,16 @@ async function openCompliancePack(){
 
   const sans1475Rows = SANS1475_CLAUSES.map(([key,title])=>{
     const rec = sans1475.find(x=>x.clause===key);
-    const status = rec ? (SANS1475_STATUS_LABEL[rec.status] || 'Not reviewed') : 'Not reviewed';
+    const applicability = rec && rec.status==='na' ? 'Not applicable' : 'Applicable';
+    const hasRegisterEntries = !!(SANS1475_REGISTERS[key] && sans1475Registers.some(x=>x.clause===key));
+    const documented = !!(rec && (rec.notes || rec.fileURL)) || hasRegisterEntries;
     return `<tr>
       <td>${escapeHtml(key)}</td>
       <td>${escapeHtml(title)}</td>
-      <td>${escapeHtml(status)}</td>
+      <td>${escapeHtml(applicability)}</td>
       <td>${escapeHtml((rec && rec.notes) || '—')}</td>
       <td>${rec && rec.fileURL ? 'Yes' : 'No'}</td>
+      <td>${documented ? 'Yes' : 'No'}</td>
     </tr>`;
   }).join('');
 
@@ -3526,9 +3540,10 @@ async function openCompliancePack(){
       <thead><tr><th>Tool</th><th>Serial</th><th>Held by</th><th>Last checked</th><th>Result</th></tr></thead>
       <tbody>${toolRows}</tbody>
     </table></div>
-    <h3 style="margin-top:18px; font-size:0.95rem;">SANS 1475 Part 1:2025 clause register</h3>
+    <h3 style="margin-top:18px; font-size:0.95rem;">SANS 1475 Part 1:2025 clause evidence register</h3>
+    <div class="meta" style="margin-top:0;">Applicability is self-declared by the business; compliance against each clause is determined by the SAQCC/SABS auditor, not recorded here.</div>
     <div class="tablewrap"><table>
-      <thead><tr><th>Clause</th><th>Requirement</th><th>Status</th><th>Notes</th><th>Evidence on file</th></tr></thead>
+      <thead><tr><th>Clause</th><th>Requirement</th><th>Applicability</th><th>Notes</th><th>Evidence on file</th><th>Documented</th></tr></thead>
       <tbody>${sans1475Rows}</tbody>
     </table></div>
     ${sans1475RegisterSections}`, 'view-audit');
