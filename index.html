@@ -1059,6 +1059,10 @@
         <p class="hint" style="margin:0 0 10px;">SANS 1475 Part 1:2025 clause-by-clause evidence register — notes and supporting evidence for your SAQCC/SABS auditor to review. Compliance against each clause is the auditor's call, not recorded here; mark a clause Not applicable only if it's out of scope for your business. Tap a clause to update it.</p>
         <div id="sans1475List"></div>
       </div>
+      <div id="companyTab-sans1475p2" style="display:none;">
+        <p class="hint" style="margin:0 0 10px;">SANS 1475 Part 2:2024 (fire hose reels and hydrants) clause-by-clause evidence register — notes and supporting evidence for your SAQCC/SABS auditor to review. Compliance against each clause is the auditor's call, not recorded here; mark a clause Not applicable only if it's out of scope for your business (for example, if you don't service underground hydrants). Tap a clause to update it.</p>
+        <div id="sans1475P2List"></div>
+      </div>
     </section>
 
     <!-- ===== CALIBRATION CERTIFICATE FORM (admin) ===== -->
@@ -2456,8 +2460,121 @@ const SANS1475_CLAUSES = [
   ['6.1','Maintenance labels'],
   ['6.2','Pressure test labels']
 ];
+
+// SANS 1475 Part 2:2024 (fire hose reels and hydrants) clause register. Part 2
+// reuses the same clause numbers as Part 1 (4.1, 5.1, 6.1 …), so every Part 2
+// key carries a "P2-" prefix — that keeps doc ids in `sans1475Checklist` and
+// `sans1475RegisterEntries` distinct from Part 1's, with no rules or schema
+// change. Show keys to people via sans1475DisplayKey(). Checklist wording below
+// is drafted from the clause titles and general hose reel / hydrant servicing
+// practice, editable in place — verify it against the published standard.
+const SANS1475_P2_PREFIX = 'P2-';
+function sans1475DisplayKey(key){ return key.startsWith(SANS1475_P2_PREFIX) ? key.slice(SANS1475_P2_PREFIX.length) : key; }
+function sans1475IsPart2(key){ return key.startsWith(SANS1475_P2_PREFIX); }
+const P2_CHK_COMPONENTS = {checklist:[
+  ['present','All component parts present and correctly assembled'],
+  ['condition','No corrosion, cracking or damage to component parts'],
+  ['operation','Moving parts operate freely and smoothly'],
+  ['replaced','Defective or worn parts replaced']
+]};
+const P2_CHK_CONTROL = {checklist:[
+  ['operates','Valves open and close fully, without sticking'],
+  ['leaks','No leakage at valve, gland or connections'],
+  ['condition','Handwheel / operating key and fittings undamaged'],
+  ['coupling','Outlet coupling undamaged and compatible with the hose or standpipe']
+]};
+const P2_CHK_SEALS = {checklist:[
+  ['renewed','Seals, washers and O-rings inspected and renewed where required'],
+  ['fitted','Seals correctly seated'],
+  ['leaktest','No leakage under water pressure']
+]};
+const P2_CHK_SEALING = {checklist:[
+  ['sealed','Seal or tamper indicator fitted after servicing'],
+  ['identified','Seal identifies the servicing organisation'],
+  ['intact','Seal intact and undamaged when the unit is next inspected']
+]};
+const P2_CHK_SUPPLY = {checklist:[
+  ['available','Water supply available at the unit'],
+  ['isolating','Isolating valve open and accessible'],
+  ['flow','Flow and pressure confirmed at the outlet'],
+  ['clear','Supply line free of obstruction']
+]};
+const SANS1475_P2_CLAUSES = [
+  ['4.1','Facilities'],
+  ['4.2','Training of staff'],
+  ['4.3','Protection of workmen'],
+  ['5','Requirements for reconditioning'],
+  ['5.1','Reconditioning'],
+  ['5.2','Extent of Reconditioning'],
+  ['5.3','Frequency of reconditioning'],
+  ['5.4','Modification'],
+  ['5.5','Rejection of a fire hose reel or hydrant'],
+  ['6','Maintenance'],
+  ['6.1','Fire hose reels'],
+  ['6.1.1','General'],
+  ['6.1.2','Frame and mounting bolts',{checklist:[
+    ['frame','Frame undamaged, not distorted and free of corrosion'],
+    ['bolts','Mounting bolts present and tight'],
+    ['secure','Reel firmly fixed to its mounting surface'],
+    ['swing','Swing arm (if fitted) moves freely and locks']
+  ]}],
+  ['6.1.3','Component parts',P2_CHK_COMPONENTS],
+  ['6.1.4','Water control fittings',P2_CHK_CONTROL],
+  ['6.1.5','Fire hose',{checklist:[
+    ['unwound','Hose fully unwound and inspected along its whole length'],
+    ['damage','No cuts, abrasions, kinks, blisters or perishing'],
+    ['couplings','Hose couplings secure and undamaged'],
+    ['pressure','Hose pressure or leak tested where required'],
+    ['rewound','Hose correctly rewound after inspection']
+  ]}],
+  ['6.1.6','Water seals',P2_CHK_SEALS],
+  ['6.1.7','Maintenance labels'],
+  ['6.1.8','Sealing',P2_CHK_SEALING],
+  ['6.1.9','Water supply',P2_CHK_SUPPLY],
+  ['6.2','Above-ground hydrants'],
+  ['6.2.1','General'],
+  ['6.2.2','Standpipe and valve body',{checklist:[
+    ['standpipe','Standpipe upright, undamaged and free of corrosion'],
+    ['valvebody','Valve body free of cracks and damage'],
+    ['secure','Standpipe securely mounted'],
+    ['drain','Drain / weep hole clear where fitted']
+  ]}],
+  ['6.2.3','Component parts',P2_CHK_COMPONENTS],
+  ['6.2.4','Water control fittings',P2_CHK_CONTROL],
+  ['6.2.5','Water seals',P2_CHK_SEALS],
+  ['6.2.6','Maintenance labels'],
+  ['6.2.7','Sealing',P2_CHK_SEALING],
+  ['6.2.8','Water supply',P2_CHK_SUPPLY],
+  ['6.3','Underground hydrants'],
+  ['6.3.1','General'],
+  ['6.3.2','Enclosure',{checklist:[
+    ['cover','Cover / surface box present, undamaged and easy to open'],
+    ['clear','Enclosure clear of debris, silt and standing water'],
+    ['marked','Location clearly identified (marker plate or paint)'],
+    ['accessible','Enclosure accessible and not obstructed']
+  ]}],
+  ['6.3.3','Valve body',{checklist:[
+    ['body','Valve body free of cracks and damage'],
+    ['corrosion','No significant corrosion'],
+    ['outlet','Outlet and thread undamaged']
+  ]}],
+  ['6.3.4','Component parts',P2_CHK_COMPONENTS],
+  ['6.3.5','Water control fittings',P2_CHK_CONTROL],
+  ['6.3.6','Water seals',P2_CHK_SEALS],
+  ['6.3.7','Service labels'],
+  ['6.3.8','Sealing',P2_CHK_SEALING],
+  ['6.3.9','Water supply',P2_CHK_SUPPLY],
+  ['7','Marking'],
+  ['7.1','Maintenance labels'],
+  ['7.2','Positioning of maintenance labels'],
+  ['7.2.1','Fire hose reels'],
+  ['7.2.2','Above-ground hydrants'],
+  ['7.2.3','Underground hydrants'],
+  ['8','Reconditioning records']
+].map(([key,title,extra])=>[SANS1475_P2_PREFIX+key, title, extra]);
+const SANS1475_ALL_CLAUSES = SANS1475_CLAUSES.concat(SANS1475_P2_CLAUSES);
 function sans1475ClauseChecklist(key){
-  const c = SANS1475_CLAUSES.find(x=>x[0]===key);
+  const c = SANS1475_ALL_CLAUSES.find(x=>x[0]===key);
   return (c && c[2] && c[2].checklist) || null;
 }
 // Compliance verdicts (compliant/non-conformance) are the auditor's call, not
@@ -2541,6 +2658,36 @@ const SANS1475_REGISTERS = {
       { id:'notes', label:'Notes', type:'textarea' }
     ],
     format(e){ return { date:e.photoDate, title:e.description||'Pressure test label', sub:e.notes||'' }; }
+  },
+  // Part 2:2024 (hose reels and hydrants) — keys are P2-prefixed, see SANS1475_P2_CLAUSES.
+  'P2-8': {
+    title: 'Hose reel & hydrant reconditioning records',
+    hint: 'Log each fire hose reel or hydrant reconditioned, with what was done, who did it and the job card or record as evidence (Part 2 clause 8; see also clauses 5.1 to 5.5).',
+    entryFile: true,
+    fields: [
+      { id:'equipType', label:'Equipment', type:'select', options:['Fire hose reel','Above-ground hydrant','Underground hydrant'] },
+      { id:'assetRef', label:'Asset tag / location' },
+      { id:'workDone', label:'Work carried out', type:'textarea' },
+      { id:'workDate', label:'Date', type:'date' },
+      { id:'staffId', label:'Technician', type:'staffSelect' },
+      { id:'outcome', label:'Outcome', type:'select', options:['Returned to service','Rejected / condemned'] },
+      { id:'notes', label:'Notes', type:'textarea' }
+    ],
+    format(e){
+      const staff = allStaffCache.find(s=>s.id===e.staffId);
+      return { date:e.workDate, title:`${e.equipType||'Equipment'}${e.assetRef?(' — '+e.assetRef):''}`, sub:[e.outcome, staff?staff.name:'', e.workDone].filter(Boolean).join(' · ') };
+    }
+  },
+  'P2-7.1': {
+    title: 'Maintenance label photos',
+    hint: 'Upload dated photo examples of the maintenance labels used on hose reels and hydrants, for Part 2 clause 7.1.',
+    entryFile: true,
+    fields: [
+      { id:'description', label:'Description', placeholder:'e.g. Hose reel maintenance label, current design' },
+      { id:'photoDate', label:'Date', type:'date' },
+      { id:'notes', label:'Notes', type:'textarea' }
+    ],
+    format(e){ return { date:e.photoDate, title:e.description||'Maintenance label', sub:e.notes||'' }; }
   }
 };
 function sans1475RegisterFieldHtml(f){
@@ -2634,10 +2781,11 @@ function paintCompanyTab(){
     ['workshops', `Workshops (${branchesCache.length})`],
     ['calibration', `Calibration (${calCertsCache.length})`],
     ['tools', `Tools (${toolsCache.length})`],
-    ['sans1475', `SANS 1475 (${SANS1475_CLAUSES.filter(([key])=>sans1475IsDocumented(key, sans1475Cache.find(c=>c.clause===key))).length}/${SANS1475_CLAUSES.length})`]
+    ['sans1475', `SANS 1475 Pt 1 (${sans1475DocumentedCount(SANS1475_CLAUSES)}/${SANS1475_CLAUSES.length})`],
+    ['sans1475p2', `SANS 1475 Pt 2 (${sans1475DocumentedCount(SANS1475_P2_CLAUSES)}/${SANS1475_P2_CLAUSES.length})`]
   ];
   chips.innerHTML = tabs.map(([k,label])=>`<button class="chip ${companyTab===k?'active':''}" onclick="setCompanyTab('${k}')">${escapeHtml(label)}${k==='documents'&&expiredCount?' <span style="color:var(--red-dark);">&#9679;</span>':''}</button>`).join('');
-  ['documents','employees','vehicles','workshops','calibration','tools','sans1475'].forEach(k=>{
+  ['documents','employees','vehicles','workshops','calibration','tools','sans1475','sans1475p2'].forEach(k=>{
     const el = document.getElementById('companyTab-'+k);
     if(el) el.style.display = (companyTab===k) ? 'block' : 'none';
   });
@@ -2648,7 +2796,8 @@ function paintCompanyTab(){
   if(companyTab==='workshops') renderBranches();
   if(companyTab==='calibration') renderCalibrationRegister();
   if(companyTab==='tools'){ renderTools(); renderToolChecks(); }
-  if(companyTab==='sans1475') renderSans1475();
+  if(companyTab==='sans1475') renderSans1475('sans1475List', SANS1475_CLAUSES);
+  if(companyTab==='sans1475p2') renderSans1475('sans1475P2List', SANS1475_P2_CLAUSES);
 }
 
 /* ---- expiry engine ---- */
@@ -2894,6 +3043,9 @@ function sans1475IsDocumented(key, rec){
   if(key==='5.1' && reconditioningJobsCache.length) return true;
   return false;
 }
+function sans1475DocumentedCount(clauses){
+  return clauses.filter(([key])=>sans1475IsDocumented(key, sans1475Cache.find(c=>c.clause===key))).length;
+}
 // Clauses that just point at evidence recorded elsewhere in the app, rather
 // than capturing anything new here — see SANS1475_LINKS below.
 const SANS1475_LINKS = {
@@ -2917,6 +3069,10 @@ const SANS1475_LINKS = {
     ] },
   '5.5': { hint:'Recharging is recorded under clause 4.8 (Charging of extinguishers).', buttons:[
       { label:'Go to clause 4.8', onclick:"openSans1475Form('4.8')" }
+    ] },
+  'P2-4.2': { hint:'Training and toolbox-talk records already live in their own tabs — open them directly rather than duplicating them here.', buttons:[
+      { label:'Open toolbox talks', onclick:"showView('view-talks')" },
+      { label:'Print training compliance report', onclick:"openTrainingComplianceReport()" }
     ] }
 };
 
@@ -3110,10 +3266,10 @@ async function openPressureTestAnalysisReport(){
     <div class="tablewrap"><table><thead><tr><th>Type</th><th>Serial</th><th>Site</th><th>Location</th><th>Due</th></tr></thead><tbody>${rowsFor(failed)}</tbody></table></div>`, 'view-audit');
 }
 
-function renderSans1475(){
-  const wrap = document.getElementById('sans1475List');
+function renderSans1475(wrapId, clauses){
+  const wrap = document.getElementById(wrapId);
   if(!wrap) return;
-  wrap.innerHTML = SANS1475_CLAUSES.map(([key,title])=>{
+  wrap.innerHTML = clauses.map(([key,title])=>{
     const rec = sans1475Cache.find(c=>c.clause===key);
     const depth = (key.match(/\./g)||[]).length;
     const na = rec && rec.status==='na';
@@ -3139,7 +3295,7 @@ function renderSans1475(){
     }
     return `<div class="card tech-card" onclick="openSans1475Form('${key}')" style="cursor:pointer; margin-left:${depth*14}px;">
       <div>
-        <div class="name">${escapeHtml(key)} — ${escapeHtml(title)}</div>
+        <div class="name">${escapeHtml(sans1475DisplayKey(key))} — ${escapeHtml(title)}</div>
         ${metaBits.length ? `<div class="meta">${escapeHtml(metaBits.join(' · '))}</div>` : ''}
       </div>
       ${pill}
@@ -3150,9 +3306,9 @@ let editingSans1475Clause = null;
 function openSans1475Form(clause){
   editingSans1475Clause = clause;
   workshopPendingFiles = {};
-  const title = (SANS1475_CLAUSES.find(c=>c[0]===clause) || [clause,''])[1];
+  const title = (SANS1475_ALL_CLAUSES.find(c=>c[0]===clause) || [clause,''])[1];
   const rec = sans1475Cache.find(c=>c.clause===clause);
-  document.getElementById('sans1475FormTitle').textContent = `${clause} — ${title}`;
+  document.getElementById('sans1475FormTitle').textContent = `${sans1475IsPart2(clause)?'Part 2 · ':''}${sans1475DisplayKey(clause)} — ${title}`;
   document.getElementById('sans1475Status').value = rec ? (rec.status||'') : '';
   document.getElementById('sans1475Notes').value = rec ? (rec.notes||'') : '';
   document.getElementById('sans1475FileInput').value = '';
@@ -3976,7 +4132,7 @@ async function openCompliancePack(){
     </tr>`;
   }).join('') : `<tr><td colspan="5">No tools registered.</td></tr>`;
 
-  const sans1475Rows = SANS1475_CLAUSES.map(([key,title])=>{
+  const sans1475RowsFor = clauses => clauses.map(([key,title])=>{
     const rec = sans1475.find(x=>x.clause===key);
     const applicability = rec && rec.status==='na' ? 'Not applicable' : 'Applicable';
     const hasRegisterEntries = !!(SANS1475_REGISTERS[key] && sans1475Registers.some(x=>x.clause===key));
@@ -3984,7 +4140,7 @@ async function openCompliancePack(){
     const checklistHtml = checklistDef ? checklistUL(checklistDef, (rec && rec.checklist) || {}) : '—';
     const documented = !!(rec && (rec.notes || rec.fileURL || (rec.checklist && Object.keys(rec.checklist).length))) || hasRegisterEntries;
     return `<tr>
-      <td>${escapeHtml(key)}</td>
+      <td>${escapeHtml(sans1475DisplayKey(key))}</td>
       <td>${escapeHtml(title)}</td>
       <td>${escapeHtml(applicability)}</td>
       <td>${escapeHtml((rec && rec.notes) || '—')}</td>
@@ -3993,6 +4149,8 @@ async function openCompliancePack(){
       <td>${checklistHtml}</td>
     </tr>`;
   }).join('');
+  const sans1475Rows = sans1475RowsFor(SANS1475_CLAUSES);
+  const sans1475P2Rows = sans1475RowsFor(SANS1475_P2_CLAUSES);
 
   const sans1475RegisterSections = Object.entries(SANS1475_REGISTERS).map(([clause,config])=>{
     const entries = sans1475Registers.filter(x=>x.clause===clause)
@@ -4001,7 +4159,7 @@ async function openCompliancePack(){
       const f = config.format(x);
       return `<tr><td>${escapeHtml(f.date||'—')}</td><td>${escapeHtml(f.title||'')}</td><td>${escapeHtml(f.sub||'')}</td><td>${x.fileURL ? 'Yes' : 'No'}</td></tr>`;
     }).join('') : `<tr><td colspan="4">No entries logged.</td></tr>`;
-    return `<h3 style="margin-top:18px; font-size:0.95rem;">${escapeHtml(config.title)} (clause ${escapeHtml(clause)})</h3>
+    return `<h3 style="margin-top:18px; font-size:0.95rem;">${escapeHtml(config.title)} (${sans1475IsPart2(clause)?'Part 2 ':''}clause ${escapeHtml(sans1475DisplayKey(clause))})</h3>
     <div class="tablewrap"><table>
       <thead><tr><th>Date</th><th>Entry</th><th>Detail</th><th>Evidence on file</th></tr></thead>
       <tbody>${rows}</tbody>
@@ -4053,6 +4211,12 @@ async function openCompliancePack(){
     <div class="tablewrap"><table>
       <thead><tr><th>Clause</th><th>Requirement</th><th>Applicability</th><th>Notes</th><th>Evidence on file</th><th>Documented</th><th>Checklist</th></tr></thead>
       <tbody>${sans1475Rows}</tbody>
+    </table></div>
+    <h3 style="margin-top:18px; font-size:0.95rem;">SANS 1475 Part 2:2024 (fire hose reels and hydrants) clause evidence register</h3>
+    <div class="meta" style="margin-top:0;">Applicability is self-declared by the business; compliance against each clause is determined by the SAQCC/SABS auditor, not recorded here.</div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Clause</th><th>Requirement</th><th>Applicability</th><th>Notes</th><th>Evidence on file</th><th>Documented</th><th>Checklist</th></tr></thead>
+      <tbody>${sans1475P2Rows}</tbody>
     </table></div>
     ${sans1475RegisterSections}
     <h3 style="margin-top:18px; font-size:0.95rem;">Reconditioning jobs (clauses 5.1 &amp; 5.4)</h3>
