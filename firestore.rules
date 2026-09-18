@@ -344,6 +344,28 @@ service cloud.firestore {
       allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
     }
 
+    // SANS 1475 Part 1:2025 clause-by-clause evidence register (Audit tab
+    // "SANS 1475" chip) — one doc per clause per company, doc id
+    // `${companyId}_${clause with dots as underscores}`. Same admin-only,
+    // Audit-add-on-gated pattern as the rest of the Audit tab; evidence
+    // files live under company-files/{companyId}/sans1475/ in Storage.
+    match /sans1475Checklist/{id} {
+      allow read:   if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
+      allow update: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+    }
+    // Repeatable dated logs for specific SANS 1475 clauses (extinguishing
+    // medium 4.4, reconditioning 5.1, conversion/modification 5.1.6) — an
+    // add-only register per clause, entries never edited after the fact.
+    // Same admin-only, Audit-add-on-gated pattern as sans1475Checklist above.
+    match /sans1475RegisterEntries/{id} {
+      allow read:   if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
+      allow update: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+    }
+
     // Weekly verification log (SANS 1475 Annex A) — production-control equipment
     // checked against reference instruments at least weekly. Collection name is
     // `calibrations` for historical reasons; the app now calls this "Weekly

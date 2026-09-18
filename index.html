@@ -1055,6 +1055,10 @@
         <div class="section-title"><h2>Recent checks</h2></div>
         <div id="toolChecksList"></div>
       </div>
+      <div id="companyTab-sans1475" style="display:none;">
+        <p class="hint" style="margin:0 0 10px;">SANS 1475 Part 1:2025 clause-by-clause evidence register. Mark each clause Compliant, Not applicable or Non-conformance, with notes and — where you have it — supporting evidence attached. Tap a clause to update it.</p>
+        <div id="sans1475List"></div>
+      </div>
     </section>
 
     <!-- ===== CALIBRATION CERTIFICATE FORM (admin) ===== -->
@@ -1194,6 +1198,38 @@
           <button class="btn secondary" onclick="showView('view-audit')">Cancel</button>
           <button class="btn" onclick="saveToolAssign()">Save</button>
         </div>
+      </div>
+    </section>
+
+    <!-- ===== SANS 1475 CHECKLIST — CLAUSE FORM (admin) ===== -->
+    <section id="view-sans1475-form" class="view">
+      <div class="backbar"><button onclick="showView('view-audit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="sans1475FormTitle">Clause</h2></div>
+      <div class="card">
+        <label style="margin-top:0;">Status</label>
+        <select id="sans1475Status">
+          <option value="">Not reviewed</option>
+          <option value="compliant">Compliant</option>
+          <option value="na">Not applicable</option>
+          <option value="nonconformance">Non-conformance</option>
+        </select>
+        <label>Notes</label><textarea id="sans1475Notes" rows="3" placeholder="Evidence reference, corrective action, etc."></textarea>
+        <label>Evidence (PDF or photo)</label>
+        <input id="sans1475FileInput" type="file" accept="application/pdf,image/*" onchange="handleWorkshopFilePick(event,'sans1475')">
+        <div class="hint">Max 15 MB.</div>
+        <a id="sans1475FileLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:0.85rem; font-weight:600;">View current file &#8599;</a>
+        <div class="row" style="margin-top:16px;">
+          <button class="btn secondary" onclick="showView('view-audit')">Cancel</button>
+          <button class="btn" onclick="saveSans1475()">Save</button>
+        </div>
+        <button class="btn ghost" id="sans1475ClearBtn" style="margin-top:10px; display:none;" onclick="clearSans1475()">Reset this clause</button>
+      </div>
+      <div id="sans1475RegisterSection" class="card" style="display:none;">
+        <label style="margin-top:0;" id="sans1475RegisterTitle">Register</label>
+        <p class="hint" id="sans1475RegisterHint" style="margin:0 0 10px;"></p>
+        <div id="sans1475RegisterFields"></div>
+        <button class="btn secondary" style="margin-top:12px;" onclick="addSans1475RegisterEntry()">Add entry</button>
+        <div class="section-title"><h2>Logged entries</h2></div>
+        <div id="sans1475RegisterList"></div>
       </div>
     </section>
 
@@ -1830,7 +1866,7 @@ let emailBackView = 'view-export';           // where the "Email to site" screen
 // The Audit tab (Company Documents / Employees / Vehicles / Workshops /
 // Calibration / Tools) is gated behind the Auditing Module — see
 // currentCompanyAddons/hasAuditPack, populated once at login.
-const AUDIT_VIEWS = ['view-audit','view-company-doc-form','view-vehicle-form','view-branch-form','view-employee-compliance','view-calibration-cert-form','view-tool-form','view-tool-assign'];
+const AUDIT_VIEWS = ['view-audit','view-company-doc-form','view-vehicle-form','view-branch-form','view-employee-compliance','view-calibration-cert-form','view-tool-form','view-tool-assign','view-sans1475-form'];
 // Trainee Module and Workshop Module views — same guard shape as
 // AUDIT_VIEWS, just gated by a different module flag each.
 const TRAINEE_VIEWS = ['view-trainees','view-trainee-form','view-trainee-detail','view-verification','view-my-trainees','view-my-trainee-detail','view-signoffs','view-signoff-form'];
@@ -1885,6 +1921,7 @@ function showView(id){
 let unsubSites = null, unsubEquipment = null, unsubInspections = null, unsubTechs = null, unsubCompetent = null, unsubCal = null, unsubTrainees = null;
 let unsubBranches = null, unsubVehicles = null, unsubCompanyDocs = null, unsubAllStaff = null, unsubCalCerts = null;
 let unsubTools = null, unsubToolChecks = null;
+let unsubSans1475 = null, unsubSans1475Register = null;
 let unsubTalks = null;
 function detachAllListeners(){
   if(unsubSites){ unsubSites(); unsubSites=null; }
@@ -1902,6 +1939,8 @@ function detachAllListeners(){
   if(unsubTalks){ unsubTalks(); unsubTalks=null; }
   if(unsubTools){ unsubTools(); unsubTools=null; }
   if(unsubToolChecks){ unsubToolChecks(); unsubToolChecks=null; }
+  if(unsubSans1475){ unsubSans1475(); unsubSans1475=null; }
+  if(unsubSans1475Register){ unsubSans1475Register(); unsubSans1475Register=null; }
 }
 
 /* ---------- Sites ---------- */
@@ -2201,6 +2240,8 @@ async function loadCompanySettings(){
 let companyTab = 'documents';
 let branchesCache = [], vehiclesCache = [], companyDocsCache = [], allStaffCache = [], calCertsCache = [];
 let toolsCache = [], toolChecksCache = [];
+let sans1475Cache = [];
+let sans1475RegisterCache = [];
 
 const COMPANY_DOC_TYPES = {
   'sabs-mark-permit': 'SABS 1475 Mark Permit',
@@ -2213,6 +2254,124 @@ const COMPANY_DOC_TYPES = {
   'other': 'Other'
 };
 const ROLE_LABEL = { admin:'Administrator', technician:'Technician', trainee:'Trainee', competent:'Competent Person' };
+
+// SANS 1475 Part 1:2025 clause register — one evidence record per clause,
+// stored in `sans1475Checklist` (doc id `${companyId}_${clause with dots as underscores}`).
+const SANS1475_CLAUSES = [
+  ['4.1','Facilities'],
+  ['4.2','Training and registration of staff'],
+  ['4.3','Pressurizing and pressure test areas'],
+  ['4.4','Quality of extinguishing mediums'],
+  ['4.5','Gas supply (propellants) and pressure control system'],
+  ['4.6','Removal of extinguishers from a building'],
+  ['4.7','Storage area or receptacles for powder'],
+  ['4.7.2','Discarded powder'],
+  ['4.8','Charging of extinguishers'],
+  ['4.8.1','Filling area of permanent workshops'],
+  ['4.8.2','Carbon dioxide (CO2) extinguishers'],
+  ['4.8.3','Foam extinguishers'],
+  ['4.8.4','Dry chemical powder extinguishers'],
+  ['4.8.5','Wet chemical extinguishers'],
+  ['4.9','Protection of workmen'],
+  ['4.10','People'],
+  ['5','Requirements for reconditioning'],
+  ['5.1','General requirements'],
+  ['5.1.1','Reconditioning'],
+  ['5.1.2','Extent of reconditioning'],
+  ['5.1.3','Frequency of reconditioning'],
+  ['5.1.4','Extinguisher conversion'],
+  ['5.1.5','Topping-up of extinguishing medium'],
+  ['5.1.6','Repair or modification'],
+  ['5.1.7','Maintenance procedures for fire extinguishers'],
+  ['5.1.8','Re-coating of aluminum cylinders'],
+  ['5.2','Safe working practices'],
+  ['5.2.1','General procedure applicable to all types of extinguishers'],
+  ['5.2.2','Water and water-based extinguishers'],
+  ['5.2.3','Carbon dioxide (CO2) extinguishers'],
+  ['5.2.4','Clean Agent (Halon) extinguishers'],
+  ['5.2.5','Dry-powder extinguishers'],
+  ['5.2.6','Internal cartridge-operated extinguishers'],
+  ['5.2.7','Rejection of the cylinder'],
+  ['5.2.8','Rendering cylinder unserviceable'],
+  ['5.3','Pressure testing (all types of extinguishers)'],
+  ['5.3.1','General'],
+  ['5.3.2','Frequency of pressure testing'],
+  ['5.3.2.1','General'],
+  ['5.3.2.2','Mild steel (Carbon steel) CO2 fire extinguishers'],
+  ['5.3.3','Extinguisher test pressure'],
+  ['5.3.4','Test equipment'],
+  ['5.3.5','Failures'],
+  ['5.4','Reconditioning records'],
+  ['5.5','Recharging (See also 4.8)'],
+  ['5.5.1','Recharging after use'],
+  ['5.5.2','Extinguishing mediums'],
+  ['5.5.3','Control of cartridges (external type only)'],
+  ['5.5.4','Leakage test'],
+  ['6','Marking'],
+  ['6.1','Maintenance labels'],
+  ['6.2','Pressure test labels']
+];
+const SANS1475_STATUS_LABEL = { compliant:'Compliant', na:'Not applicable', nonconformance:'Non-conformance' };
+function sans1475SafeKey(clause){ return clause.replace(/\./g,'_'); }
+function sans1475DocId(clause){ return `${currentCompanyId}_${sans1475SafeKey(clause)}`; }
+
+// Clause-specific registers — a repeatable, dated log of entries rather than
+// a single status+notes record, for the clauses where an audit expects a
+// documented history over time. Entries live in `sans1475RegisterEntries`,
+// tagged with the clause they belong to; `format()` turns a raw entry into
+// the {date, title, sub} shown in the log and the printed compliance pack.
+const SANS1475_REGISTERS = {
+  '4.4': {
+    title: 'Extinguishing medium log',
+    hint: 'Log each batch or delivery of extinguishing medium taken into stock — type, standard, supplier and batch/certificate reference (clause 4.4, see also 5.5.2).',
+    fields: [
+      { id:'medType', label:'Medium type', type:'select', options:['DCP','Foam','Water','CO2','Wet chemical','Clean agent','Other'] },
+      { id:'standardRef', label:'Standard / specification', placeholder:'e.g. SANS 1910' },
+      { id:'supplier', label:'Supplier' },
+      { id:'batchNo', label:'Batch / lot number' },
+      { id:'certRef', label:'Certificate of conformance / test report ref' },
+      { id:'testDate', label:'Test / delivery date', type:'date' },
+      { id:'notes', label:'Notes', type:'textarea' }
+    ],
+    format(e){ return { date:e.testDate, title:`${e.medType||'Medium'} — batch ${e.batchNo||'—'}`, sub:[e.standardRef, e.supplier, e.certRef?('cert '+e.certRef):''].filter(Boolean).join(' · ') }; }
+  },
+  '5.1': {
+    title: 'Reconditioning register',
+    hint: 'Log each reconditioning job — the extinguisher reconditioned, the extent of work performed and who did it (clause 5.1, records kept per 5.4).',
+    fields: [
+      { id:'serial', label:'Extinguisher serial / asset tag' },
+      { id:'extentText', label:'Extent of reconditioning', type:'textarea', placeholder:'e.g. full strip-down, internal/external inspection, recharge, reassembly' },
+      { id:'reconDate', label:'Date', type:'date' },
+      { id:'technician', label:'Technician' },
+      { id:'saqcc', label:'SAQCC no.' },
+      { id:'notes', label:'Notes', type:'textarea' }
+    ],
+    format(e){ return { date:e.reconDate, title:`${e.serial||'Extinguisher'} — reconditioned`, sub:[e.technician, e.saqcc, e.extentText].filter(Boolean).join(' · ') }; }
+  },
+  '5.1.6': {
+    title: 'Conversion & modification register',
+    hint: 'Log any conversion (change of extinguisher type) or repair/modification performed on a unit (clauses 5.1.4 and 5.1.6).',
+    fields: [
+      { id:'serial', label:'Extinguisher serial / asset tag' },
+      { id:'workType', label:'Type of work', type:'select', options:['Conversion','Repair','Modification'] },
+      { id:'fromType', label:'Converted from (if applicable)' },
+      { id:'toType', label:'Converted to (if applicable)' },
+      { id:'description', label:'Description of work', type:'textarea' },
+      { id:'workDate', label:'Date', type:'date' },
+      { id:'technician', label:'Technician' },
+      { id:'approvedBy', label:'Approved by' },
+      { id:'notes', label:'Notes', type:'textarea' }
+    ],
+    format(e){ return { date:e.workDate, title:`${e.serial||'Extinguisher'} — ${e.workType||'Modification'}`, sub:[e.fromType&&e.toType?(e.fromType+' → '+e.toType):'', e.technician, e.approvedBy?('approved by '+e.approvedBy):''].filter(Boolean).join(' · ') }; }
+  }
+};
+function sans1475RegisterFieldHtml(f){
+  const id = `s1475rf_${f.id}`;
+  if(f.type==='select') return `<label>${escapeHtml(f.label)}</label><select id="${id}">${f.options.map(o=>`<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('')}</select>`;
+  if(f.type==='textarea') return `<label>${escapeHtml(f.label)}</label><textarea id="${id}" rows="2" placeholder="${escapeHtml(f.placeholder||'')}"></textarea>`;
+  if(f.type==='date') return `<label>${escapeHtml(f.label)}</label><input id="${id}" type="date">`;
+  return `<label>${escapeHtml(f.label)}</label><input id="${id}" placeholder="${escapeHtml(f.placeholder||'')}">`;
+}
 
 function startWorkshopFileListeners(){
   if(!currentCompanyId) return;
@@ -2256,6 +2415,19 @@ function startWorkshopFileListeners(){
     paintCompanyTab();
   }, err=>{ toast('Could not load tools: ' + err.message); });
 
+  if(unsubSans1475) unsubSans1475();
+  unsubSans1475 = db.collection('sans1475Checklist').where('companyId','==',currentCompanyId).onSnapshot(snap=>{
+    sans1475Cache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    paintCompanyTab();
+  }, err=>{ toast('Could not load SANS 1475 checklist: ' + err.message); });
+
+  if(unsubSans1475Register) unsubSans1475Register();
+  unsubSans1475Register = db.collection('sans1475RegisterEntries').where('companyId','==',currentCompanyId).onSnapshot(snap=>{
+    sans1475RegisterCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    paintCompanyTab();
+    if(editingSans1475Clause && SANS1475_REGISTERS[editingSans1475Clause]) renderSans1475RegisterList();
+  }, err=>{ toast('Could not load SANS 1475 registers: ' + err.message); });
+
   if(unsubToolChecks) unsubToolChecks();
   unsubToolChecks = db.collection('toolChecks').where('companyId','==',currentCompanyId).onSnapshot(snap=>{
     toolChecksCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -2275,10 +2447,11 @@ function paintCompanyTab(){
     ['vehicles', `Vehicles (${vehiclesCache.length})`],
     ['workshops', `Workshops (${branchesCache.length})`],
     ['calibration', `Calibration (${calCertsCache.length})`],
-    ['tools', `Tools (${toolsCache.length})`]
+    ['tools', `Tools (${toolsCache.length})`],
+    ['sans1475', `SANS 1475 (${sans1475Cache.filter(c=>c.status).length}/${SANS1475_CLAUSES.length})`]
   ];
   chips.innerHTML = tabs.map(([k,label])=>`<button class="chip ${companyTab===k?'active':''}" onclick="setCompanyTab('${k}')">${escapeHtml(label)}${k==='documents'&&expiredCount?' <span style="color:var(--red-dark);">&#9679;</span>':''}</button>`).join('');
-  ['documents','employees','vehicles','workshops','calibration','tools'].forEach(k=>{
+  ['documents','employees','vehicles','workshops','calibration','tools','sans1475'].forEach(k=>{
     const el = document.getElementById('companyTab-'+k);
     if(el) el.style.display = (companyTab===k) ? 'block' : 'none';
   });
@@ -2289,6 +2462,7 @@ function paintCompanyTab(){
   if(companyTab==='workshops') renderBranches();
   if(companyTab==='calibration') renderCalibrationRegister();
   if(companyTab==='tools'){ renderTools(); renderToolChecks(); }
+  if(companyTab==='sans1475') renderSans1475();
 }
 
 /* ---- expiry engine ---- */
@@ -2520,6 +2694,129 @@ async function deleteCompanyDoc(){
     await db.collection('companyDocuments').doc(editingCompanyDocId).delete();
     toast('Deleted');
     showView('view-audit');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+
+/* ---- SANS 1475 Part 1:2025 clause checklist ---- */
+function renderSans1475(){
+  const wrap = document.getElementById('sans1475List');
+  if(!wrap) return;
+  wrap.innerHTML = SANS1475_CLAUSES.map(([key,title])=>{
+    const rec = sans1475Cache.find(c=>c.clause===key);
+    const depth = (key.match(/\./g)||[]).length;
+    const status = rec && rec.status;
+    const pill = status
+      ? `<span class="pill ${status==='compliant'?'pass':(status==='nonconformance'?'fail':'')}" style="margin:0;">${SANS1475_STATUS_LABEL[status]}</span>`
+      : `<span class="pill due" style="margin:0;">Not reviewed</span>`;
+    const metaBits = [];
+    if(rec && rec.fileURL) metaBits.push('evidence attached');
+    if(rec && rec.notes) metaBits.push(rec.notes);
+    if(SANS1475_REGISTERS[key]){
+      const n = sans1475RegisterCache.filter(e=>e.clause===key).length;
+      metaBits.push(`${n} ${n===1?'entry':'entries'} logged`);
+    }
+    return `<div class="card tech-card" onclick="openSans1475Form('${key}')" style="cursor:pointer; margin-left:${depth*14}px;">
+      <div>
+        <div class="name">${escapeHtml(key)} — ${escapeHtml(title)}</div>
+        ${metaBits.length ? `<div class="meta">${escapeHtml(metaBits.join(' · '))}</div>` : ''}
+      </div>
+      ${pill}
+    </div>`;
+  }).join('');
+}
+let editingSans1475Clause = null;
+function openSans1475Form(clause){
+  editingSans1475Clause = clause;
+  workshopPendingFiles = {};
+  const title = (SANS1475_CLAUSES.find(c=>c[0]===clause) || [clause,''])[1];
+  const rec = sans1475Cache.find(c=>c.clause===clause);
+  document.getElementById('sans1475FormTitle').textContent = `${clause} — ${title}`;
+  document.getElementById('sans1475Status').value = rec ? (rec.status||'') : '';
+  document.getElementById('sans1475Notes').value = rec ? (rec.notes||'') : '';
+  document.getElementById('sans1475FileInput').value = '';
+  setFileLink('sans1475FileLink', rec && rec.fileURL);
+  document.getElementById('sans1475ClearBtn').style.display = rec ? 'block' : 'none';
+  const regConfig = SANS1475_REGISTERS[clause];
+  const regSection = document.getElementById('sans1475RegisterSection');
+  if(regConfig){
+    document.getElementById('sans1475RegisterTitle').textContent = regConfig.title;
+    document.getElementById('sans1475RegisterHint').textContent = regConfig.hint;
+    document.getElementById('sans1475RegisterFields').innerHTML = regConfig.fields.map(sans1475RegisterFieldHtml).join('');
+    regSection.style.display = 'block';
+    renderSans1475RegisterList();
+  } else {
+    regSection.style.display = 'none';
+  }
+  showView('view-sans1475-form');
+}
+async function saveSans1475(){
+  if(!editingSans1475Clause) return;
+  const payload = {
+    companyId: currentCompanyId,
+    clause: editingSans1475Clause,
+    status: document.getElementById('sans1475Status').value,
+    notes: document.getElementById('sans1475Notes').value.trim(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  try{
+    const ref = db.collection('sans1475Checklist').doc(sans1475DocId(editingSans1475Clause));
+    if(workshopPendingFiles.sans1475){
+      toast('Uploading…');
+      payload.fileURL = await uploadWorkshopFile(workshopPendingFiles.sans1475, `company-files/${currentCompanyId}/sans1475/${sans1475SafeKey(editingSans1475Clause)}.${fileExt(workshopPendingFiles.sans1475)}`);
+    }
+    await ref.set(payload, {merge:true});
+    toast('Clause saved');
+    showView('view-audit');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+async function clearSans1475(){
+  if(!editingSans1475Clause) return;
+  if(!confirm('Reset this clause to Not reviewed? The uploaded evidence file is not removed.')) return;
+  try{
+    await db.collection('sans1475Checklist').doc(sans1475DocId(editingSans1475Clause)).delete();
+    toast('Reset');
+    showView('view-audit');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+function renderSans1475RegisterList(){
+  const wrap = document.getElementById('sans1475RegisterList');
+  const config = SANS1475_REGISTERS[editingSans1475Clause];
+  if(!wrap || !config) return;
+  const entries = sans1475RegisterCache.filter(e=>e.clause===editingSans1475Clause)
+    .sort((a,b)=>((b.createdAt&&b.createdAt.seconds)||0)-((a.createdAt&&a.createdAt.seconds)||0));
+  if(entries.length===0){ wrap.innerHTML = `<div class="empty">No entries logged yet.</div>`; return; }
+  wrap.innerHTML = entries.map(e=>{
+    const f = config.format(e);
+    return `<div class="insp-row" style="cursor:default;">
+      <div class="top"><span class="date">${escapeHtml(f.date||'—')}${f.title?(' · '+escapeHtml(f.title)):''}</span></div>
+      <div class="sub">${escapeHtml(f.sub||'')} <span onclick="deleteSans1475RegisterEntry('${e.id}')" style="color:var(--red-dark); cursor:pointer; font-weight:700;">delete</span></div>
+    </div>`;
+  }).join('');
+}
+async function addSans1475RegisterEntry(){
+  const clause = editingSans1475Clause;
+  const config = SANS1475_REGISTERS[clause];
+  if(!config) return;
+  const payload = { companyId: currentCompanyId, clause, createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdByName: currentProfile.name || '' };
+  let hasValue = false;
+  config.fields.forEach(f=>{
+    const el = document.getElementById(`s1475rf_${f.id}`);
+    const v = el ? el.value.trim() : '';
+    payload[f.id] = v;
+    if(v) hasValue = true;
+  });
+  if(!hasValue){ toast('Fill in at least one field'); return; }
+  try{
+    await db.collection('sans1475RegisterEntries').add(payload);
+    config.fields.forEach(f=>{ const el = document.getElementById(`s1475rf_${f.id}`); if(el && f.type!=='select') el.value = ''; });
+    toast('Entry added');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+async function deleteSans1475RegisterEntry(id){
+  if(!confirm('Delete this entry?')) return;
+  try{
+    await db.collection('sans1475RegisterEntries').doc(id).delete();
+    toast('Deleted');
   }catch(e){ toast('Error: ' + e.message); }
 }
 
@@ -3021,9 +3318,9 @@ async function deleteToolCheck(id){
 async function openCompliancePack(){
   toast('Building pack…');
   await loadCompanySettings();
-  let branches = [], vehicles = [], docs = [], staff = [], certs = [], training = { topics:[], roster:[], rows:[] }, tools = [], toolChecks = [];
+  let branches = [], vehicles = [], docs = [], staff = [], certs = [], training = { topics:[], roster:[], rows:[] }, tools = [], toolChecks = [], sans1475 = [], sans1475Registers = [];
   try{
-    const [b, v, d, s, cc, tc, tl, tk] = await Promise.all([
+    const [b, v, d, s, cc, tc, tl, tk, sc, sr] = await Promise.all([
       db.collection('branches').where('companyId','==',currentCompanyId).get(),
       db.collection('vehicles').where('companyId','==',currentCompanyId).get(),
       db.collection('companyDocuments').where('companyId','==',currentCompanyId).get(),
@@ -3031,7 +3328,9 @@ async function openCompliancePack(){
       db.collection('calibrationCertificates').where('companyId','==',currentCompanyId).get(),
       computeTrainingCompliance(),
       db.collection('tools').where('companyId','==',currentCompanyId).get(),
-      db.collection('toolChecks').where('companyId','==',currentCompanyId).get()
+      db.collection('toolChecks').where('companyId','==',currentCompanyId).get(),
+      db.collection('sans1475Checklist').where('companyId','==',currentCompanyId).get(),
+      db.collection('sans1475RegisterEntries').where('companyId','==',currentCompanyId).get()
     ]);
     branches = b.docs.map(x=>({id:x.id, ...x.data()}));
     vehicles = v.docs.map(x=>({id:x.id, ...x.data()}));
@@ -3041,6 +3340,8 @@ async function openCompliancePack(){
     training = tc;
     tools = tl.docs.map(x=>({id:x.id, ...x.data()}));
     toolChecks = tk.docs.map(x=>({id:x.id, ...x.data()}));
+    sans1475 = sc.docs.map(x=>({id:x.id, ...x.data()}));
+    sans1475Registers = sr.docs.map(x=>({id:x.id, ...x.data()}));
   }catch(e){ toast('Could not load: ' + e.message); return; }
   const co = companySettings || {};
   const today = toLocalISO(new Date());
@@ -3159,6 +3460,32 @@ async function openCompliancePack(){
     </tr>`;
   }).join('') : `<tr><td colspan="5">No tools registered.</td></tr>`;
 
+  const sans1475Rows = SANS1475_CLAUSES.map(([key,title])=>{
+    const rec = sans1475.find(x=>x.clause===key);
+    const status = rec ? (SANS1475_STATUS_LABEL[rec.status] || 'Not reviewed') : 'Not reviewed';
+    return `<tr>
+      <td>${escapeHtml(key)}</td>
+      <td>${escapeHtml(title)}</td>
+      <td>${escapeHtml(status)}</td>
+      <td>${escapeHtml((rec && rec.notes) || '—')}</td>
+      <td>${rec && rec.fileURL ? 'Yes' : 'No'}</td>
+    </tr>`;
+  }).join('');
+
+  const sans1475RegisterSections = Object.entries(SANS1475_REGISTERS).map(([clause,config])=>{
+    const entries = sans1475Registers.filter(x=>x.clause===clause)
+      .sort((a,b)=>((b.createdAt&&b.createdAt.seconds)||0)-((a.createdAt&&a.createdAt.seconds)||0));
+    const rows = entries.length ? entries.map(x=>{
+      const f = config.format(x);
+      return `<tr><td>${escapeHtml(f.date||'—')}</td><td>${escapeHtml(f.title||'')}</td><td>${escapeHtml(f.sub||'')}</td></tr>`;
+    }).join('') : `<tr><td colspan="3">No entries logged.</td></tr>`;
+    return `<h3 style="margin-top:18px; font-size:0.95rem;">${escapeHtml(config.title)} (clause ${escapeHtml(clause)})</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Date</th><th>Entry</th><th>Detail</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  }).join('');
+
   showReport('Company compliance pack', `${letterheadHTML(co)}
     <h2 style="margin-top:16px; font-size:1rem;">Company Compliance Pack — SANS 1475 servicing organisation</h2>
     <div class="meta"><strong>Generated:</strong> ${today}</div>
@@ -3198,7 +3525,13 @@ async function openCompliancePack(){
     <div class="tablewrap"><table>
       <thead><tr><th>Tool</th><th>Serial</th><th>Held by</th><th>Last checked</th><th>Result</th></tr></thead>
       <tbody>${toolRows}</tbody>
-    </table></div>`, 'view-audit');
+    </table></div>
+    <h3 style="margin-top:18px; font-size:0.95rem;">SANS 1475 Part 1:2025 clause register</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Clause</th><th>Requirement</th><th>Status</th><th>Notes</th><th>Evidence on file</th></tr></thead>
+      <tbody>${sans1475Rows}</tbody>
+    </table></div>
+    ${sans1475RegisterSections}`, 'view-audit');
 }
 
 function renderCompanyLogoPreview(){
