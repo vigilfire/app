@@ -15,15 +15,28 @@
  *     days ago or from now), not hard-coded calendar dates, so the demo
  *     stays realistic (overdue items overdue, due-soon items due soon) no
  *     matter when you (re)run it.
+ *   - The company is created with every feature module switched on
+ *     (clientModule / traineeModule / workshopModule / auditingModule), and
+ *     with its Facilities & audit scope declared — workshop, pressure test,
+ *     charging, reconditioning, hose reels and above-ground hydrants, but NOT
+ *     underground hydrants or site-servicing-only — so the Audit tab shows a
+ *     real spread: rows on file, partly ticked, empty, marked not applicable,
+ *     and greyed out because a facility isn't declared. It also seeds three
+ *     vehicles (one per Annex A purpose, with an assignment history), delegates
+ *     for each employee, the materials/PPE/modification/label/complaints/
+ *     documents registers, checklist ticks, and reconditioning jobs.
  *   - A few things are deliberately left *unfinished* rather than fully
  *     seeded, so you have something real to click through as each demo
  *     account: the technician/trainee/Competent Person accounts start with
  *     an INCOMPLETE profile (so you see the profile-completion gate), the
  *     trainee has one unsigned draft logbook entry, the Competent Person has
  *     no monthly check for the current month yet, one condemned unit has no
- *     action plan recorded, and one site has an outstanding recharge
- *     blocking its register. Everything else is pre-filled so reports have
- *     real content to show immediately.
+ *     action plan recorded, one site has an outstanding recharge blocking
+ *     its register, the delivery vehicle has no roadworthy date, one
+ *     complaint is still open, and a few procedure rows (topping-up, control
+ *     of cartridges, protection of product quality) have no document tagged.
+ *     Everything else is pre-filled so reports have real content to show
+ *     immediately.
  *
  * Setup (one time):
  *   1. Firebase Console -> vigil-fire project -> Project settings -> Service
@@ -99,6 +112,7 @@ const COMPANY_SCOPED_COLLECTIONS = [
   "traineeAssignments", "traineeCompetencies", "monthlyChecks", "toolboxTalks",
   "calibrations", "calibrationCertificates", "companyDocuments", "vehicles",
   "branches", "tools", "toolChecks", "mandatoryTopics", "emailLog",
+  "sans1475Checklist", "sans1475RegisterEntries", "reconditioningJobs",
 ];
 
 async function commitInChunks(ops) {
@@ -158,18 +172,31 @@ async function upsertAuthUser({ email, password, displayName }) {
 
 /* ------------------------------- build ---------------------------------- */
 async function buildCompany() {
+  // Vigil Core + 4 feature modules, all switched on so every screen of the demo
+  // works (the app and firestore.rules read `modules`; the old `plan` /
+  // `seatLimit` / `{ audit: true }` shape was retired by migrate-to-addons-pricing.js).
+  // The add-on allowances are the same generous ones that migration grandfathers in.
+  const modules = { clientModule: true, traineeModule: true, workshopModule: true, auditingModule: true };
+  const addOns = { extraTechnicians: 50, extraAdmins: 10, extraTrainees: 50, extraWorkshops: 20 };
   await db.collection("companies").doc(COMPANY_ID).set({
     name: "Vigil Fire Demo (Pty) Ltd",
-    plan: "business",
-    seatLimit: null,
+    modules, addOns,
     status: "trialing",
     createdAt: ts(NOW),
     notes: "Seeded by scripts/seed-demo.js — safe to wipe and rebuild at any time.",
     usage: { storageBytes: 0, emailsSentThisMonth: 0 },
     lastActivityAt: ts(NOW),
   });
-  await db.collection("companyAddons").doc(COMPANY_ID).set({ audit: true });
+  await db.collection("companyAddons").doc(COMPANY_ID).set({ modules, addOns });
   await db.collection("settings").doc(COMPANY_ID).set({
+    // Facilities & audit scope (Company profile -> Facilities & audit scope).
+    // The demo runs a workshop, pressure-test bay, charging area, reconditioning
+    // and services hose reels and above-ground hydrants — but NOT underground
+    // hydrants, so those rows show greyed out as "Not applicable" on the Audit tab.
+    facilities: {
+      workshop: true, pressuretest: true, charging: true, reconditioning: true,
+      hosereels: true, aghydrants: true, ughydrants: false, siteservicing: false,
+    },
     name: "Vigil Fire Demo (Pty) Ltd",
     reg: "2019/123456/07",
     address: "12 Protea Road, Century City, Cape Town, 7441",
@@ -184,7 +211,7 @@ async function buildCompany() {
     calibrationLabContact: "lab@sanastestlab.example",
     updatedAt: ts(NOW),
   });
-  console.log("Company, add-on flag and settings created.");
+  console.log("Company, modules, facilities and settings created.");
 }
 
 async function buildAccounts() {
@@ -573,7 +600,7 @@ async function buildMonthlyChecks(siteAId, siteAEquipment, competentUid) {
 }
 
 /* -------------------------------- audit tab ------------------------------ */
-async function buildAuditData(techUid, competentUid) {
+async function buildAuditData(techUid, competentUid, adminUid) {
   const branchRef = db.collection("branches").doc();
   await branchRef.set({
     companyId: COMPANY_ID, name: "Head Office Workshop — Cape Town",
@@ -584,21 +611,57 @@ async function buildAuditData(techUid, competentUid) {
   });
   const branchId = branchRef.id;
 
+  // One vehicle of each Annex A.8.2 purpose. `assignments` is the automatic
+  // assignment history the app keeps ({staffId, name, from, to} — a blank `to`
+  // means "still assigned"). The delivery vehicle is deliberately left without a
+  // roadworthy date or a driver, so A.8.2.5 "Management of vehicles" shows as
+  // not yet on file and there is something to fix.
   await db.collection("vehicles").doc().set({
-    companyId: COMPANY_ID, registrationNo: "CA 123-456", description: "Toyota Hilux service vehicle",
-    branchId, assignedTechnicianId: techUid,
+    companyId: COMPANY_ID, registrationNo: "CA 123-456", description: "Toyota Hilux mobile workshop",
+    purpose: "mobileworkshop", branchId, assignedTechnicianId: techUid,
+    assignments: [
+      { staffId: competentUid, name: COMPETENT_NAME, from: iso(monthsAgo(20)), to: iso(monthsAgo(6)) },
+      { staffId: techUid, name: TECH_NAME, from: iso(monthsAgo(6)), to: "" },
+    ],
     licenceDiskExpiry: iso(monthsFromNow(5)), roadworthyDate: iso(monthsAgo(3)),
     mobileWorkshopApprovalRef: "SABS-MW-00981", mobileWorkshopApprovalExpiry: iso(monthsFromNow(10)),
     carriedExtinguisherSerial: "VF-CARR-0042", carriedExtinguisherServiceDate: iso(monthsAgo(3)),
     notes: "", licenceDiskFileURL: "", approvalLetterFileURL: "",
     updatedAt: ts(NOW), createdAt: ts(monthsAgo(20)), active: true,
   });
+  await db.collection("vehicles").doc().set({
+    companyId: COMPANY_ID, registrationNo: "CA 654-321", description: "Isuzu NPR delivery truck",
+    purpose: "delivery", branchId, assignedTechnicianId: "", assignments: [],
+    licenceDiskExpiry: iso(monthsFromNow(6)), roadworthyDate: "",
+    mobileWorkshopApprovalRef: "", mobileWorkshopApprovalExpiry: "",
+    carriedExtinguisherSerial: "", carriedExtinguisherServiceDate: "",
+    notes: "Roadworthy certificate still to be captured.", licenceDiskFileURL: "", approvalLetterFileURL: "",
+    updatedAt: ts(NOW), createdAt: ts(monthsAgo(14)), active: true,
+  });
+  await db.collection("vehicles").doc().set({
+    companyId: COMPANY_ID, registrationNo: "CA 987-654", description: "Toyota Quantum maintenance van",
+    purpose: "maintenance", branchId, assignedTechnicianId: techUid,
+    assignments: [{ staffId: techUid, name: TECH_NAME, from: iso(monthsAgo(9)), to: "" }],
+    licenceDiskExpiry: iso(monthsFromNow(8)), roadworthyDate: iso(monthsAgo(2)),
+    mobileWorkshopApprovalRef: "", mobileWorkshopApprovalExpiry: "",
+    carriedExtinguisherSerial: "VF-CARR-0051", carriedExtinguisherServiceDate: iso(monthsAgo(2)),
+    notes: "", licenceDiskFileURL: "", approvalLetterFileURL: "",
+    updatedAt: ts(NOW), createdAt: ts(monthsAgo(9)), active: true,
+  });
 
+  // Designation, authorities and ONE delegate each (who is in charge when
+  // they are absent). The trainee has no delegate — trainees work under
+  // supervision — so the Delegations view shows a mix of set and covered.
   await db.collection("technicians").doc(techUid).update({
     branchId, saqccRegExpiry: iso(monthsFromNow(7)), medicalCertExpiry: iso(monthsFromNow(9)),
+    designation: "Senior Technician", appointments: "Workshop Supervisor", delegateId: competentUid,
   });
   await db.collection("technicians").doc(competentUid).update({
     branchId, saqccRegExpiry: iso(monthsFromNow(3)), medicalCertExpiry: iso(daysFromNow(25)),
+    designation: "Competent Person", appointments: "Responsible Person, SHE Rep", delegateId: techUid,
+  });
+  await db.collection("technicians").doc(adminUid).update({
+    designation: "Compliance Manager", appointments: "SAQCC company contact", delegateId: techUid,
   });
 
   const companyDocs = [
@@ -718,6 +781,112 @@ async function buildToolboxTalks(techUid, traineeUid, competentUid, audit) {
   console.log("Toolbox talks created: 2 mandatory topics, 2 talks (mixed signed/unsigned attendance).");
 }
 
+/* ------------------------ SANS 1475 audit categories --------------------- */
+// The Audit tab's category tables (Facilities & safety, Reconditioning &
+// production, Labels & marking, Hose reels & hydrants, Documents & complaints…)
+// read from three collections; this seeds enough in each to show every state:
+// rows fully on file, partly ticked, empty, marked not applicable and greyed out.
+const tick = (...keys) => Object.fromEntries(keys.map((k) => [k, true]));
+// Mirrors index.html's sans1475SafeKey(): dots become underscores.
+const safeClauseKey = (clause) => clause.replace(/\./g, "_");
+
+async function buildSans1475Data(adminUid, techUid, competentUid) {
+  // 1. Per-clause checklist / notes / not-applicable records: sans1475Checklist,
+  //    doc id `${companyId}_${clause with dots as underscores}`.
+  const clauseDocs = [
+    // Facilities & safety — 4.1 ticked but for ventilation; 4.5 barely started.
+    ["4.1", { checklist: tick("intake", "emptying", "inprocess", "dispatch", "walkways"), notes: "Site plan v3 lodged with the SABS Mark Permit application." }],
+    ["4.3", { checklist: tick("shielded", "operator", "relief", "cordoned", "signage", "cylinders", "ignition") }],
+    ["4.5", { checklist: tick("secured", "regulators") }],
+    ["4.7", { checklist: tick("dry", "sealed", "contamination", "fifo", "spill") }],
+    ["4.8.1", { checklist: tick("cage", "ppe", "spill") }],
+    // Reconditioning & production — safe working and charging checklists.
+    ["5.2.1", { checklist: tick("depressurise", "ppe", "stable", "areaclear") }],
+    ["5.2.5", { checklist: tick("depressurise", "dustmask") }],
+    ["4.8.2", { checklist: tick("weighed", "noflame", "secured") }],
+    // Marked not applicable by the business (shows as "Not applicable", not greyed).
+    ["5.1.8", { status: "na", notes: "We don't re-coat aluminium cylinders — they are sent to a specialist." }],
+    // Hose reels & hydrants (Part 2). Draft-worded checklists — see the app.
+    ["P2-6.1.3", { checklist: tick("present", "condition") }],
+    ["P2-6.1.4", { checklist: tick("operates", "leaks", "condition", "coupling") }],
+    ["P2-6.1.9", { checklist: tick("available", "isolating") }],
+    ["P2-6.2.2", { checklist: tick("standpipe", "valvebody") }],
+  ];
+  for (const [clause, data] of clauseDocs) {
+    await db.collection("sans1475Checklist").doc(`${COMPANY_ID}_${safeClauseKey(clause)}`).set({
+      companyId: COMPANY_ID, clause, status: "", notes: "", checklist: {}, ...data, updatedAt: ts(NOW),
+    });
+  }
+
+  // 2. Dated register entries: sans1475RegisterEntries, tagged by clause.
+  const entry = (clause, fields, when) => db.collection("sans1475RegisterEntries").add({
+    companyId: COMPANY_ID, clause, ...fields, createdAt: ts(when), createdByName: "Demo Admin",
+  });
+
+  // Materials & components log (clause 4.4 / Annex A.4) — includes a disposal,
+  // which is what clause 4.7.2 (discarded powder) looks for.
+  await entry("4.4", { entryType: "Purchase / restock", medType: "DCP", standardRef: "SANS 1910", supplier: "Cape Fire Supplies", batchNo: "DCP-24-0871", certRef: "COC-5521", testDate: iso(monthsAgo(5)), notes: "" }, monthsAgo(5));
+  await entry("4.4", { entryType: "Purchase / restock", medType: "Foam", standardRef: "", supplier: "Cape Fire Supplies", batchNo: "FM-24-0233", certRef: "COC-5540", testDate: iso(monthsAgo(3)), notes: "" }, monthsAgo(3));
+  await entry("4.4", { entryType: "Purchase / restock", medType: "Component (valve, seal, gauge, cartridge…)", standardRef: "", supplier: "Valve & Seal Co", batchNo: "V-2291", certRef: "", testDate: iso(monthsAgo(4)), notes: "Cylinder valves and O-ring kits." }, monthsAgo(4));
+  await entry("4.4", { entryType: "Disposal", medType: "DCP", standardRef: "", supplier: "", batchNo: "DCP-23-0412", certRef: "DISP-0316", testDate: iso(monthsAgo(2)), notes: "Contaminated with moisture — collected by a licensed waste handler." }, monthsAgo(2));
+
+  // PPE register (clause 4.9 protection of workmen; also serves Part 2 4.3).
+  await entry("4.9", { staffId: techUid, itemType: "Gloves", issueDate: iso(monthsAgo(4)), condition: "Good", replaceBy: iso(monthsFromNow(8)), notes: "" }, monthsAgo(4));
+  await entry("4.9", { staffId: techUid, itemType: "Goggles / face shield", issueDate: iso(monthsAgo(4)), condition: "Good", replaceBy: iso(monthsFromNow(20)), notes: "" }, monthsAgo(4));
+  await entry("4.9", { staffId: techUid, itemType: "Respirator / dust mask", issueDate: iso(monthsAgo(7)), condition: "Needs replacement", replaceBy: iso(daysFromNow(10)), notes: "Filter due." }, monthsAgo(7));
+  await entry("4.9", { staffId: competentUid, itemType: "Safety boots", issueDate: iso(monthsAgo(6)), condition: "Good", replaceBy: iso(monthsFromNow(6)), notes: "" }, monthsAgo(6));
+
+  // Conversion & modification register (5.1.4 / 5.1.6 / Part 2 5.4).
+  await entry("5.1.6", { serial: "VF-0007", workType: "Conversion", fromType: "9L Foam", toType: "9L Water", description: "Foam extinguisher converted to water; cylinder flushed, refilled and relabelled.", workDate: iso(monthsAgo(3)), technician: TECH_NAME, approvedBy: COMPETENT_NAME, notes: "" }, monthsAgo(3));
+  await entry("5.1.6", { serial: "HR-2003", workType: "Repair", fromType: "", toType: "", description: "Hose reel swing arm bracket replaced.", workDate: iso(monthsAgo(1)), technician: TECH_NAME, approvedBy: COMPETENT_NAME, notes: "" }, monthsAgo(1));
+
+  // Label photos (clause 6.1 register, tagged by what the label is used on) —
+  // one photo set serves Part 1 6.1 and the Part 2 label rows. No underground
+  // hydrant label: the demo doesn't service them. (No files are attached: this
+  // script can't upload to Storage, so the entries are dated descriptions only.)
+  await entry("6.1", { labelFor: "Extinguisher", description: "Standard maintenance label, 2026 stock", photoDate: iso(monthsAgo(2)), notes: "" }, monthsAgo(2));
+  await entry("6.1", { labelFor: "Fire hose reel", description: "Hose reel maintenance label", photoDate: iso(monthsAgo(2)), notes: "" }, monthsAgo(2));
+  await entry("6.1", { labelFor: "Above-ground hydrant", description: "Hydrant maintenance label", photoDate: iso(monthsAgo(1)), notes: "" }, monthsAgo(1));
+  await entry("6.2", { description: "Pressure test label, current design", photoDate: iso(monthsAgo(2)), notes: "" }, monthsAgo(2));
+
+  // Complaints register (Annex A.7.1): one closed, one still open.
+  await entry("A-7.1", { complaintDate: iso(monthsAgo(3)), complainant: "Riverside Office Park", reference: "Cert CM-0412", description: "Extinguisher on the 3rd floor found without its tamper seal after service.", actionTaken: "Revisited within 24 hours, seal fitted and unit re-inspected.", staffId: competentUid, status: "Closed", closedDate: iso(daysAgo(87)) }, monthsAgo(3));
+  await entry("A-7.1", { complaintDate: iso(daysAgo(6)), complainant: "Bellville Depot", reference: "Cert CM-0519", description: "Service certificate issued with the wrong serial number.", actionTaken: "Corrected certificate requested from the workshop.", staffId: techUid, status: "Open", closedDate: "" }, daysAgo(6));
+
+  // Documents register (Annex A.7.2 / A.7.3): one row per procedure, tagged with
+  // the clauses it covers so it shows up against each of them. 5.1.5, 5.5.3 and
+  // A.6.3 are deliberately left untagged — those rows show "No evidence yet".
+  // (Reference standard has no version, so document control reads 4 of 5.)
+  const docs = [
+    { title: "Quality manual", docType: "Policy", docRef: "QM-001", version: "3", issueDate: iso(monthsAgo(8)), reviewDate: iso(monthsFromNow(4)), owner: "Demo Admin", covers: "A-1,A-6.1" },
+    { title: "Reconditioning procedure", docType: "Procedure", docRef: "RP-002", version: "2", issueDate: iso(monthsAgo(10)), reviewDate: iso(monthsFromNow(2)), owner: COMPETENT_NAME, covers: "5.1.7,P2-6.1.1,P2-6.2.1" },
+    { title: "Final inspection procedure", docType: "Procedure", docRef: "FI-003", version: "1", issueDate: iso(monthsAgo(10)), reviewDate: iso(monthsFromNow(2)), owner: COMPETENT_NAME, covers: "A-6.2" },
+    { title: "Reconditioning frequency schedule", docType: "Procedure", docRef: "RF-004", version: "1", issueDate: iso(monthsAgo(6)), reviewDate: iso(monthsFromNow(6)), owner: TECH_NAME, covers: "5.1.3,P2-5.3" },
+    { title: "SANS 1475 reference copies", docType: "Reference standard", docRef: "REF-005", version: "", issueDate: "", reviewDate: "", owner: "Demo Admin", covers: "" },
+  ];
+  for (const d of docs) await entry("A-7.2", d, monthsAgo(6));
+
+  // 3. Reconditioning jobs (drive A.6.2 final inspection and clause 5.1 / 5.4 /
+  //    Part 2 5.1 & 8). Two carry the final-inspection step; one is a hose reel.
+  const done = tick("stripped", "inspectcylinder", "inspectvalve", "seals", "recharged", "tested", "reassembled", "finalinspect");
+  const jobs = [
+    { serial: "VF-0101", equipmentType: "9kg DCP", status: "complete", received: daysAgo(40), completed: daysAgo(36), checklist: done, notes: "" },
+    { serial: "VF-0102", equipmentType: "2kg CO2", status: "complete", received: daysAgo(25), completed: daysAgo(21), checklist: done, notes: "" },
+    { serial: "HR-2001", equipmentType: "Hose reel", status: "complete", received: daysAgo(18), completed: daysAgo(15), checklist: done, notes: "New hose and nozzle fitted." },
+    { serial: "VF-0104", equipmentType: "9L Foam", status: "in-progress", received: daysAgo(4), completed: null, checklist: tick("stripped", "inspectcylinder"), notes: "Awaiting replacement valve." },
+  ];
+  for (const j of jobs) {
+    await db.collection("reconditioningJobs").add({
+      companyId: COMPANY_ID, serial: j.serial, equipmentType: j.equipmentType,
+      assignedTechnicianId: techUid, receivedDate: iso(j.received), completedDate: j.completed ? iso(j.completed) : "",
+      status: j.status, checklist: j.checklist, notes: j.notes,
+      createdAt: ts(j.received), updatedAt: ts(j.completed || j.received),
+    });
+  }
+
+  console.log("SANS 1475 audit data created: 13 clause records, 7 registers (21 entries), 4 reconditioning jobs.");
+}
+
 /* --------------------------------- main ---------------------------------- */
 async function main() {
   await wipeCompany();
@@ -729,7 +898,8 @@ async function main() {
   const { siteA } = await buildEquipment(techUid, siteAId, siteBId);
   await buildTraineeRecords(adminUid, techUid, traineeUid);
   await buildMonthlyChecks(siteAId, siteA, competentUid);
-  const audit = await buildAuditData(techUid, competentUid);
+  const audit = await buildAuditData(techUid, competentUid, adminUid);
+  await buildSans1475Data(adminUid, techUid, competentUid);
   await buildToolboxTalks(techUid, traineeUid, competentUid, audit);
 
   console.log("\n=== Demo tenant ready ===");
