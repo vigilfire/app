@@ -129,6 +129,29 @@
   .pill.due{background:var(--amber-bg); color:var(--amber);}
   .chip{font-size:0.75rem; font-weight:700; padding:6px 12px; border-radius:6px; background:var(--surface); color:var(--ink-soft); border:1px solid var(--line-strong); cursor:pointer;}
   .chip.active{background:var(--ink); color:#fff; border-color:var(--ink);}
+  .chip.na{opacity:0.55; border-style:dashed;}
+  .scope-na{opacity:0.55;}
+  .cat-flash{box-shadow:0 0 0 3px var(--amber); transition:box-shadow 0.4s;}
+
+  /* Audit category tables: Item | Relevant standards | Record | Supporting documents.
+     Four columns on a wide screen; stacked, with each cell labelled, on a phone. */
+  .cat-head, .cat-row{display:grid; grid-template-columns:1.25fr 1fr 0.85fr 1.3fr; gap:10px;}
+  .cat-head{font-size:0.66rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--grey); padding:0 12px 6px;}
+  .cat-heading{margin:16px 0 6px; font-weight:800; font-size:0.85rem;}
+  .cat-row{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:12px; margin-bottom:8px; font-size:0.82rem; align-items:start; word-break:break-word;}
+  .cat-row .cat-item{font-weight:700;}
+  .cat-row .cat-sub{font-size:0.74rem; color:var(--grey); font-weight:400; margin-top:3px;}
+  .cat-std{display:flex; flex-wrap:wrap; gap:4px;}
+  .cat-std span{font-size:0.68rem; font-weight:700; padding:2px 6px; border-radius:4px; background:var(--paper-dim); color:var(--ink-soft);}
+  .cat-docs a{display:block; font-weight:600; margin-bottom:4px;}
+  .cat-docs .cat-x{color:var(--red-dark); cursor:pointer; font-weight:700; margin-left:6px;}
+  .cat-add{display:inline-block; font-size:0.78rem; font-weight:700; color:var(--red-dark); cursor:pointer; margin-top:2px;}
+  .cat-link{font-size:0.72rem; font-weight:700; color:var(--grey); cursor:pointer; text-decoration:underline; display:inline-block; margin-top:6px;}
+  @media (max-width:560px){
+    .cat-head{display:none;}
+    .cat-row{grid-template-columns:1fr; gap:8px;}
+    .cat-row > div[data-label]::before{content:attr(data-label); display:block; font-size:0.64rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--grey); margin-bottom:2px;}
+  }
 
   .tech-card{display:flex; align-items:center; justify-content:space-between; padding:14px 16px; margin-bottom:10px;}
   .tech-card .name{font-weight:700; font-size:0.97rem;}
@@ -973,6 +996,14 @@
         <button class="btn" style="margin-top:16px;" onclick="saveCompanySettings()">Save company profile</button>
       </div>
 
+      <div class="card" id="coFacilitiesCard" style="display:none;">
+        <label style="margin-top:0;">Facilities &amp; audit scope</label>
+        <p class="hint" style="margin:0 0 10px;">Tick the facilities your business operates. The Audit section then marks everything that doesn't apply to you as Not applicable, so you're only asked for evidence you actually need. Administration / office is always included. You can change this at any time — records already captured are kept.</p>
+        <div id="coFacilitiesList"></div>
+        <div class="hint" id="coFacilitiesStatus" style="margin-top:8px;"></div>
+        <button class="btn" style="margin-top:12px;" onclick="saveFacilities()">Save facilities</button>
+      </div>
+
       <div class="card">
         <label style="margin-top:0;">Records backup</label>
         <p class="hint" style="margin:0 0 10px;">A complete machine-readable snapshot of every site, equipment record, maintenance-history entry, monthly check, weekly verification entry and trainee placement. Keep it filed with your printed registers — SANS 1475 clause 5.4 requires records to be kept for at least 5 years.</p>
@@ -1004,7 +1035,13 @@
         <button class="btn secondary" onclick="openTrainingComplianceReport()">Print training compliance report</button>
         <button class="btn secondary" onclick="openCondemnedUnitsSummaryReport()">Condemned units summary</button>
       </div>
+      <div id="auditSummary"></div>
+      <div class="card" style="padding:10px 12px;">
+        <input id="clauseFind" oninput="renderClauseFind()" placeholder="Find a clause — e.g. 5.3.4, A.8.2.5, Pt 2 6.1.3, or a word like “seals”" autocomplete="off">
+        <div id="clauseFindResults"></div>
+      </div>
       <div id="companyExpirySummary"></div>
+      <div id="companyScopeNote"></div>
       <div class="pillrow" id="companyTabChips" style="margin-bottom:12px;"></div>
 
       <div id="companyTab-documents">
@@ -1012,10 +1049,17 @@
         <button class="btn" style="margin-top:12px;" onclick="openCompanyDocForm()">+ Add document</button>
       </div>
       <div id="companyTab-employees" style="display:none;">
-        <p class="hint" style="margin:0 0 10px;">Every employee already in Technicians / Trainees, with their registration and compliance documents in one place. Tap a name to add or update.</p>
+        <p class="hint" style="margin:0 0 10px;">Each row lists every standard it satisfies. Open the record to fill in the employees themselves; ID, medical, contract, SAQCC card and appointment documents that employees have already uploaded are collected here automatically, and you can add more.</p>
+        <div id="employeeCategoryTable"></div>
+        <div class="section-title" id="employeesSection"><h2 id="employeesSectionTitle">All employees</h2></div>
+        <div id="employeesFilterNote"></div>
         <div id="employeeComplianceList"></div>
       </div>
       <div id="companyTab-vehicles" style="display:none;">
+        <p class="hint" style="margin:0 0 10px;">Each row lists every standard it satisfies. Open the record to fill in the vehicles themselves; supporting documents already uploaded against a vehicle are collected here automatically, and you can add more.</p>
+        <div id="vehicleCategoryTable"></div>
+        <div class="section-title" id="vehiclesSection"><h2 id="vehiclesSectionTitle">Vehicles</h2></div>
+        <div id="vehiclesFilterNote"></div>
         <div id="vehiclesList"></div>
         <button class="btn" style="margin-top:12px;" onclick="openVehicleForm()">+ Add vehicle</button>
       </div>
@@ -1038,7 +1082,8 @@
         <button class="btn secondary" style="margin-top:8px;" onclick="openCalibrationCertRegister()">Print calibration register</button>
       </div>
       <div id="companyTab-tools" style="display:none;">
-        <p class="hint" style="margin:0 0 10px;">Workshop tools and each technician's issued kit, tracked together — who holds a tool tells the two apart.</p>
+        <p class="hint" style="margin:0 0 10px;">Each row lists every standard it satisfies. Calibration certificates already uploaded are collected here automatically, and you can add more. Workshop tools and each technician's issued kit are tracked together below — who holds a tool tells the two apart.</p>
+        <div id="toolsCategoryTable"></div>
         <div class="card">
           <label style="margin-top:0;">Log a check</label>
           <label>Tool</label><select id="toolCheckToolSelect"></select>
@@ -1049,19 +1094,31 @@
           <label>Notes</label><input id="toolCheckNotes" placeholder="Optional — e.g. handle cracked, replaced blade">
           <button class="btn secondary" style="margin-top:12px;" onclick="saveToolCheck()">Add to log</button>
         </div>
-        <div class="section-title"><h2>Tools</h2></div>
+        <div class="section-title" id="toolsSection"><h2>Tools</h2></div>
         <div id="toolsList"></div>
         <button class="btn" style="margin-top:12px;" onclick="openToolForm()">+ Add tool</button>
         <div class="section-title"><h2>Recent checks</h2></div>
         <div id="toolChecksList"></div>
       </div>
-      <div id="companyTab-sans1475" style="display:none;">
-        <p class="hint" style="margin:0 0 10px;">SANS 1475 Part 1:2025 clause-by-clause evidence register — notes and supporting evidence for your SAQCC/SABS auditor to review. Compliance against each clause is the auditor's call, not recorded here; mark a clause Not applicable only if it's out of scope for your business. Tap a clause to update it.</p>
-        <div id="sans1475List"></div>
+      <div id="companyTab-recon" style="display:none;">
+        <p class="hint" style="margin:0 0 10px;">Each row lists every standard it satisfies, across Part 1, Annex A and Part 2. The reconditioning jobs, per-unit pressure-test and recharge records, condemned units and the materials log are recorded once and counted against all of them. Procedures are evidenced by documents you tag in the Documents register — they appear here automatically.</p>
+        <div id="reconCategoryTable"></div>
       </div>
-      <div id="companyTab-sans1475p2" style="display:none;">
-        <p class="hint" style="margin:0 0 10px;">SANS 1475 Part 2:2024 (fire hose reels and hydrants) clause-by-clause evidence register — notes and supporting evidence for your SAQCC/SABS auditor to review. Compliance against each clause is the auditor's call, not recorded here; mark a clause Not applicable only if it's out of scope for your business (for example, if you don't service underground hydrants). Tap a clause to update it.</p>
-        <div id="sans1475P2List"></div>
+      <div id="companyTab-facilities" style="display:none;">
+        <p class="hint" style="margin:0 0 10px;">Each row lists every standard it satisfies. Fill in the checklist for each area, and add photos of it as supporting documents. The hose reel and hydrant clauses for facilities and protection of workmen (Part 2) are covered by the same rows — there is nothing extra to fill in for them.</p>
+        <div id="facilitiesCategoryTable"></div>
+      </div>
+      <div id="companyTab-labels" style="display:none;">
+        <p class="hint" style="margin:0 0 10px;">Each row lists every standard it satisfies. Upload a dated photo of each label once, choosing what it is used on — the hose reel and hydrant rows collect the same photos, so nothing is uploaded twice.</p>
+        <div id="labelsCategoryTable"></div>
+      </div>
+      <div id="companyTab-hose" style="display:none;">
+        <p class="hint" style="margin:0 0 10px;">SANS 1475 Part 2 maintenance checks for hose reels and hydrants. The same checks apply to all three, so each check is one row that lists all its clauses. Each unit's day-to-day inspection is recorded under Sites; add photos or procedures for a check as supporting documents. <strong style="color:var(--amber);">The checklist wording is a draft from the clause titles — check it against SANS 1475-2 before an audit.</strong></p>
+        <div id="hoseCategoryTable"></div>
+      </div>
+      <div id="companyTab-docsreg" style="display:none;">
+        <p class="hint" style="margin:0 0 10px;">The Documents register is where every procedure is uploaded once — give it a reference, version and issue date, and tick the clauses it covers so it appears against each of them across the other tabs. Customer complaints are logged in the complaints register.</p>
+        <div id="docsregCategoryTable"></div>
       </div>
     </section>
 
@@ -1138,14 +1195,19 @@
       <div class="card">
         <label style="margin-top:0;">Registration number</label><input id="vehReg" placeholder="e.g. CA 123-456">
         <label>Description</label><input id="vehDescription" placeholder="e.g. 2019 Toyota Hilux — white">
+        <label>Vehicle purpose (SANS 1475 Annex A.8.2)</label><select id="vehPurpose" onchange="syncVehApprovalVisibility()"></select>
         <label>Workshop / branch</label><select id="vehBranch"></select>
         <label>Assigned technician</label><select id="vehTechnician"></select>
+        <div class="hint">Changing the technician is logged automatically in the assignment history below.</div>
+        <div id="vehAssignHistory"></div>
         <div class="row">
           <div><label>Licence disk expiry</label><input id="vehLicenceExpiry" type="date"></div>
           <div><label>Last roadworthy</label><input id="vehRoadworthy" type="date"></div>
         </div>
-        <label>SABS mobile-workshop approval ref (if approved)</label><input id="vehApprovalRef" placeholder="Optional">
-        <label>Mobile-workshop approval expiry</label><input id="vehApprovalExpiry" type="date">
+        <div id="vehApprovalWrap">
+          <label>SABS mobile-workshop approval ref (if approved)</label><input id="vehApprovalRef" placeholder="Optional">
+          <label>Mobile-workshop approval expiry</label><input id="vehApprovalExpiry" type="date">
+        </div>
         <div class="row">
           <div><label>Carried extinguisher — serial</label><input id="vehExtSerial" placeholder="Optional"></div>
           <div><label>Its last service</label><input id="vehExtServiceDate" type="date"></div>
@@ -1153,9 +1215,11 @@
         <label>Licence disk (photo)</label>
         <input id="vehLicenceFileInput" type="file" accept="application/pdf,image/*" onchange="handleWorkshopFilePick(event,'vehLicence')">
         <a id="vehLicenceFileLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:0.85rem; font-weight:600;">View current file &#8599;</a>
-        <label>Mobile-workshop approval letter</label>
-        <input id="vehApprovalFileInput" type="file" accept="application/pdf,image/*" onchange="handleWorkshopFilePick(event,'vehApproval')">
-        <a id="vehApprovalFileLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:0.85rem; font-weight:600;">View current file &#8599;</a>
+        <div id="vehApprovalFileWrap">
+          <label>Mobile-workshop approval letter</label>
+          <input id="vehApprovalFileInput" type="file" accept="application/pdf,image/*" onchange="handleWorkshopFilePick(event,'vehApproval')">
+          <a id="vehApprovalFileLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:0.85rem; font-weight:600;">View current file &#8599;</a>
+        </div>
         <label>Notes</label><textarea id="vehNotes" rows="2"></textarea>
         <div class="row" style="margin-top:16px;">
           <button class="btn secondary" onclick="showView('view-audit')">Cancel</button>
@@ -1217,13 +1281,15 @@
         <div class="hint">Compliance against this clause is judged by your SAQCC/SABS auditor, not recorded here — this only marks whether the clause is in scope for your business. Use Notes and Evidence below to keep the paper trail ready for them.</div>
         <div id="sans1475LinksSection" style="display:none;">
           <div class="divider"></div>
-          <label style="margin-top:0;">Related</label>
-          <div id="sans1475LinksHint" class="hint" style="margin:0 0 10px;"></div>
+          <label style="margin-top:0;">Covered by</label>
+          <div id="sans1475LinksHint" class="hint" style="margin:0 0 6px;"></div>
+          <div id="sans1475LinksStatus" style="font-size:0.85rem; font-weight:600; margin:0 0 10px;"></div>
           <div id="sans1475LinksButtons" class="row"></div>
         </div>
         <div id="sans1475ChecklistSection" style="display:none;">
           <div class="divider"></div>
           <label style="margin-top:0;">Checklist</label>
+          <div id="sans1475ChecklistDraft" class="hint" style="color:var(--amber); font-weight:700; margin:0 0 6px;"></div>
           <div id="sans1475ChecklistWrap"></div>
         </div>
         <label>Notes</label><textarea id="sans1475Notes" rows="3" placeholder="Evidence reference, procedure summary, etc."></textarea>
@@ -1318,8 +1384,10 @@
         </div>
         <label>Designation</label><input id="empDesignation" placeholder="e.g. Workshop Supervisor">
         <label>Appointments / authorities held</label><input id="empAppointments" placeholder="e.g. Responsible Person, SHE Rep">
-        <label>Delegate (covers this person's duties when absent)</label>
-        <select id="empDelegate"></select>
+        <label>Delegate — in charge when this person is absent</label>
+        <select id="empDelegate" onchange="onEmpDelegateChange()"></select>
+        <div class="hint" id="empDelegateWarn" style="color:var(--amber); font-weight:700;"></div>
+        <div class="hint" id="empCoversFor"></div>
         <label>ID document (photo or PDF)</label>
         <input id="empIdFileInput" type="file" accept="application/pdf,image/*" onchange="handleWorkshopFilePick(event,'empId')">
         <a id="empIdFileLink" href="#" target="_blank" rel="noopener" style="display:none; font-size:0.85rem; font-weight:600;">View current file &#8599;</a>
@@ -2274,6 +2342,8 @@ async function loadCompanySettings(){
   }
   renderCompanyLogoPreview();
   renderCompanySignaturePreview();
+  renderFacilitiesCard();
+  paintCompanyTab();   // the Audit tab paints before settings arrive; repaint so the facility scope applies
 }
 
 /* ======================================================================
@@ -2314,13 +2384,14 @@ const ROLE_LABEL = { admin:'Administrator', technician:'Technician', trainee:'Tr
 // form's Pressure Test and Recharge sections already use (see PT_CHECKLIST/
 // RC_CHECKLIST below) — content drafted from SANS 1475 Part 1 and general
 // workshop H&S practice, editable in place.
+// A heading groups the clauses under it and has nothing of its own to evidence,
+// so it gets no status pill and is left out of the progress counts.
+const SANS1475_HEADING = {heading:true};
 const SANS1475_CLAUSES = [
   ['4.1','Facilities',{checklist:[
     ['intake','Designated intake / receiving area for extinguishers arriving for service'],
     ['emptying','Designated emptying / discharge area'],
     ['inprocess','Designated in-process area — strip-down, inspection and repair'],
-    ['pressuretest','Pressure-test area physically separated and shielded from other work areas'],
-    ['filling','Designated charging / filling area'],
     ['dispatch','Designated finished-goods / dispatch area'],
     ['walkways','Walkways between areas clearly demarcated'],
     ['ventilation','Each area adequately ventilated and lit']
@@ -2356,9 +2427,9 @@ const SANS1475_CLAUSES = [
     ['segregated','Discarded powder segregated from usable stock'],
     ['checked','Powder checked for moisture/contamination before a disposal decision is made'],
     ['guidance','Disposed of per manufacturer and environmental guidance'],
-    ['recorded','Disposal recorded in the extinguishing medium log (clause 4.4)']
+    ['recorded','Disposal recorded in the materials & components log (clause 4.4)']
   ]}],
-  ['4.8','Charging of extinguishers'],
+  ['4.8','Charging of extinguishers',SANS1475_HEADING],
   ['4.8.1','Filling area of permanent workshops',{checklist:[
     ['cage','Filling point enclosed by a cage or screen'],
     ['ppe','PPE required and available in the filling area'],
@@ -2388,8 +2459,8 @@ const SANS1475_CLAUSES = [
   ]}],
   ['4.9','Protection of workmen'],
   ['4.10','People'],
-  ['5','Requirements for reconditioning'],
-  ['5.1','General requirements'],
+  ['5','Requirements for reconditioning',SANS1475_HEADING],
+  ['5.1','General requirements',SANS1475_HEADING],   // the reconditioning jobs page still opens under this key; 5.1.1 to 5.1.8 are the rows
   ['5.1.1','Reconditioning'],
   ['5.1.2','Extent of reconditioning'],
   ['5.1.3','Frequency of reconditioning'],
@@ -2398,7 +2469,7 @@ const SANS1475_CLAUSES = [
   ['5.1.6','Repair or modification'],
   ['5.1.7','Maintenance procedures for fire extinguishers'],
   ['5.1.8','Re-coating of aluminum cylinders'],
-  ['5.2','Safe working practices'],
+  ['5.2','Safe working practices',SANS1475_HEADING],
   ['5.2.1','General procedure applicable to all types of extinguishers',{checklist:[
     ['depressurise','Extinguisher fully depressurised before any work begins'],
     ['ppe','Correct PPE worn for the task'],
@@ -2444,7 +2515,7 @@ const SANS1475_CLAUSES = [
   ]}],
   ['5.3','Pressure testing (all types of extinguishers)'],
   ['5.3.1','General'],
-  ['5.3.2','Frequency of pressure testing'],
+  ['5.3.2','Frequency of pressure testing',SANS1475_HEADING],
   ['5.3.2.1','General'],
   ['5.3.2.2','Mild steel (Carbon steel) CO2 fire extinguishers'],
   ['5.3.3','Extinguisher test pressure'],
@@ -2456,7 +2527,7 @@ const SANS1475_CLAUSES = [
   ['5.5.2','Extinguishing mediums'],
   ['5.5.3','Control of cartridges (external type only)'],
   ['5.5.4','Leakage test'],
-  ['6','Marking'],
+  ['6','Marking',SANS1475_HEADING],
   ['6.1','Maintenance labels'],
   ['6.2','Pressure test labels']
 ];
@@ -2469,31 +2540,44 @@ const SANS1475_CLAUSES = [
 // is drafted from the clause titles and general hose reel / hydrant servicing
 // practice, editable in place — verify it against the published standard.
 const SANS1475_P2_PREFIX = 'P2-';
-function sans1475DisplayKey(key){ return key.startsWith(SANS1475_P2_PREFIX) ? key.slice(SANS1475_P2_PREFIX.length) : key; }
+const SANS1475_A_PREFIX = 'A-';   // Part 1:2025 Annex A — keys 'A-3.3.1', shown as 'A.3.3.1'
+function sans1475DisplayKey(key){
+  if(key.startsWith(SANS1475_P2_PREFIX)) return key.slice(SANS1475_P2_PREFIX.length);
+  if(key.startsWith(SANS1475_A_PREFIX)) return 'A.' + key.slice(SANS1475_A_PREFIX.length);
+  return key;
+}
 function sans1475IsPart2(key){ return key.startsWith(SANS1475_P2_PREFIX); }
-const P2_CHK_COMPONENTS = {checklist:[
+function sans1475IsAnnex(key){ return key.startsWith(SANS1475_A_PREFIX); }
+// Short label used where a clause is named outside its own tab ("Pt 2 5.2", "A.6.1").
+function sans1475ShortLabel(key){ return (sans1475IsPart2(key) ? 'Pt 2 ' : (sans1475IsAnnex(key) ? '' : 'Pt 1 ')) + sans1475DisplayKey(key); }
+function sans1475IsHeading(key){ const c = SANS1475_ALL_CLAUSES.find(x=>x[0]===key); return !!(c && c[2] && c[2].heading); }
+// Every Part 2 checklist below is `draft`: worded from the clause titles and
+// general hose reel / hydrant servicing practice, NOT taken from SANS 1475-2.
+// It is labelled as a draft on screen and in the printed pack. Once the wording
+// has been checked against the standard, delete `draft:true` here.
+const P2_CHK_COMPONENTS = {draft:true, checklist:[
   ['present','All component parts present and correctly assembled'],
   ['condition','No corrosion, cracking or damage to component parts'],
   ['operation','Moving parts operate freely and smoothly'],
   ['replaced','Defective or worn parts replaced']
 ]};
-const P2_CHK_CONTROL = {checklist:[
+const P2_CHK_CONTROL = {draft:true, checklist:[
   ['operates','Valves open and close fully, without sticking'],
   ['leaks','No leakage at valve, gland or connections'],
   ['condition','Handwheel / operating key and fittings undamaged'],
   ['coupling','Outlet coupling undamaged and compatible with the hose or standpipe']
 ]};
-const P2_CHK_SEALS = {checklist:[
+const P2_CHK_SEALS = {draft:true, checklist:[
   ['renewed','Seals, washers and O-rings inspected and renewed where required'],
   ['fitted','Seals correctly seated'],
   ['leaktest','No leakage under water pressure']
 ]};
-const P2_CHK_SEALING = {checklist:[
+const P2_CHK_SEALING = {draft:true, checklist:[
   ['sealed','Seal or tamper indicator fitted after servicing'],
   ['identified','Seal identifies the servicing organisation'],
   ['intact','Seal intact and undamaged when the unit is next inspected']
 ]};
-const P2_CHK_SUPPLY = {checklist:[
+const P2_CHK_SUPPLY = {draft:true, checklist:[
   ['available','Water supply available at the unit'],
   ['isolating','Isolating valve open and accessible'],
   ['flow','Flow and pressure confirmed at the outlet'],
@@ -2503,16 +2587,16 @@ const SANS1475_P2_CLAUSES = [
   ['4.1','Facilities'],
   ['4.2','Training of staff'],
   ['4.3','Protection of workmen'],
-  ['5','Requirements for reconditioning'],
+  ['5','Requirements for reconditioning',SANS1475_HEADING],
   ['5.1','Reconditioning'],
   ['5.2','Extent of Reconditioning'],
   ['5.3','Frequency of reconditioning'],
   ['5.4','Modification'],
   ['5.5','Rejection of a fire hose reel or hydrant'],
-  ['6','Maintenance'],
-  ['6.1','Fire hose reels'],
+  ['6','Maintenance',SANS1475_HEADING],
+  ['6.1','Fire hose reels',SANS1475_HEADING],
   ['6.1.1','General'],
-  ['6.1.2','Frame and mounting bolts',{checklist:[
+  ['6.1.2','Frame and mounting bolts',{draft:true, checklist:[
     ['frame','Frame undamaged, not distorted and free of corrosion'],
     ['bolts','Mounting bolts present and tight'],
     ['secure','Reel firmly fixed to its mounting surface'],
@@ -2520,7 +2604,7 @@ const SANS1475_P2_CLAUSES = [
   ]}],
   ['6.1.3','Component parts',P2_CHK_COMPONENTS],
   ['6.1.4','Water control fittings',P2_CHK_CONTROL],
-  ['6.1.5','Fire hose',{checklist:[
+  ['6.1.5','Fire hose',{draft:true, checklist:[
     ['unwound','Hose fully unwound and inspected along its whole length'],
     ['damage','No cuts, abrasions, kinks, blisters or perishing'],
     ['couplings','Hose couplings secure and undamaged'],
@@ -2531,9 +2615,9 @@ const SANS1475_P2_CLAUSES = [
   ['6.1.7','Maintenance labels'],
   ['6.1.8','Sealing',P2_CHK_SEALING],
   ['6.1.9','Water supply',P2_CHK_SUPPLY],
-  ['6.2','Above-ground hydrants'],
+  ['6.2','Above-ground hydrants',SANS1475_HEADING],
   ['6.2.1','General'],
-  ['6.2.2','Standpipe and valve body',{checklist:[
+  ['6.2.2','Standpipe and valve body',{draft:true, checklist:[
     ['standpipe','Standpipe upright, undamaged and free of corrosion'],
     ['valvebody','Valve body free of cracks and damage'],
     ['secure','Standpipe securely mounted'],
@@ -2545,15 +2629,15 @@ const SANS1475_P2_CLAUSES = [
   ['6.2.6','Maintenance labels'],
   ['6.2.7','Sealing',P2_CHK_SEALING],
   ['6.2.8','Water supply',P2_CHK_SUPPLY],
-  ['6.3','Underground hydrants'],
+  ['6.3','Underground hydrants',SANS1475_HEADING],
   ['6.3.1','General'],
-  ['6.3.2','Enclosure',{checklist:[
+  ['6.3.2','Enclosure',{draft:true, checklist:[
     ['cover','Cover / surface box present, undamaged and easy to open'],
     ['clear','Enclosure clear of debris, silt and standing water'],
     ['marked','Location clearly identified (marker plate or paint)'],
     ['accessible','Enclosure accessible and not obstructed']
   ]}],
-  ['6.3.3','Valve body',{checklist:[
+  ['6.3.3','Valve body',{draft:true, checklist:[
     ['body','Valve body free of cracks and damage'],
     ['corrosion','No significant corrosion'],
     ['outlet','Outlet and thread undamaged']
@@ -2564,15 +2648,200 @@ const SANS1475_P2_CLAUSES = [
   ['6.3.7','Service labels'],
   ['6.3.8','Sealing',P2_CHK_SEALING],
   ['6.3.9','Water supply',P2_CHK_SUPPLY],
-  ['7','Marking'],
+  ['7','Marking',SANS1475_HEADING],
   ['7.1','Maintenance labels'],
-  ['7.2','Positioning of maintenance labels'],
+  ['7.2','Positioning of maintenance labels',SANS1475_HEADING],
   ['7.2.1','Fire hose reels'],
   ['7.2.2','Above-ground hydrants'],
   ['7.2.3','Underground hydrants'],
   ['8','Reconditioning records']
 ].map(([key,title,extra])=>[SANS1475_P2_PREFIX+key, title, extra]);
-const SANS1475_ALL_CLAUSES = SANS1475_CLAUSES.concat(SANS1475_P2_CLAUSES);
+
+// SANS 1475 Part 1:2025 Annex A (requirements for a servicing organisation).
+// Clause titles are as supplied, with "Personal" corrected to "Personnel" and
+// "A 7.1" to A.7.1. The supplied list numbered Delivery vehicle A.8.2.2 a second
+// time; it is A.8.2.2.1, a sub-clause of Vehicle Purpose (confirmed).
+const SANS1475_A_CLAUSES = [
+  ['1','General'],
+  ['2','Organization Control'],
+  ['3','Personnel',SANS1475_HEADING],
+  ['3.1','General'],
+  ['3.2','Identification of registered persons'],
+  ['3.3','Responsibilities and authorities of technical personnel',SANS1475_HEADING],
+  ['3.3.1','Registered competent person'],
+  ['3.3.2','Registered trainees'],
+  ['3.4','On-the-job training'],
+  ['3.5','Register of technical personnel'],
+  ['4','Components'],
+  ['5','Hand tools and production control equipment',SANS1475_HEADING],
+  ['5.1','Hand tools'],
+  ['5.2','Production control equipment'],
+  ['6','Production control',SANS1475_HEADING],
+  ['6.1','General'],
+  ['6.2','Final inspection'],
+  ['6.3','Protection of product quality'],
+  ['6.4','Transportation of pressurizing cylinders'],
+  ['7','Documentation',SANS1475_HEADING],
+  ['7.1','Complaints'],
+  ['7.2','Reference documents'],
+  ['7.3','Document control'],
+  ['8','Plant and equipment',SANS1475_HEADING],
+  ['8.1','Tools and production control equipment in permanent and mobile workshops'],
+  ['8.2','Vehicles used for reconditioning purposes',SANS1475_HEADING],
+  ['8.2.1','General'],
+  ['8.2.2','Vehicle Purpose',SANS1475_HEADING],
+  ['8.2.2.1','Delivery vehicle'],
+  ['8.2.3','Maintenance vehicle'],
+  ['8.2.4','Mobile workshop'],
+  ['8.2.5','Management of vehicles']
+].map(([key,title,extra])=>[SANS1475_A_PREFIX+key, title, extra]);
+const SANS1475_ALL_CLAUSES = SANS1475_CLAUSES.concat(SANS1475_A_CLAUSES, SANS1475_P2_CLAUSES);
+
+/* ---- Facilities & audit scope ----
+   The company declares the facilities it operates (Company profile →
+   Facilities & audit scope), stored as `settings/{companyId}.facilities`, a
+   {facilityKey: boolean} map. The Audit section greys out and labels "Not
+   applicable" whatever needs a facility that isn't ticked. An absent map means
+   "not declared yet" and everything stays in scope, so existing companies see
+   no change until they declare. Nothing is hidden or deleted: out-of-scope
+   records stay reachable and come back into scope if the facility is re-ticked.
+   Administration / office is always on, so it isn't stored. */
+const FACILITIES = [
+  ['workshop','Extinguisher workshop','servicing and maintenance premises, powder storage, labelling'],
+  ['pressuretest','Pressure test area','pressure testing of extinguisher cylinders'],
+  ['charging','Charging / filling area','recharging with extinguishing medium and propellant'],
+  ['reconditioning','Reconditioning','stripping down and reconditioning extinguishers'],
+  ['hosereels','Fire hose reels','maintenance and reconditioning (SANS 1475 Part 2)'],
+  ['aghydrants','Above-ground hydrants','maintenance and reconditioning (SANS 1475 Part 2)'],
+  ['ughydrants','Underground hydrants','maintenance and reconditioning (SANS 1475 Part 2)'],
+  ['siteservicing','Site servicing only','servicing at client premises from service vehicles, with no workshop of your own']
+];
+const FACILITY_NAME = Object.fromEntries(FACILITIES.map(([k,name])=>[k,name]));
+const FACILITY_KEYS = FACILITIES.map(f=>f[0]);
+// Site servicing is for businesses with no workshop of their own, so it is
+// mutually exclusive with these (the Company profile checklist enforces that).
+// It can still be combined with the Part 2 hose reel / hydrant facilities.
+const P1_PREMISES_FACILITIES = ['workshop','pressuretest','charging','reconditioning'];
+const P2_FACILITIES = ['hosereels','aghydrants','ughydrants'];
+// Anyone who services extinguishers, in a workshop or on site.
+const SANS1475_OPERATIONAL_FACILITIES = P1_PREMISES_FACILITIES.concat('siteservicing');
+// Audit sub-tabs that depend on a facility (any one of the listed is enough).
+// Documents and Employees apply to every business, so they aren't listed.
+const COMPANY_TAB_FACILITIES = {
+  vehicles: ['workshop','siteservicing'],
+  workshops: P1_PREMISES_FACILITIES,
+  calibration: ['pressuretest','charging'],
+  tools: FACILITY_KEYS,
+  recon: SANS1475_OPERATIONAL_FACILITIES,
+  facilities: FACILITY_KEYS,
+  labels: FACILITY_KEYS,
+  hose: P2_FACILITIES,
+  docsreg: null   // documents and complaints apply to every business
+};
+function facilitiesDeclared(){ return !!(companySettings && companySettings.facilities); }
+function hasFacility(k){ return !facilitiesDeclared() || !!companySettings.facilities[k]; }
+function facilitiesInScope(anyOf){ return !anyOf || anyOf.some(hasFacility); }
+function facilityNames(anyOf){ return anyOf.map(k=>FACILITY_NAME[k]).join(' or '); }
+function companyTabInScope(tab){ return facilitiesInScope(COMPANY_TAB_FACILITIES[tab]); }
+// Facilities that bring a clause into scope, or null when it applies to every
+// business. Part 1 follows the approved facility → clause mapping; in Part 2
+// the hose reel / hydrant sub-clauses follow their own equipment type and
+// everything general (4.x, 5.x, 7.1, 8) applies if any Part 2 facility is ticked.
+function sans1475RequiredFacilities(key){
+  const k = sans1475DisplayKey(key);
+  const under = root => k===root || k.startsWith(root+'.');
+  if(sans1475IsAnnex(key)){
+    // Personnel, documentation and organisation apply to every business.
+    if(k==='A.6.4' || under('A.8.2')) return ['workshop','siteservicing'];   // vehicles
+    if(under('A.4') || under('A.5') || under('A.6') || under('A.8')) return SANS1475_OPERATIONAL_FACILITIES;
+    return null;
+  }
+  if(sans1475IsPart2(key)){
+    if(under('6.1') || k==='7.2.1') return ['hosereels'];
+    if(under('6.2') || k==='7.2.2') return ['aghydrants'];
+    if(under('6.3') || k==='7.2.3') return ['ughydrants'];
+    return P2_FACILITIES;
+  }
+  if(k==='4.2' || k==='4.10') return null;   // training and people (designations, delegates) apply to every business with staff
+  if(k==='4.6') return ['workshop','siteservicing'];
+  if(under('4.3') || under('5.3')) return ['pressuretest'];
+  if(under('4.5') || under('4.8') || under('5.5')) return ['charging'];
+  if(under('5.1') || k==='5.4') return ['reconditioning'];
+  if(k==='5') return P1_PREMISES_FACILITIES;
+  if(k==='6' || k==='6.2') return ['workshop','pressuretest'];
+  return ['workshop'];   // 4.1, 4.4, 4.7, 4.9, 4.10, 5.2.x, 6.1
+}
+function sans1475ClauseInScope(key){ return facilitiesInScope(sans1475RequiredFacilities(key)); }
+// Applies to a printed report section: a one-line note when out of scope.
+function scopeNoteHtml(anyOf){
+  return facilitiesInScope(anyOf) ? '' : `<div class="meta" style="margin-top:0;">Not applicable — no matching facility declared (${escapeHtml(facilityNames(anyOf))}).</div>`;
+}
+function renderFacilitiesCard(){
+  const card = document.getElementById('coFacilitiesCard');
+  if(!card) return;
+  card.style.display = hasAuditPack() ? 'block' : 'none';
+  renderCheckboxList('coFacilitiesList', FACILITIES.map(([k,name,desc])=>[k, `${name} — ${desc}`]), (companySettings && companySettings.facilities) || {});
+  document.getElementById('coFacilitiesList').onchange = onFacilityToggle;
+  document.getElementById('coFacilitiesStatus').textContent = facilitiesDeclared()
+    ? 'Facilities declared. Changing them updates the Audit section straight away.'
+    : 'Not declared yet — until you save, the Audit section shows every clause.';
+}
+// Site servicing (no workshop) and the workshop facilities can't both be true:
+// ticking one clears the other, and the toast says why.
+function onFacilityToggle(e){
+  const input = e.target;
+  if(!input || !input.checked) return;
+  const k = input.dataset.k;
+  const clash = k==='siteservicing' ? P1_PREMISES_FACILITIES : (P1_PREMISES_FACILITIES.includes(k) ? ['siteservicing'] : []);
+  let cleared = false;
+  clash.forEach(c=>{
+    const other = document.querySelector(`#coFacilitiesList input[data-k="${c}"]`);
+    if(other && other.checked){ other.checked = false; other.closest('.chk').classList.remove('on'); cleared = true; }
+  });
+  if(cleared) toast(k==='siteservicing' ? 'Site servicing is for businesses with no workshop — workshop facilities unticked' : 'You have a workshop — Site servicing only unticked');
+}
+async function saveFacilities(){
+  const ticked = collectCheckboxList('coFacilitiesList');
+  const facilities = {};
+  FACILITY_KEYS.forEach(k=>{ facilities[k] = !!ticked[k]; });
+  if(!FACILITY_KEYS.some(k=>facilities[k]) && !confirm('No facilities ticked — every facility-dependent Audit clause and tab will show as Not applicable. Continue?')) return;
+  const payload = { facilities, updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+  try{
+    await db.collection('settings').doc(currentCompanyId).set(payload, {merge:true});
+    companySettings = Object.assign({}, companySettings, payload);
+    renderFacilitiesCard();
+    paintCompanyTab();
+    toast('Facilities saved');
+  }catch(e){ toast('Error: ' + e.message); }
+}
+function renderCompanyScopeNote(){
+  const wrap = document.getElementById('companyScopeNote');
+  if(!wrap) return;
+  const goProfile = `<button class="btn secondary" style="margin-top:8px;" onclick="showView('view-company')">Set facilities in Company profile</button>`;
+  if(!facilitiesDeclared()){
+    wrap.innerHTML = `<div class="card" style="border-left:4px solid var(--amber);">
+      <strong style="font-size:0.9rem;">Facilities not declared yet</strong>
+      <div class="hint" style="margin:4px 0 0;">Every clause and tab is showing. Declare which facilities you operate (workshop, pressure test area, reconditioning, hose reels and hydrants…) and anything that doesn't apply to you will be marked Not applicable.</div>
+      ${goProfile}
+    </div>`;
+    return;
+  }
+  const required = COMPANY_TAB_FACILITIES[companyTab];
+  if(required && !facilitiesInScope(required)){
+    wrap.innerHTML = `<div class="card" style="border-left:4px solid var(--grey);">
+      <strong style="font-size:0.9rem;">Not applicable to your declared facilities</strong>
+      <div class="hint" style="margin:4px 0 0;">This section needs: ${escapeHtml(facilityNames(required))}. Any records already captured are kept and still shown below.</div>
+      ${goProfile}
+    </div>`;
+    return;
+  }
+  wrap.innerHTML = '';
+}
+const SANS1475_DRAFT_NOTE = 'Draft wording — drafted from the clause title and general practice, not taken from the standard. Check it against SANS 1475 before relying on it.';
+function sans1475ChecklistIsDraft(key){
+  const c = SANS1475_ALL_CLAUSES.find(x=>x[0]===key);
+  return !!(c && c[2] && c[2].draft);
+}
 function sans1475ClauseChecklist(key){
   const c = SANS1475_ALL_CLAUSES.find(x=>x[0]===key);
   return (c && c[2] && c[2].checklist) || null;
@@ -2588,14 +2857,18 @@ function sans1475DocId(clause){ return `${currentCompanyId}_${sans1475SafeKey(cl
 // documented history over time. Entries live in `sans1475RegisterEntries`,
 // tagged with the clause they belong to; `format()` turns a raw entry into
 // the {date, title, sub} shown in the log and the printed compliance pack.
+// What a maintenance label is used on. One photo set serves Part 1 clause 6.1
+// and the Part 2 label clauses; entries saved before this field existed count
+// as extinguisher labels.
+const SANS1475_LABEL_FOR = ['Extinguisher','Fire hose reel','Above-ground hydrant','Underground hydrant'];
 const SANS1475_REGISTERS = {
   '4.4': {
-    title: 'Extinguishing medium log',
-    hint: 'Log every purchase/restock, replacement or disposal of extinguishing medium — type, standard, supplier/batch reference, and the agreement, delivery note or disposal certificate as evidence (clause 4.4, see also 4.7.2 and 5.5.2).',
+    title: 'Materials & components log',
+    hint: 'Log every purchase/restock, replacement or disposal of extinguishing medium or of components (valves, seals, gauges, cartridges…) — type, standard, supplier/batch reference, and the agreement, delivery note or disposal certificate as evidence (clause 4.4 and Annex A.4; see also 4.7.2 and 5.5.2).',
     entryFile: true,
     fields: [
       { id:'entryType', label:'Entry type', type:'select', options:['Purchase / restock','Replacement','Disposal'] },
-      { id:'medType', label:'Medium type', type:'select', options:['DCP','Foam','Water','CO2','Wet chemical','Clean agent','Other'] },
+      { id:'medType', label:'Material / component type', type:'select', options:['DCP','Foam','Water','CO2','Wet chemical','Clean agent','Component (valve, seal, gauge, cartridge…)','Other'] },
       { id:'standardRef', label:'Standard / specification', placeholder:'e.g. SANS 1910' },
       { id:'supplier', label:'Supplier' },
       { id:'batchNo', label:'Batch / lot number' },
@@ -2639,14 +2912,15 @@ const SANS1475_REGISTERS = {
   },
   '6.1': {
     title: 'Maintenance label photos',
-    hint: 'Upload dated photo examples of the maintenance labels used, for clause 6.1.',
+    hint: 'Upload dated photo examples of the maintenance labels used, for clause 6.1. Choose what each label is for — hose reel and hydrant labels also serve Part 2 clauses 6.1.7, 6.2.6, 6.3.7, 7.1 and 7.2.x, so there is no need to upload them again there.',
     entryFile: true,
     fields: [
+      { id:'labelFor', label:'Label is used on', type:'select', options:SANS1475_LABEL_FOR },
       { id:'description', label:'Description', placeholder:'e.g. Standard maintenance label, 2026 stock' },
       { id:'photoDate', label:'Date', type:'date' },
       { id:'notes', label:'Notes', type:'textarea' }
     ],
-    format(e){ return { date:e.photoDate, title:e.description||'Maintenance label', sub:e.notes||'' }; }
+    format(e){ return { date:e.photoDate, title:`${e.description||'Maintenance label'} — ${e.labelFor||SANS1475_LABEL_FOR[0]}`, sub:e.notes||'' }; }
   },
   '6.2': {
     title: 'Pressure test label photos',
@@ -2659,41 +2933,52 @@ const SANS1475_REGISTERS = {
     ],
     format(e){ return { date:e.photoDate, title:e.description||'Pressure test label', sub:e.notes||'' }; }
   },
-  // Part 2:2024 (hose reels and hydrants) — keys are P2-prefixed, see SANS1475_P2_CLAUSES.
-  'P2-8': {
-    title: 'Hose reel & hydrant reconditioning records',
-    hint: 'Log each fire hose reel or hydrant reconditioned, with what was done, who did it and the job card or record as evidence (Part 2 clause 8; see also clauses 5.1 to 5.5).',
+  // Annex A.7 — documentation. The two registers below are the only records
+  // Annex A needs that the app didn't already hold.
+  'A-7.1': {
+    title: 'Complaints register',
+    hint: 'Log each customer complaint, what was done about it and when it was closed (Annex A.7.1).',
     entryFile: true,
     fields: [
-      { id:'equipType', label:'Equipment', type:'select', options:['Fire hose reel','Above-ground hydrant','Underground hydrant'] },
-      { id:'assetRef', label:'Asset tag / location' },
-      { id:'workDone', label:'Work carried out', type:'textarea' },
-      { id:'workDate', label:'Date', type:'date' },
-      { id:'staffId', label:'Technician', type:'staffSelect' },
-      { id:'outcome', label:'Outcome', type:'select', options:['Returned to service','Rejected / condemned'] },
-      { id:'notes', label:'Notes', type:'textarea' }
+      { id:'complaintDate', label:'Date received', type:'date' },
+      { id:'complainant', label:'Complainant / client' },
+      { id:'reference', label:'Site / job / certificate reference' },
+      { id:'description', label:'Complaint', type:'textarea' },
+      { id:'actionTaken', label:'Action taken', type:'textarea' },
+      { id:'staffId', label:'Handled by', type:'staffSelect' },
+      { id:'status', label:'Status', type:'select', options:['Open','Closed'] },
+      { id:'closedDate', label:'Date closed', type:'date' }
     ],
     format(e){
       const staff = allStaffCache.find(s=>s.id===e.staffId);
-      return { date:e.workDate, title:`${e.equipType||'Equipment'}${e.assetRef?(' — '+e.assetRef):''}`, sub:[e.outcome, staff?staff.name:'', e.workDone].filter(Boolean).join(' · ') };
+      return { date:e.complaintDate, title:`${e.complainant||'Complaint'}${e.status?(' — '+e.status):''}`, sub:[e.reference, staff?('handled by '+staff.name):'', e.closedDate?('closed '+e.closedDate):'', e.description].filter(Boolean).join(' · ') };
     }
   },
-  'P2-7.1': {
-    title: 'Maintenance label photos',
-    hint: 'Upload dated photo examples of the maintenance labels used on hose reels and hydrants, for Part 2 clause 7.1.',
+  'A-7.2': {
+    title: 'Documents register',
+    hint: 'One list of your procedures, reference documents and forms (Annex A.7.2 and A.7.3). Upload each document once, give it a reference number, version and issue date so it is under document control, and tick every clause it covers — those clauses then show as covered without any further typing.',
     entryFile: true,
     fields: [
-      { id:'description', label:'Description', placeholder:'e.g. Hose reel maintenance label, current design' },
-      { id:'photoDate', label:'Date', type:'date' },
-      { id:'notes', label:'Notes', type:'textarea' }
+      { id:'title', label:'Document title', placeholder:'e.g. Reconditioning procedure' },
+      { id:'docType', label:'Type', type:'select', options:['Procedure','Reference standard','Form / template','Policy','Other'] },
+      { id:'docRef', label:'Document reference no.' },
+      { id:'version', label:'Version / revision' },
+      { id:'issueDate', label:'Issue date', type:'date' },
+      { id:'reviewDate', label:'Next review', type:'date' },
+      { id:'owner', label:'Document owner' },
+      { id:'covers', label:'Covers these clauses', type:'clauseChecks' }
     ],
-    format(e){ return { date:e.photoDate, title:e.description||'Maintenance label', sub:e.notes||'' }; }
+    format(e){
+      const covers = (e.covers||'').split(',').filter(Boolean).map(sans1475ShortLabel);
+      return { date:e.issueDate, title:`${e.docRef?(e.docRef+' — '):''}${e.title||'Document'}`, sub:[e.docType, e.version?('v'+e.version):'', e.reviewDate?('review '+e.reviewDate):'', covers.length?('covers '+covers.join(', ')):''].filter(Boolean).join(' · ') };
+    }
   }
 };
 function sans1475RegisterFieldHtml(f){
   const id = `s1475rf_${f.id}`;
   if(f.type==='select') return `<label>${escapeHtml(f.label)}</label><select id="${id}">${f.options.map(o=>`<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('')}</select>`;
   if(f.type==='staffSelect') return `<label>${escapeHtml(f.label)}</label><select id="${id}"></select>`;
+  if(f.type==='clauseChecks') return `<label>${escapeHtml(f.label)}</label><div id="${id}" style="max-height:220px; overflow:auto;"></div>`;
   if(f.type==='textarea') return `<label>${escapeHtml(f.label)}</label><textarea id="${id}" rows="2" placeholder="${escapeHtml(f.placeholder||'')}"></textarea>`;
   if(f.type==='date') return `<label>${escapeHtml(f.label)}</label><input id="${id}" type="date">`;
   return `<label>${escapeHtml(f.label)}</label><input id="${id}" placeholder="${escapeHtml(f.placeholder||'')}">`;
@@ -2774,18 +3059,28 @@ function paintCompanyTab(){
   const chips = document.getElementById('companyTabChips');
   if(!chips) return;
   const expiredCount = workshopExpiryItems().filter(i=>i.status==='expired').length;
+  // Category tabs show progress (rows on file / rows that apply); the record tabs show a count.
+  const catTab = k=>{ const cat = auditCategoryByTab(k), p = categoryProgress(cat); return [k, `${cat.name} (${p.done}/${p.total})`]; };
   const tabs = [
     ['documents', `Company documents (${companyDocsCache.length})`],
-    ['employees', `Employees (${allStaffCache.length})`],
-    ['vehicles', `Vehicles (${vehiclesCache.length})`],
+    catTab('employees'),
+    catTab('vehicles'),
     ['workshops', `Workshops (${branchesCache.length})`],
     ['calibration', `Calibration (${calCertsCache.length})`],
-    ['tools', `Tools (${toolsCache.length})`],
-    ['sans1475', `SANS 1475 Pt 1 (${sans1475DocumentedCount(SANS1475_CLAUSES)}/${SANS1475_CLAUSES.length})`],
-    ['sans1475p2', `SANS 1475 Pt 2 (${sans1475DocumentedCount(SANS1475_P2_CLAUSES)}/${SANS1475_P2_CLAUSES.length})`]
+    catTab('tools'),
+    catTab('recon'),
+    catTab('facilities'),
+    catTab('labels'),
+    catTab('hose'),
+    catTab('docsreg')
   ];
-  chips.innerHTML = tabs.map(([k,label])=>`<button class="chip ${companyTab===k?'active':''}" onclick="setCompanyTab('${k}')">${escapeHtml(label)}${k==='documents'&&expiredCount?' <span style="color:var(--red-dark);">&#9679;</span>':''}</button>`).join('');
-  ['documents','employees','vehicles','workshops','calibration','tools','sans1475','sans1475p2'].forEach(k=>{
+  chips.innerHTML = tabs.map(([k,label])=>{
+    const na = COMPANY_TAB_FACILITIES[k] && !companyTabInScope(k);
+    return `<button class="chip ${companyTab===k?'active':''}${na?' na':''}" onclick="setCompanyTab('${k}')">${escapeHtml(label)}${na?' · N/A':''}${k==='documents'&&expiredCount?' <span style="color:var(--red-dark);">&#9679;</span>':''}</button>`;
+  }).join('');
+  renderCompanyScopeNote();
+  renderAuditSummary();
+  ['documents','employees','vehicles','workshops','calibration','tools','recon','facilities','labels','hose','docsreg'].forEach(k=>{
     const el = document.getElementById('companyTab-'+k);
     if(el) el.style.display = (companyTab===k) ? 'block' : 'none';
   });
@@ -2795,9 +3090,12 @@ function paintCompanyTab(){
   if(companyTab==='vehicles') renderVehicles();
   if(companyTab==='workshops') renderBranches();
   if(companyTab==='calibration') renderCalibrationRegister();
-  if(companyTab==='tools'){ renderTools(); renderToolChecks(); }
-  if(companyTab==='sans1475') renderSans1475('sans1475List', SANS1475_CLAUSES);
-  if(companyTab==='sans1475p2') renderSans1475('sans1475P2List', SANS1475_P2_CLAUSES);
+  if(companyTab==='tools'){ renderCategoryTable('toolsCategoryTable', TOOLS_CATEGORY_ROWS); renderTools(); renderToolChecks(); }
+  if(companyTab==='recon') renderCategoryTable('reconCategoryTable', RECON_CATEGORY_ROWS);
+  if(companyTab==='facilities') renderCategoryTable('facilitiesCategoryTable', FACILITIES_CATEGORY_ROWS);
+  if(companyTab==='labels') renderCategoryTable('labelsCategoryTable', LABELS_CATEGORY_ROWS);
+  if(companyTab==='hose') renderCategoryTable('hoseCategoryTable', HOSE_CATEGORY_ROWS);
+  if(companyTab==='docsreg') renderCategoryTable('docsregCategoryTable', DOCUMENTS_CATEGORY_ROWS);
 }
 
 /* ---- expiry engine ---- */
@@ -2875,16 +3173,31 @@ function renderCompanyDocs(){
   </div>`).join('');
 }
 
+// The Vehicles record section can be narrowed to one purpose by the row that
+// opened it (Delivery vehicle, Maintenance vehicle, Mobile workshop); null = all.
+let vehiclesFilter = null;
+function openVehiclesSection(purpose){
+  vehiclesFilter = purpose || null;
+  renderVehicles();
+  const el = document.getElementById('vehiclesSection');
+  if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+}
 function renderVehicles(){
+  renderCategoryTable('vehicleCategoryTable', VEHICLE_CATEGORY_ROWS);
   const wrap = document.getElementById('vehiclesList');
   if(!wrap) return;
-  if(vehiclesCache.length===0){ wrap.innerHTML = `<div class="empty">No vehicles yet.</div>`; return; }
-  wrap.innerHTML = vehiclesCache.map(v=>{
+  const label = vehiclesFilter ? vehiclePurposeLabel(vehiclesFilter) : '';
+  document.getElementById('vehiclesSectionTitle').textContent = vehiclesFilter ? `${label}s` : 'All vehicles';
+  document.getElementById('vehiclesFilterNote').innerHTML = vehiclesFilter
+    ? `<div class="hint" style="margin:0 0 10px;">Showing ${escapeHtml(label.toLowerCase())}s only. <span class="cat-link" onclick="openVehiclesSection(null)">Show all vehicles</span></div>` : '';
+  const shown = vehiclesFilter ? vehiclesCache.filter(v=>v.purpose===vehiclesFilter) : vehiclesCache;
+  if(shown.length===0){ wrap.innerHTML = `<div class="empty">${vehiclesFilter ? `No ${escapeHtml(label.toLowerCase())}s yet.` : 'No vehicles yet.'}</div>`; return; }
+  wrap.innerHTML = shown.map(v=>{
     const tech = allStaffCache.find(s=>s.id===v.assignedTechnicianId);
     return `<div class="card tech-card" onclick="openVehicleForm('${v.id}')" style="cursor:pointer;">
       <div>
         <div class="name">${escapeHtml(v.registrationNo||'—')}</div>
-        <div class="meta">${escapeHtml(v.description||'')}${v.branchId?(' &middot; '+escapeHtml(branchName(v.branchId))):''}${tech?(' &middot; '+escapeHtml(tech.name)):''}</div>
+        <div class="meta">${escapeHtml(v.description||'')}${v.purpose?(' &middot; '+escapeHtml(vehiclePurposeLabel(v.purpose))):''}${v.branchId?(' &middot; '+escapeHtml(branchName(v.branchId))):''}${tech?(' &middot; '+escapeHtml(tech.name)):''}</div>
       </div>
       ${v.licenceDiskExpiry ? expiryPill(v.licenceDiskExpiry, 'Licence') : ''}
     </div>`;
@@ -2911,25 +3224,55 @@ function employeeExpectedDocs(s){
   else if(s.role==='competent'){ need.push(['appointmentLetterPhotoURL','Appointment letter']); }
   return need;
 }
+// The Employees record section can be narrowed by the row that opened it:
+// 'competent' | 'trainee' | 'delegations'; null = everyone.
+let employeesFilter = null;
+const EMPLOYEES_FILTER_TITLE = { competent:'Registered competent persons', trainee:'Registered trainees', delegations:'Delegations — who is in charge when someone is absent' };
+function openEmployeesSection(filter){
+  employeesFilter = filter || null;
+  renderEmployeeCompliance();
+  const el = document.getElementById('employeesSection');
+  if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+}
+// Everyone who has named this person as their delegate.
+function employeesCoveredBy(id){ return allStaffCache.filter(x=>x.active!==false && x.delegateId===id); }
 function renderEmployeeCompliance(){
+  renderCategoryTable('employeeCategoryTable', EMPLOYEE_CATEGORY_ROWS);
   const wrap = document.getElementById('employeeComplianceList');
   if(!wrap) return;
+  document.getElementById('employeesSectionTitle').textContent = EMPLOYEES_FILTER_TITLE[employeesFilter] || 'All employees';
+  document.getElementById('employeesFilterNote').innerHTML = employeesFilter
+    ? `<div class="hint" style="margin:0 0 10px;">${employeesFilter==='delegations' ? 'Each person’s delegate covers their duties when they are absent. Tap a person to set or change it. ' : ''}<span class="cat-link" onclick="openEmployeesSection(null)">Show all employees</span></div>` : '';
   if(allStaffCache.length===0){ wrap.innerHTML = `<div class="empty">No employees yet.</div>`; return; }
   const roleOrder = ['admin','technician','competent','trainee'];
-  const sorted = [...allStaffCache].sort((a,b)=> roleOrder.indexOf(a.role)-roleOrder.indexOf(b.role) || (a.name||'').localeCompare(b.name||''));
+  let shown = [...allStaffCache];
+  // Trainees work under supervision rather than holding duties that need covering.
+  if(employeesFilter==='delegations') shown = shown.filter(s=>s.active!==false && s.role!=='trainee');
+  else if(employeesFilter) shown = shown.filter(s=>s.role===employeesFilter);
+  const sorted = shown.sort((a,b)=> roleOrder.indexOf(a.role)-roleOrder.indexOf(b.role) || (a.name||'').localeCompare(b.name||''));
+  if(sorted.length===0){ wrap.innerHTML = `<div class="empty">Nobody here yet.</div>`; return; }
   wrap.innerHTML = sorted.map(s=>{
     const need = employeeExpectedDocs(s);
     const missing = need.filter(([f])=> !s[f]).length;
     const inactive = s.active === false;
-    const right = inactive
+    let right = inactive
       ? `<span class="pill" style="margin:0;">Deactivated</span>`
       : (missing
         ? `<span class="pill due" style="margin:0;">${missing} missing</span>`
         : `<span class="pill pass" style="margin:0;">Complete</span>`);
+    let meta = `${ROLE_LABEL[s.role]||s.role||''}${s.techNumber?(' · '+s.techNumber):''}${s.branchId?(' · '+branchName(s.branchId)):''}`;
+    if(employeesFilter==='delegations'){
+      const delegate = allStaffCache.find(x=>x.id===s.delegateId);
+      const covers = employeesCoveredBy(s.id).map(x=>x.name);
+      right = !delegate ? `<span class="pill due" style="margin:0;">No delegate</span>`
+        : (delegate.active===false ? `<span class="pill due" style="margin:0;">Delegate deactivated</span>`
+        : (delegate.role==='trainee' ? `<span class="pill due" style="margin:0;">Delegate is a trainee</span>` : `<span class="pill pass" style="margin:0;">→ ${escapeHtml(delegate.name||'')}</span>`));
+      meta = [s.designation || (ROLE_LABEL[s.role]||''), covers.length ? ('covers for ' + covers.join(', ')) : ''].filter(Boolean).join(' · ');
+    }
     return `<div class="card tech-card" onclick="openEmployeeCompliance('${s.id}')" style="cursor:pointer;${inactive?'opacity:0.55;':''}">
       <div>
         <div class="name">${escapeHtml(s.name||'')}</div>
-        <div class="meta">${escapeHtml(ROLE_LABEL[s.role]||s.role||'')}${s.techNumber?(' &middot; '+escapeHtml(s.techNumber)):''}${s.branchId?(' &middot; '+escapeHtml(branchName(s.branchId))):''}</div>
+        <div class="meta">${escapeHtml(meta)}</div>
       </div>
       ${right}
     </div>`;
@@ -3037,44 +3380,617 @@ async function deleteCompanyDoc(){
 // (notes, an evidence file, or a logged register entry) — not a compliance
 // verdict, which this app never records; see the hint on the clause form.
 function sans1475IsDocumented(key, rec){
-  if(rec && (rec.notes || rec.fileURL)) return true;
+  if(rec && (rec.notes || rec.fileURL || (rec.docs && rec.docs.length))) return true;
   if(rec && rec.checklist && Object.keys(rec.checklist).length) return true;
   if(SANS1475_REGISTERS[key] && sans1475RegisterCache.some(e=>e.clause===key)) return true;
   if(key==='5.1' && reconditioningJobsCache.length) return true;
+  const link = SANS1475_LINKS[key];
+  if(link && link.status && link.status().documented) return true;
   return false;
 }
-function sans1475DocumentedCount(clauses){
-  return clauses.filter(([key])=>sans1475IsDocumented(key, sans1475Cache.find(c=>c.clause===key))).length;
-}
-// Clauses that just point at evidence recorded elsewhere in the app, rather
-// than capturing anything new here — see SANS1475_LINKS below.
-const SANS1475_LINKS = {
-  '4.2': { hint:'Training and toolbox-talk records already live in their own tabs — open them directly rather than duplicating them here.', buttons:[
-      { label:'Open toolbox talks', onclick:"showView('view-talks')" },
-      { label:'Print training compliance report', onclick:"openTrainingComplianceReport()" }
-    ] },
-  '4.6': { hint:'Evidence of how extinguishers are transported to and from site lives on each service vehicle’s record.', buttons:[
-      { label:'View service vehicles', onclick:"showView('view-audit'); setCompanyTab('vehicles')" }
-    ] },
-  '4.10': { hint:'Designation, appointments/authorities and delegate (who covers this person when absent) are set on each employee’s record under the Employees tab.', buttons:[
-      { label:'View employees', onclick:"showView('view-audit'); setCompanyTab('employees')" },
-      { label:'Print employee summary', onclick:"openEmployeeSummaryReport()" }
-    ] },
-  '5.4': { hint:'Reconditioning records are kept under clause 5.1 (Reconditioning), including the printable Reconditioning register.', buttons:[
-      { label:'Go to clause 5.1', onclick:"openSans1475Form('5.1')" },
-      { label:'Print reconditioning register', onclick:"openReconditioningReport()" }
-    ] },
-  '5.3': { hint:'This is an analysis pulled from pressure-test due dates across all sites and the weekly gauge/master verification log, rather than a separate manual record.', buttons:[
-      { label:'Print pressure-test analysis', onclick:"openPressureTestAnalysisReport()" }
-    ] },
-  '5.5': { hint:'Recharging is recorded under clause 4.8 (Charging of extinguishers).', buttons:[
-      { label:'Go to clause 4.8', onclick:"openSans1475Form('4.8')" }
-    ] },
-  'P2-4.2': { hint:'Training and toolbox-talk records already live in their own tabs — open them directly rather than duplicating them here.', buttons:[
-      { label:'Open toolbox talks', onclick:"showView('view-talks')" },
-      { label:'Print training compliance report', onclick:"openTrainingComplianceReport()" }
-    ] }
+
+/* ---- Record once, cover many clauses ----
+   The three clause lists (Part 1, Annex A, Part 2) ask for the same evidence
+   again and again — training, PPE, reconditioning, labels, vehicles. Each kind
+   of evidence lives in ONE record (Employees, Tools, Vehicles, Reconditioning
+   jobs, the label photos, the Documents register …) and every clause that needs
+   it gets an entry in SANS1475_LINKS: where the record is, plus a live
+   `status()` read from that record's data. A covered clause therefore shows
+   Documented by itself, with nothing typed against the clause. Clauses with no
+   record of their own (the `docs: true` ones) are evidenced by tagging a
+   document in the Documents register (clause A.7.2). */
+const goTab = tab => `showView('view-audit'); setCompanyTab('${tab}')`;
+const SL_BTN = {
+  employees:     { label:'View employees', onclick:goTab('employees') },
+  employeeSummary:{ label:'Print employee summary', onclick:'openEmployeeSummaryReport()' },
+  talks:         { label:'Open toolbox talks', onclick:"openModuleView('view-talks')" },
+  trainingReport:{ label:'Print training compliance report', onclick:'openTrainingComplianceReport()' },
+  trainees:      { label:'View trainees', onclick:"openModuleView('view-trainees')" },
+  tools:         { label:'View tools', onclick:goTab('tools') },
+  calibration:   { label:'View calibration', onclick:goTab('calibration') },
+  verification:  { label:'Weekly verification log', onclick:'openWeeklyVerification()' },
+  vehicles:      { label:'View service vehicles', onclick:goTab('vehicles') },
+  jobs:          { label:'Go to reconditioning jobs (clause 5.1)', onclick:"openSans1475Form('5.1')" },
+  reconReport:   { label:'Print reconditioning register', onclick:'openReconditioningReport()' },
+  condemned:     { label:'Condemned units summary', onclick:'openCondemnedUnitsSummaryReport()' },
+  ppe:           { label:'Go to PPE register (clause 4.9)', onclick:"openSans1475Form('4.9')" },
+  materials:     { label:'Go to materials & components log (clause 4.4)', onclick:"openSans1475Form('4.4')" },
+  labels:        { label:'Go to label photos (clause 6.1)', onclick:"openSans1475Form('6.1')" },
+  facilities:    { label:'Go to facilities checklist (clause 4.1)', onclick:"openSans1475Form('4.1')" },
+  modifications: { label:'Go to conversion & modification register (clause 5.1.6)', onclick:"openSans1475Form('5.1.6')" },
+  charging:      { label:'See the charging checks (Reconditioning & production)', onclick:goTab('recon') },
+  pressureAnalysis:{ label:'Print pressure-test analysis', onclick:'openPressureTestAnalysisReport()' },
+  docs:          { label:'Open documents register', onclick:"openSans1475Form('A-7.2')" }
 };
+// Some records live in screens that belong to other modules (toolbox talks and
+// the weekly verification log are Workshop; trainees are Trainee). Without the
+// module showView() would silently drop the admin on the Sites page, so say why.
+function openModuleView(view){
+  const inTrainee = TRAINEE_VIEWS.includes(view), inWorkshop = WORKSHOP_VIEWS.includes(view);
+  if((inTrainee && !hasTraineeModule()) || (inWorkshop && !hasWorkshopModule())){
+    toast(`That screen is part of the ${inTrainee ? 'Trainee' : 'Workshop'} module, which isn't switched on for your company`);
+    return;
+  }
+  showView(view);
+}
+function openWeeklyVerification(){ openModuleView('view-calibration'); }
+const slStat = (documented, text)=>({documented, text});
+const slPlural = (n, one, many)=> `${n} ${n===1 ? one : (many || one+'s')}`;
+const slActiveStaff = ()=> allStaffCache.filter(s=>s.active!==false);
+const slEntries = clause => sans1475RegisterCache.filter(e=>e.clause===clause);
+const slHoseHydrantJobs = ()=> reconditioningJobsCache.filter(j=>{ const t = EQUIPMENT_TYPES[j.equipmentType]; return t && (t.category==='hosereel' || t.category==='hydrant'); });
+const slLabels = tags => slEntries('6.1').filter(e=>tags.includes(e.labelFor || SANS1475_LABEL_FOR[0]));
+const slDocsCovering = key => slEntries('A-7.2').filter(e=>(e.covers||'').split(',').includes(key));
+// Documents-register entries tagged to any of these clauses (deduplicated).
+const slDocsCoveringAny = keys => slEntries('A-7.2').filter(e=>{ const tags = (e.covers||'').split(','); return keys.some(k=>tags.includes(k)); });
+const SL = {
+  employees(){ const n = slActiveStaff().length; return slStat(n>0, slPlural(n,'active employee')+' on file'); },
+  designations(){ const all = slActiveStaff(), n = all.filter(s=>s.designation).length; return slStat(n>0, `${n} of ${all.length} employees have a designation set`); },
+  saqcc(){ const tech = slActiveStaff().filter(s=>s.role!=='admin'), n = tech.filter(s=>s.saqcc).length; return slStat(n>0, `${n} of ${tech.length} technical staff have a SAQCC number`); },
+  competent(){ const n = slActiveStaff().filter(s=>s.role==='competent').length; return slStat(n>0, slPlural(n,'registered competent person')); },
+  trainees(){ const n = slActiveStaff().filter(s=>s.role==='trainee').length; return slStat(n>0, slPlural(n,'registered trainee')); },
+  tools(){ const n = toolsCache.length; return slStat(n>0, slPlural(n,'tool')+' registered'); },
+  calibration(){ const n = calCertsCache.length; return slStat(n>0, slPlural(n,'calibration certificate')+' on file'); },
+  toolsAndCalibration(){ const t = toolsCache.length, c = calCertsCache.length; return slStat(t>0 && c>0, `${slPlural(t,'tool')} registered, ${slPlural(c,'calibration certificate')} on file`); },
+  vehicles(){ const n = vehiclesCache.length; return slStat(n>0, slPlural(n,'vehicle')+' registered'); },
+  vehiclePurpose(purpose){ return ()=>{ const n = vehiclesCache.filter(v=>v.purpose===purpose).length; return slStat(n>0, slPlural(n, vehiclePurposeLabel(purpose).toLowerCase())+' registered'); }; },
+  vehiclesManaged(){ const n = vehiclesCache.length, m = vehiclesCache.filter(v=>v.licenceDiskExpiry && v.roadworthyDate).length; return slStat(n>0 && m===n, `${m} of ${n} vehicles have licence and roadworthy dates`); },
+  jobs(){ const n = reconditioningJobsCache.length; return slStat(n>0, slPlural(n,'reconditioning job')+' recorded'); },
+  hoseHydrantJobs(){ const n = slHoseHydrantJobs().length; return slStat(n>0, slPlural(n,'hose reel / hydrant reconditioning job')+' recorded'); },
+  finalInspection(){ const all = reconditioningJobsCache.length, n = reconditioningJobsCache.filter(j=>j.checklist && j.checklist.finalinspect).length; return slStat(n>0, `${n} of ${all} reconditioning jobs have a final inspection recorded`); },
+  register(clause, one, many){ return ()=>{ const n = slEntries(clause).length; return slStat(n>0, slPlural(n, one, many)+' logged'); }; },
+  labels(tags){ return ()=>{ const n = slLabels(tags).length; return slStat(n>0, slPlural(n,'label photo')+' on file'); }; },
+  documentsTagged(key){ return ()=>{ const n = slDocsCovering(key).length; return slStat(n>0, slPlural(n,'document')+' tagged to this clause'); }; },
+  documentsTaggedAny(keys){ return ()=>{ const n = slDocsCoveringAny(keys).length; return slStat(n>0, slPlural(n,'document')+' tagged to these clauses'); }; },
+  disposals(){ const n = slEntries('4.4').filter(e=>e.entryType==='Disposal').length; return slStat(n>0, slPlural(n,'disposal entry','disposal entries')+' logged'); },
+  documentControl(){ const all = slEntries('A-7.2'), n = all.filter(e=>e.version && e.issueDate).length; return slStat(n>0, `${n} of ${all.length} documents have a version and issue date`); },
+  auto(text){ return ()=>slStat(true, text); },
+  clauseDocumented(keys){ return ()=>slStat(keys.some(k=>sans1475IsDocumented(k, sans1475Cache.find(c=>c.clause===k))), 'see the linked clause'); }
+};
+const SL_DOCS_HINT = 'This clause is evidenced by a document (procedure or policy). Upload it once in the Documents register and tick this clause under “Covers” — it then shows as covered here without uploading it again.';
+const SANS1475_LINKS = {
+  // ---- Part 1:2025
+  '4.2':  { record:'Employees & training', hint:'Training and toolbox-talk records already live in their own tabs — open them directly rather than duplicating them here.', buttons:[SL_BTN.talks, SL_BTN.trainingReport, SL_BTN.employees], status:SL.employees },
+  '4.6':  { record:'Service vehicles', hint:'Evidence of how extinguishers are transported to and from site lives on each service vehicle’s record.', buttons:[SL_BTN.vehicles], status:SL.vehicles },
+  '4.10': { record:'Employees', hint:'Designation, appointments/authorities and delegate (who covers this person when absent) are set on each employee’s record under the Employees tab.', buttons:[SL_BTN.employees, SL_BTN.employeeSummary], status:SL.designations },
+  '5.4':  { record:'Reconditioning jobs', hint:'Reconditioning records are kept under clause 5.1 (Reconditioning), including the printable Reconditioning register.', buttons:[SL_BTN.jobs, SL_BTN.reconReport], status:SL.jobs },
+  '5.3':  { record:'Equipment records', hint:'This is an analysis pulled from pressure-test due dates across all sites and the weekly gauge/master verification log, rather than a separate manual record.', buttons:[SL_BTN.pressureAnalysis], status:SL.auto('generated from your equipment and verification records') },
+  '5.5':  { record:'Charging (clause 4.8)', hint:'Recharging is recorded on each unit and through the charging checks under clause 4.8 (Charging of extinguishers).', buttons:[SL_BTN.charging], status:SL.clauseDocumented(['4.8.1','4.8.2','4.8.3','4.8.4','4.8.5']) },
+  // Reconditioning (5.1.x) — the reconditioning jobs, modification register and documents
+  '5.1.1': { record:'Reconditioning jobs', hint:'Reconditioning is recorded as jobs (received, in progress, complete), each assigned to a technician.', buttons:[SL_BTN.jobs, SL_BTN.reconReport], status:SL.jobs },
+  '5.1.2': { record:'Reconditioning jobs', hint:'The extent of reconditioning is the checklist completed on every reconditioning job, and printed on the Reconditioning register.', buttons:[SL_BTN.jobs, SL_BTN.reconReport], status:SL.jobs },
+  '5.1.4': { record:'Conversion & modification register', hint:'Conversions are logged in the conversion & modification register under clause 5.1.6.', buttons:[SL_BTN.modifications], status:SL.register('5.1.6','entry','entries') },
+  // Pressure testing (5.3.x) — every unit's service record already holds the pressure test
+  '5.3.1': { record:'Unit pressure-test records', hint:'Each pressure test is recorded on the extinguisher’s own record (Annex G checklist, test pressure, technician, SAQCC number and label fitted) — nothing to type here.', buttons:[SL_BTN.pressureAnalysis], status:SL.auto('recorded on each unit’s service record') },
+  '5.3.2.1':{ record:'Equipment records', hint:'Due dates are worked out from each unit’s last pressure test; the pressure-test analysis lists what is overdue or coming due.', buttons:[SL_BTN.pressureAnalysis], status:SL.auto('worked out from your equipment records') },
+  '5.3.2.2':{ record:'Equipment records', hint:'Due dates are worked out per equipment type from each unit’s last pressure test; the pressure-test analysis lists what is overdue or coming due.', buttons:[SL_BTN.pressureAnalysis], status:SL.auto('worked out from your equipment records') },
+  '5.3.3': { record:'Unit pressure-test records', hint:'The test pressure (kPa) used is recorded on each unit’s pressure test.', buttons:[SL_BTN.pressureAnalysis], status:SL.auto('recorded on each unit’s service record') },
+  '5.3.4': { record:'Calibration & weekly verification', hint:'Test equipment is evidenced by the annual calibration certificates and the weekly gauge / master verification log.', buttons:[SL_BTN.calibration, SL_BTN.verification], status:SL.calibration },
+  '5.3.5': { record:'Condemned units', hint:'A unit that fails its pressure test is condemned on its own record, which feeds the Condemned units summary.', buttons:[SL_BTN.condemned], status:SL.auto('generated from your inspection records') },
+  // Recharging (5.5.x) — the recharge is recorded on each unit
+  '5.5.1': { record:'Unit recharge records', hint:'Each recharge is recorded on the extinguisher’s own record (medium and charge, pressures, technician, SAQCC number and checklist) — nothing to type here.', buttons:[SL_BTN.charging], status:SL.auto('recorded on each unit’s service record') },
+  '5.5.2': { record:'Materials & components log', hint:'Extinguishing mediums are logged in the materials & components log (clause 4.4).', buttons:[SL_BTN.materials], status:SL.register('4.4','entry','entries') },
+  '5.5.4': { record:'Unit recharge records', hint:'The leak test after pressurisation is a step on each unit’s recharge checklist.', buttons:[SL_BTN.charging], status:SL.auto('recorded on each unit’s service record') },
+  // Rejection (5.2.7, 5.2.8) and discarded powder (4.7.2)
+  '5.2.7': { record:'Condemned units', hint:'Cylinders rejected for corrosion, damage or age are condemned on their own record against the condemning criteria — nothing to type here.', buttons:[SL_BTN.condemned], status:SL.auto('generated from your inspection records') },
+  '5.2.8': { record:'Condemned units', hint:'A cylinder taken out of service is recorded as condemned, with the date, reason and any replacement.', buttons:[SL_BTN.condemned], status:SL.auto('generated from your inspection records') },
+  '4.7.2': { record:'Materials & components log', hint:'Discarded powder is recorded as a Disposal entry in the materials & components log (clause 4.4).', buttons:[SL_BTN.materials], status:SL.disposals },
+  // ---- Annex A (Part 1:2025)
+  'A-2':   { record:'Employees / Documents register', docs:true, hint:'Organisation control is shown by the designation and authority set on each employee’s record, and by any organisation chart or procedure tagged in the Documents register.', buttons:[SL_BTN.employees, SL_BTN.docs],
+             status:()=>{ const d = SL.designations(), t = slDocsCovering('A-2').length; return slStat(d.documented || t>0, `${d.text}; ${slPlural(t,'document')} tagged`); } },
+  'A-3.1': { record:'Employees', hint:'Every person on the company’s books is recorded once, under Employees.', buttons:[SL_BTN.employees], status:SL.employees },
+  'A-3.2': { record:'Employees', hint:'Registered persons are identified by the SAQCC number and registration details on their employee record.', buttons:[SL_BTN.employees, SL_BTN.employeeSummary], status:SL.saqcc },
+  'A-3.3.1':{ record:'Employees', hint:'Registered competent persons, with their designation, appointments and delegate, are recorded under Employees.', buttons:[SL_BTN.employees, SL_BTN.employeeSummary], status:SL.competent },
+  'A-3.3.2':{ record:'Trainees', hint:'Registered trainees, their supervisor and registration dates are recorded under Trainees.', buttons:[SL_BTN.trainees, SL_BTN.employees], status:SL.trainees },
+  'A-3.4': { record:'Trainee logbooks', hint:'On-the-job training is evidenced by each trainee’s logbook, competency record and sign-offs under Trainees.', buttons:[SL_BTN.trainees, SL_BTN.trainingReport], status:SL.trainees },
+  'A-3.5': { record:'Employees', hint:'The printable employee summary is the register of technical personnel.', buttons:[SL_BTN.employeeSummary, SL_BTN.employees], status:SL.employees },
+  'A-4':   { record:'Materials & components log', hint:'Components are logged with the extinguishing mediums in the materials & components log (clause 4.4).', buttons:[SL_BTN.materials], status:SL.register('4.4','entry','entries') },
+  'A-5.1': { record:'Tools', hint:'Hand tools are registered and checked under the Tools tab.', buttons:[SL_BTN.tools], status:SL.tools },
+  'A-5.2': { record:'Calibration & weekly verification', hint:'Production control equipment (scales and gauges) is evidenced by its annual calibration certificates and the weekly verification log.', buttons:[SL_BTN.calibration, SL_BTN.verification], status:SL.calibration },
+  // Final inspection is evidenced either by the final-inspection step on the
+  // reconditioning jobs or, for a business that doesn't recondition, by its
+  // final inspection procedure uploaded to the Documents register.
+  'A-6.2': { record:'Reconditioning jobs / Documents register', docs:true, hint:'The final inspection is a step on every reconditioning job. If you don’t recondition, upload your final inspection procedure in the Documents register and tick this clause under “Covers”.', buttons:[SL_BTN.jobs, SL_BTN.reconReport, SL_BTN.docs],
+           status:()=>{
+             const all = reconditioningJobsCache.length, n = reconditioningJobsCache.filter(j=>j.checklist && j.checklist.finalinspect).length, d = slDocsCovering('A-6.2').length;
+             const parts = [];
+             if(all) parts.push(`${n} of ${all} reconditioning jobs have a final inspection recorded`);
+             if(d) parts.push(`${slPlural(d,'final inspection procedure')} uploaded`);
+             return slStat(n>0 || d>0, parts.join('; ') || 'no final inspection recorded yet');
+           } },
+  'A-6.4': { record:'Service vehicles', hint:'Transportation of pressurizing cylinders is evidenced on the service vehicle records.', buttons:[SL_BTN.vehicles], status:SL.vehicles },
+  'A-7.3': { record:'Documents register', hint:'Document control is shown by giving each document in the Documents register a reference number, version and issue date.', buttons:[SL_BTN.docs], status:SL.documentControl },
+  'A-8.1': { record:'Tools & calibration', hint:'Workshop tools and production control equipment are recorded under Tools and Calibration.', buttons:[SL_BTN.tools, SL_BTN.calibration, SL_BTN.verification], status:SL.toolsAndCalibration },
+  'A-8.2.1':{ record:'Service vehicles', hint:'Every vehicle used for reconditioning work is recorded once under Vehicles.', buttons:[SL_BTN.vehicles], status:SL.vehicles },
+  'A-8.2.2.1':{ record:'Service vehicles', hint:'Delivery vehicles are vehicles with the purpose “Delivery vehicle”. Mark this clause Not applicable if you have none.', buttons:[SL_BTN.vehicles], status:SL.vehiclePurpose('delivery') },
+  'A-8.2.3':{ record:'Service vehicles', hint:'Maintenance vehicles are vehicles with the purpose “Maintenance vehicle”. Mark this clause Not applicable if you have none.', buttons:[SL_BTN.vehicles], status:SL.vehiclePurpose('maintenance') },
+  'A-8.2.4':{ record:'Service vehicles', hint:'Mobile workshops are vehicles with the purpose “Mobile workshop”, with their SABS approval reference, expiry and letter. Mark this clause Not applicable if you have none.', buttons:[SL_BTN.vehicles], status:SL.vehiclePurpose('mobileworkshop') },
+  'A-8.2.5':{ record:'Service vehicles', hint:'Management of vehicles is shown by each vehicle’s assigned technician, licence disk expiry and last roadworthy date.', buttons:[SL_BTN.vehicles], status:SL.vehiclesManaged },
+  // ---- Part 2:2024 (hose reels and hydrants)
+  'P2-4.1':{ record:'Facilities checklist', hint:'Facilities are checked once, under Part 1 clause 4.1, and that checklist serves this clause too.', buttons:[SL_BTN.facilities], status:SL.clauseDocumented(['4.1']) },
+  'P2-4.2':{ record:'Employees & training', hint:'Training and toolbox-talk records already live in their own tabs — open them directly rather than duplicating them here.', buttons:[SL_BTN.talks, SL_BTN.trainingReport, SL_BTN.employees], status:SL.employees },
+  'P2-4.3':{ record:'PPE register', hint:'Protective equipment is logged once, in the PPE register under Part 1 clause 4.9.', buttons:[SL_BTN.ppe], status:SL.register('4.9','PPE item') },
+  'P2-5.1':{ record:'Reconditioning jobs', hint:'Hose reels and hydrants are reconditioned as jobs in the same reconditioning register as extinguishers — choose “Fire hose reel” or “Fire hydrant” as the type.', buttons:[SL_BTN.jobs, SL_BTN.reconReport], status:SL.hoseHydrantJobs },
+  'P2-5.4':{ record:'Conversion & modification register', hint:'Modifications are logged in the conversion & modification register under Part 1 clause 5.1.6.', buttons:[SL_BTN.modifications], status:SL.register('5.1.6','entry','entries') },
+  'P2-5.5':{ record:'Condemned units', hint:'Rejected hose reels and hydrants are recorded as condemned units when they are inspected — nothing to type here.', buttons:[SL_BTN.condemned], status:SL.auto('generated from your inspection records') },
+  'P2-6.1.7':{ record:'Label photos', hint:'Hose reel maintenance-label photos are uploaded once, under Part 1 clause 6.1 (choose “Fire hose reel”).', buttons:[SL_BTN.labels], status:SL.labels(['Fire hose reel']) },
+  'P2-6.2.6':{ record:'Label photos', hint:'Above-ground hydrant label photos are uploaded once, under Part 1 clause 6.1 (choose “Above-ground hydrant”).', buttons:[SL_BTN.labels], status:SL.labels(['Above-ground hydrant']) },
+  'P2-6.3.7':{ record:'Label photos', hint:'Underground hydrant label photos are uploaded once, under Part 1 clause 6.1 (choose “Underground hydrant”).', buttons:[SL_BTN.labels], status:SL.labels(['Underground hydrant']) },
+  'P2-7.1':{ record:'Label photos', hint:'Maintenance-label photos are uploaded once, under Part 1 clause 6.1, tagged by what the label is used on.', buttons:[SL_BTN.labels], status:SL.labels(['Fire hose reel','Above-ground hydrant','Underground hydrant']) },
+  'P2-7.2.1':{ record:'Label photos', hint:'A photo showing where the label sits on a hose reel goes in the label photos under Part 1 clause 6.1 (choose “Fire hose reel”).', buttons:[SL_BTN.labels], status:SL.labels(['Fire hose reel']) },
+  'P2-7.2.2':{ record:'Label photos', hint:'A photo showing where the label sits on an above-ground hydrant goes in the label photos under Part 1 clause 6.1 (choose “Above-ground hydrant”).', buttons:[SL_BTN.labels], status:SL.labels(['Above-ground hydrant']) },
+  'P2-7.2.3':{ record:'Label photos', hint:'A photo showing where the label sits on an underground hydrant goes in the label photos under Part 1 clause 6.1 (choose “Underground hydrant”).', buttons:[SL_BTN.labels], status:SL.labels(['Underground hydrant']) },
+  'P2-8':  { record:'Reconditioning jobs', hint:'Hose reel and hydrant reconditioning records are the reconditioning jobs — choose “Fire hose reel” or “Fire hydrant” as the type. Print them as the Reconditioning register.', buttons:[SL_BTN.jobs, SL_BTN.reconReport], status:SL.hoseHydrantJobs }
+};
+// Clauses evidenced by a tagged document rather than a record of their own.
+// (A-6.2 is also docs-evidenced but keeps its own entry above, which reads the reconditioning jobs first.)
+['5.1.3','5.1.5','5.1.7','5.1.8','5.5.3','A-1','A-6.1','A-6.3','P2-5.2','P2-5.3','P2-6.1.1','P2-6.2.1','P2-6.3.1'].forEach(key=>{
+  SANS1475_LINKS[key] = { record:'Documents register', docs:true, hint:SL_DOCS_HINT, buttons:[SL_BTN.docs], status:SL.documentsTagged(key) };
+});
+
+/* ---- Audit category tables ----
+   One table per category of evidence (Vehicles first): a heading from the
+   standard, then rows — Item | Relevant standards | Record | Supporting
+   documents. A row is something you actually fill in or upload; the standards
+   column lists EVERY clause it satisfies, across Part 1, Annex A and Part 2 (a
+   row's home is its Annex A clause where there is one). Status text comes from
+   the row's SANS1475_LINKS entry, so it is the same live figure the clause
+   lists show. Supporting documents are collected automatically from records
+   already in the app (autoDocs) plus anything uploaded straight to the row,
+   which lives in `docs` on the row's sans1475Checklist doc. */
+function sans1475ClauseTitle(key){ const c = SANS1475_ALL_CLAUSES.find(x=>x[0]===key); return c ? c[1] : key; }
+// Part 2 reuses Part 1's clause numbers, so a Part 2 row is labelled "Pt 2 6.1.7".
+function categoryRowLabel(r){
+  const clauseKey = r.key || r.heading;
+  return `${sans1475IsPart2(clauseKey) ? 'Pt 2 ' : ''}${sans1475DisplayKey(clauseKey)} — ${r.title || sans1475ClauseTitle(clauseKey)}`;
+}
+// Everything about a row that comes from live data. The on-screen tables, the
+// per-tab and overall progress, and the printed pack all read this, so they can
+// never disagree about whether a row is documented.
+function categoryRowState(r){
+  const standards = r.standards || [r.key];
+  const rec = sans1475Cache.find(c=>c.clause===r.key);
+  // A row is in scope if ANY standard it satisfies applies to the declared
+  // facilities (a row can carry a Part 1 and a Part 2 clause with different scopes).
+  const inScope = standards.some(k=>sans1475ClauseInScope(k));
+  const manualNA = !!(rec && rec.status==='na');
+  // A row may bring its own status (r.status) where the clause's default
+  // "covered by" figure isn't the right one for what the row records.
+  const link = SANS1475_LINKS[r.key];
+  const st = r.status ? r.status() : (link && link.status ? link.status() : null);
+  const documented = r.status ? !!((st && st.documented) || (rec && (rec.notes || rec.fileURL || (rec.docs && rec.docs.length)))) : sans1475IsDocumented(r.key, rec);
+  // Documents in the Documents register that are tagged to any of this row's
+  // standards show up here too, so a procedure is uploaded once and appears
+  // wherever it applies.
+  const tagged = slDocsCoveringAny(standards).filter(e=>e.fileURL)
+    .map(e=>({ label:`${e.docRef ? e.docRef+' — ' : ''}${e.title || 'Document'}`, url:e.fileURL }));
+  // An evidence file attached on the clause's own form is kept and shown here —
+  // for every clause the row covers, not just its home clause.
+  const clauseFile = standards.map(k=>({ k, rec:sans1475Cache.find(c=>c.clause===k) })).filter(x=>x.rec && x.rec.fileURL)
+    .map(x=>({ label:`Evidence file (${sans1475ShortLabel(x.k)})`, url:x.rec.fileURL }));
+  const auto = (r.autoDocs ? r.autoDocs() : []).concat(clauseFile, tagged);
+  return { standards, rec, inScope, manualNA, na:!inScope || manualNA, st, documented, auto, manual:(rec && rec.docs) || [] };
+}
+function renderCategoryTable(wrapId, rows){
+  const wrap = document.getElementById(wrapId);
+  if(!wrap) return;
+  const head = `<div class="cat-head"><div>Item</div><div>Relevant standards</div><div>Record</div><div>Supporting documents</div></div>`;
+  wrap.innerHTML = head + rows.map(r=>{
+    if(r.headingText) return `<div class="cat-heading">${escapeHtml(r.headingText)}</div>`;
+    const label = escapeHtml(categoryRowLabel(r));
+    if(r.heading) return `<div class="cat-heading${sans1475ClauseInScope(r.heading)?'':' scope-na'}">${label}</div>`;
+    const s = categoryRowState(r);
+    const inScope = s.inScope, manualNA = s.manualNA;
+    const pill = s.na ? '<span class="pill">Not applicable</span>'
+      : (s.documented ? '<span class="pill pass">Documented</span>' : '<span class="pill due">No evidence yet</span>');
+    const statusText = s.st ? s.st.text : '';
+    const standards = s.standards.map(k=>`<span title="${escapeHtml(sans1475ClauseTitle(k))}">${escapeHtml(sans1475ShortLabel(k))}</span>`).join('');
+    const docLinks = s.auto.map(d=>`<a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">${escapeHtml(d.label)} &#8599;</a>`)
+      .concat(s.manual.map(d=>`<a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">${escapeHtml(d.name)} &#8599;<span class="cat-x" title="Remove" onclick="event.preventDefault(); event.stopPropagation(); removeCategoryDoc('${r.key}','${d.id}')">&times;</span></a>`)).join('');
+    return `<div class="cat-row${inScope?'':' scope-na'}" id="catrow-${r.key}">
+      <div data-label="Item">
+        <div class="cat-item">${label}</div>
+        <div style="margin-top:4px;">${pill}</div>
+        ${inScope ? `<span class="cat-link" onclick="toggleCategoryRowNA('${r.key}')">${manualNA ? 'Mark applicable' : 'Mark not applicable'}</span>` : ''}
+      </div>
+      <div data-label="Relevant standards"><div class="cat-std">${standards}</div></div>
+      <div data-label="Record">
+        <button class="btn secondary" style="padding:8px 10px; font-size:0.78rem;" onclick="${r.open}">${escapeHtml(r.openLabel || 'Open record')}</button>
+        ${(r.also || []).map(b=>`<button class="btn secondary" style="padding:8px 10px; font-size:0.78rem; margin-top:6px;" onclick="${b.onclick}">${escapeHtml(b.label)}</button>`).join('')}
+        ${statusText ? `<div class="cat-sub">${escapeHtml(statusText)}</div>` : ''}
+      </div>
+      <div data-label="Supporting documents" class="cat-docs">
+        ${docLinks || '<div class="cat-sub" style="margin:0 0 4px;">None yet</div>'}
+        <label class="cat-add">+ Add document<input type="file" accept="application/pdf,image/*" style="display:none;" onchange="uploadCategoryDoc('${r.key}', this)"></label>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function uploadCategoryDoc(key, input){
+  const file = input.files[0];
+  if(!file) return;
+  if(file.size > 15 * 1024 * 1024){ toast('That file is over 15 MB — choose a smaller one'); input.value = ''; return; }
+  try{
+    toast('Uploading…');
+    const rec = sans1475Cache.find(c=>c.clause===key);
+    const id = Date.now().toString(36);
+    const url = await uploadWorkshopFile(file, `company-files/${currentCompanyId}/sans1475/${sans1475SafeKey(key)}/docs/${id}.${fileExt(file)}`);
+    const docs = ((rec && rec.docs) || []).concat({ id, name:file.name, url, addedAt:toLocalISO(new Date()) });
+    await db.collection('sans1475Checklist').doc(sans1475DocId(key)).set({ companyId:currentCompanyId, clause:key, docs, updatedAt:firebase.firestore.FieldValue.serverTimestamp() }, {merge:true});
+    toast('Document added');
+  }catch(e){ toast('Error: ' + e.message); }
+  input.value = '';
+}
+async function removeCategoryDoc(key, id){
+  if(!confirm('Remove this document from the row? The file itself is not deleted.')) return;
+  const rec = sans1475Cache.find(c=>c.clause===key);
+  try{
+    await db.collection('sans1475Checklist').doc(sans1475DocId(key)).set({ companyId:currentCompanyId, clause:key, docs:((rec && rec.docs) || []).filter(d=>d.id!==id), updatedAt:firebase.firestore.FieldValue.serverTimestamp() }, {merge:true});
+  }catch(e){ toast('Error: ' + e.message); }
+}
+async function toggleCategoryRowNA(key){
+  const rec = sans1475Cache.find(c=>c.clause===key);
+  const na = !(rec && rec.status==='na');
+  try{
+    await db.collection('sans1475Checklist').doc(sans1475DocId(key)).set({ companyId:currentCompanyId, clause:key, status:na?'na':'', updatedAt:firebase.firestore.FieldValue.serverTimestamp() }, {merge:true});
+  }catch(e){ toast('Error: ' + e.message); }
+}
+
+// Vehicles category. Every purpose carries extinguishers and cylinders, so each
+// also satisfies A.6.4 (transportation of pressurizing cylinders) and Part 1 4.6.
+function vehicleDocs(purpose, kinds){
+  const out = [];
+  vehiclesCache.filter(v=>!purpose || v.purpose===purpose).forEach(v=>{
+    const reg = v.registrationNo || 'Vehicle';
+    if(kinds.includes('licence') && v.licenceDiskFileURL) out.push({ label:`${reg} — licence disk`, url:v.licenceDiskFileURL });
+    if(kinds.includes('approval') && v.approvalLetterFileURL) out.push({ label:`${reg} — approval letter`, url:v.approvalLetterFileURL });
+  });
+  return out;
+}
+const vehicleRow = (key, purpose, kinds)=>({
+  key, standards:[key, 'A-6.4', '4.6'],
+  open:`openVehiclesSection(${purpose ? `'${purpose}'` : 'null'})`, openLabel:'Open vehicles',
+  autoDocs:()=>vehicleDocs(purpose, kinds)
+});
+const VEHICLE_CATEGORY_ROWS = [
+  { heading:'A-8.2' },
+  vehicleRow('A-8.2.1', null, ['licence','approval']),
+  { heading:'A-8.2.2' },
+  vehicleRow('A-8.2.2.1', 'delivery', ['licence','approval']),
+  vehicleRow('A-8.2.3', 'maintenance', ['licence','approval']),
+  vehicleRow('A-8.2.4', 'mobileworkshop', ['licence','approval']),
+  { key:'A-8.2.5', standards:['A-8.2.5'], open:'openVehiclesSection(null)', openLabel:'Open vehicles', autoDocs:()=>vehicleDocs(null, ['licence']) }
+];
+
+// Employees category. Documents are collected from what each employee (or the
+// admin) has already uploaded, so this one row set replaces asking for them again.
+const EMPLOYEE_DOC_FIELDS = {
+  id:['idDocumentPhotoURL','ID document'], medical:['medicalCertPhotoURL','medical certificate'], contract:['employmentContractFileURL','employment contract'],
+  saqcc:['saqccCardPhotoURL','SAQCC card'], photo:['profilePhotoURL','photo'], training:['trainingCertificatePhotoURL','training certificate'], appointment:['appointmentLetterPhotoURL','appointment letter']
+};
+function employeeDocs(roles, kinds){
+  const out = [];
+  allStaffCache.filter(s=>s.active!==false && (!roles || roles.includes(s.role))).forEach(s=>{
+    kinds.forEach(k=>{ const [field, label] = EMPLOYEE_DOC_FIELDS[k]; if(s[field]) out.push({ label:`${s.name||'Employee'} — ${label}`, url:s[field] }); });
+  });
+  return out;
+}
+// Delegation: every non-trainee employee should have one active, non-trainee
+// delegate who is in charge when they are absent (set on the employee record).
+// A delegate who is a trainee is called out rather than counted.
+SL.delegations = ()=>{
+  const staff = slActiveStaff();
+  const need = staff.filter(s=>s.role!=='trainee');
+  const delegateOf = s => staff.find(d=>d.id===s.delegateId);
+  const n = need.filter(s=>{ const d = delegateOf(s); return d && d.role!=='trainee'; }).length;
+  const t = need.filter(s=>{ const d = delegateOf(s); return d && d.role==='trainee'; }).length;
+  return slStat(n>0, `${n} of ${need.length} employees have an active delegate${t ? `; ${t} ${t===1?'delegate is a':'delegates are'} trainee${t===1?'':'s'}` : ''}`);
+};
+const employeeRow = (key, standards, filter, kinds, roles, extra)=>Object.assign({
+  key, standards, open:`openEmployeesSection(${filter ? `'${filter}'` : 'null'})`, openLabel:'Open employees',
+  autoDocs:()=>employeeDocs(roles, kinds)
+}, extra||{});
+const EMPLOYEE_CATEGORY_ROWS = [
+  employeeRow('A-2', ['A-2'], null, [], null),
+  employeeRow('4.2', ['4.2','P2-4.2'], null, [], null, { open:"openModuleView('view-talks')", openLabel:'Open toolbox talks' }),
+  { heading:'A-3' },
+  employeeRow('A-3.1', ['A-3.1'], null, ['id','contract','medical'], null),
+  employeeRow('A-3.2', ['A-3.2'], null, ['saqcc','photo'], null),
+  employeeRow('A-3.4', ['A-3.4'], null, [], null, { open:"openModuleView('view-trainees')", openLabel:'Open trainees' }),
+  employeeRow('A-3.5', ['A-3.5'], null, [], null, { open:'openEmployeeSummaryReport()', openLabel:'Print register' }),
+  { heading:'A-3.3' },
+  employeeRow('A-3.3.1', ['A-3.3.1'], 'competent', ['appointment','saqcc'], ['competent']),
+  employeeRow('A-3.3.2', ['A-3.3.2'], 'trainee', ['training'], ['trainee']),
+  employeeRow('4.10', ['4.10','A-3.3'], 'delegations', ['appointment'], null, { title:'People — designation, authorities and delegate (who is in charge when absent)', status:SL.delegations })
+];
+
+// Tools & equipment category: hand tools, and the production control equipment
+// (scales, working and master gauges) with its annual calibration certificates
+// and weekly verification log. The calibration and weekly-verification records
+// live in their own screens; the row buttons go straight to them.
+function openToolsSection(){
+  const el = document.getElementById('toolsSection');
+  if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+}
+function calibrationDocs(){
+  return calCertsCache.filter(c=>c.certificateFileURL).map(c=>({ label:`${c.instrument||'Instrument'} — calibration certificate`, url:c.certificateFileURL }));
+}
+const TOOLS_CATEGORY_ROWS = [
+  { heading:'A-5' },
+  { key:'A-5.1', standards:['A-5.1','A-8.1'], open:'openToolsSection()', openLabel:'Open tools' },
+  { key:'A-5.2', standards:['A-5.2','A-8.1','5.3.4'], open:goTab('calibration'), openLabel:'Open calibration',
+    also:[SL_BTN.verification], autoDocs:calibrationDocs },
+  { heading:'A-8' },
+  { key:'A-8.1', standards:['A-8.1','A-5.1','A-5.2'], open:'openToolsSection()', openLabel:'Open tools',
+    also:[SL_BTN.calibration], autoDocs:calibrationDocs }
+];
+
+// Reconditioning & production category. The heart of it is one row: the
+// reconditioning jobs already satisfy A.6.2 (final inspection), 5.1.1, 5.1.2
+// (extent), 5.4 (records) and Part 2 5.1, 5.2 and 8, so they are listed once
+// against it. Procedures (docRow) are evidenced by documents tagged in the
+// Documents register; checklists open the clause's own checklist; the rest
+// point at records that already exist (per-unit pressure test and recharge,
+// condemned units, the materials log).
+const goDocsRegister = "openSans1475Form('A-7.2')";
+const docRow = (key, standards, extra)=>Object.assign({
+  key, standards, open:goDocsRegister, openLabel:'Open documents register', status:SL.documentsTaggedAny(standards)
+}, extra || {});
+const checklistRow = (key, extra)=>Object.assign({
+  key, standards:[key], open:`openSans1475Form('${key}')`, openLabel:'Open checklist',
+  status:()=>{
+    const def = sans1475ClauseChecklist(key) || [];
+    const rec = sans1475Cache.find(c=>c.clause===key);
+    // Count only items that are still on the checklist — a tick saved against an
+    // item since removed (e.g. the old 4.1 pressure-test / filling items) doesn't count.
+    const n = rec && rec.checklist ? def.filter(([k])=>rec.checklist[k]).length : 0;
+    return slStat(n>0, `${n}/${def.length} checklist items`);
+  }
+}, extra || {});
+function materialDocs(){
+  return slEntries('4.4').filter(e=>e.fileURL).map(e=>({ label:`${e.medType || 'Material'} — ${e.entryType || 'entry'}${e.batchNo ? ' (batch '+e.batchNo+')' : ''}`, url:e.fileURL }));
+}
+const RECON_CATEGORY_ROWS = [
+  { heading:'A-6' },
+  docRow('A-6.1', ['A-6.1']),
+  { key:'A-6.2', title:'Reconditioning jobs, final inspection and records',
+    standards:['A-6.2','5.1.1','5.1.2','5.4','P2-5.1','P2-5.2','P2-8'],
+    open:"openSans1475Form('5.1')", openLabel:'Open jobs', also:[SL_BTN.reconReport, SL_BTN.docs],
+    // A final-inspection procedure tagged to A.6.2 also counts (see SANS1475_LINKS['A-6.2']).
+    status:()=>{ const j = SL.jobs(), f = SANS1475_LINKS['A-6.2'].status(); return slStat(j.documented || f.documented, `${j.text}; ${f.text}`); } },
+  docRow('A-6.3', ['A-6.3'], { title:'Protection of product quality — procedure' }),
+  { key:'A-4', title:'Components, extinguishing mediums and discarded powder', standards:['A-4','4.4','4.7.2','5.5.2'],
+    open:"openSans1475Form('4.4')", openLabel:'Open materials log', autoDocs:materialDocs },
+  { heading:'5' },
+  docRow('5.1.3', ['5.1.3','P2-5.3'], { title:'Frequency of reconditioning — procedure' }),
+  docRow('5.1.5', ['5.1.5'], { title:'Topping-up of extinguishing medium — procedure' }),
+  { key:'5.1.6', title:'Conversion, repair and modification (register)', standards:['5.1.4','5.1.6','P2-5.4'],
+    open:"openSans1475Form('5.1.6')", openLabel:'Open register', status:SL.register('5.1.6','entry','entries') },
+  docRow('5.1.7', ['5.1.7','P2-6.1.1','P2-6.2.1','P2-6.3.1']),
+  docRow('5.1.8', ['5.1.8'], { title:'Re-coating of aluminum cylinders — procedure' }),
+  { heading:'5.2' },
+  checklistRow('5.2.1'), checklistRow('5.2.2'), checklistRow('5.2.3'), checklistRow('5.2.4'), checklistRow('5.2.5'), checklistRow('5.2.6'),
+  { key:'5.2.7', title:'Rejection and condemned units', standards:['5.2.7','5.2.8','5.3.5','P2-5.5'],
+    open:'openCondemnedUnitsSummaryReport()', openLabel:'Condemned units summary' },
+  { heading:'5.3' },
+  { key:'5.3.1', title:'Pressure testing — recorded on each unit', standards:['5.3','5.3.1','5.3.2.1','5.3.2.2','5.3.3'],
+    open:'openPressureTestAnalysisReport()', openLabel:'Pressure-test analysis' },
+  { heading:'4.8' },
+  checklistRow('4.8.2'), checklistRow('4.8.3'), checklistRow('4.8.4'), checklistRow('4.8.5'),
+  { heading:'5.5' },
+  { key:'5.5.1', title:'Recharging — recorded on each unit', standards:['5.5','5.5.1','5.5.4'],
+    open:"showView('view-sites')", openLabel:'Open sites (unit records)' },
+  docRow('5.5.3', ['5.5.3'], { title:'Control of cartridges (external type only) — procedure' })
+];
+
+// Facilities & health and safety category: the areas and services a servicing
+// business must have (Part 1 clause 4) and how its people are protected. The
+// checklists are the fillable part; photos of each area go in as supporting
+// documents. Part 2's facilities and protection-of-workmen clauses are the
+// same evidence, so they are listed against these rows rather than repeated.
+const FACILITIES_CATEGORY_ROWS = [
+  { headingText:'Facilities' },
+  checklistRow('4.1', { standards:['4.1','P2-4.1'] }),
+  checklistRow('4.3'),
+  checklistRow('4.5'),
+  checklistRow('4.7'),
+  checklistRow('4.8.1'),
+  { headingText:'Health and safety' },
+  { key:'4.9', title:'Protection of workmen — PPE register', standards:['4.9','P2-4.3'],
+    open:"openSans1475Form('4.9')", openLabel:'Open PPE register', status:SL.register('4.9','PPE item') }
+];
+
+// Labels & marking category. Label photos are uploaded once, in the 6.1
+// register, tagged by what the label is used on; the Part 2 label rows open the
+// same register with that equipment pre-selected and collect its photos.
+function labelDocs(tags){
+  return slLabels(tags).filter(e=>e.fileURL).map(e=>({ label:`${e.description || 'Label photo'}${e.photoDate ? ' ('+e.photoDate+')' : ''}`, url:e.fileURL }));
+}
+function entryDocs(clause){
+  return slEntries(clause).filter(e=>e.fileURL).map(e=>({ label:`${e.description || 'Photo'}${e.photoDate ? ' ('+e.photoDate+')' : ''}`, url:e.fileURL }));
+}
+const labelRow = (key, title, standards, tags)=>({
+  key, title, standards, open: tags.length===1 ? `openSans1475Form('6.1', {labelFor:'${tags[0]}'})` : "openSans1475Form('6.1')", openLabel:'Open label photos',
+  status:SL.labels(tags), autoDocs:()=>labelDocs(tags)
+});
+const LABELS_CATEGORY_ROWS = [
+  { headingText:'Extinguishers (Part 1 clause 6)' },
+  labelRow('6.1', 'Maintenance labels', ['6.1'], ['Extinguisher']),
+  { key:'6.2', title:'Pressure test labels', standards:['6.2'], open:"openSans1475Form('6.2')", openLabel:'Open label photos',
+    status:SL.register('6.2','label photo'), autoDocs:()=>entryDocs('6.2') },
+  { headingText:'Hose reels and hydrants (Part 2 clauses 6 and 7)' },
+  labelRow('P2-6.1.7', 'Maintenance labels and their positioning — hose reels', ['P2-6.1.7','P2-7.2.1'], ['Fire hose reel']),
+  labelRow('P2-6.2.6', 'Maintenance labels and their positioning — above-ground hydrants', ['P2-6.2.6','P2-7.2.2'], ['Above-ground hydrant']),
+  labelRow('P2-6.3.7', 'Service labels and their positioning — underground hydrants', ['P2-6.3.7','P2-7.2.3'], ['Underground hydrant']),
+  labelRow('P2-7.1', 'Maintenance labels — all hose reels and hydrants', ['P2-7.1'], ['Fire hose reel','Above-ground hydrant','Underground hydrant'])
+];
+
+// Hose reels & hydrants (Part 2 maintenance). The same five checks apply to hose
+// reels, above-ground hydrants and underground hydrants, so each check is one
+// row (one checklist) listing all three clauses instead of three rows; only
+// what is specific to a type (frame, hose, standpipe, enclosure, valve body) is
+// its own row. Each unit's day-to-day inspection is recorded under Sites.
+const hoseRow = (key, title, standards)=>checklistRow(key, {
+  title, standards, also:[{ label:'Open sites (unit records)', onclick:"showView('view-sites')" }]
+});
+const HOSE_CATEGORY_ROWS = [
+  { headingText:'Maintenance checks — hose reels, above-ground and underground hydrants' },
+  hoseRow('P2-6.1.3', 'Component parts', ['P2-6.1.3','P2-6.2.3','P2-6.3.4']),
+  hoseRow('P2-6.1.4', 'Water control fittings', ['P2-6.1.4','P2-6.2.4','P2-6.3.5']),
+  hoseRow('P2-6.1.6', 'Water seals', ['P2-6.1.6','P2-6.2.5','P2-6.3.6']),
+  hoseRow('P2-6.1.8', 'Sealing', ['P2-6.1.8','P2-6.2.7','P2-6.3.8']),
+  hoseRow('P2-6.1.9', 'Water supply', ['P2-6.1.9','P2-6.2.8','P2-6.3.9']),
+  { headingText:'Fire hose reels' },
+  hoseRow('P2-6.1.2', 'Frame and mounting bolts', ['P2-6.1.2']),
+  hoseRow('P2-6.1.5', 'Fire hose', ['P2-6.1.5']),
+  { headingText:'Above-ground hydrants' },
+  hoseRow('P2-6.2.2', 'Standpipe and valve body', ['P2-6.2.2']),
+  { headingText:'Underground hydrants' },
+  hoseRow('P2-6.3.2', 'Enclosure', ['P2-6.3.2']),
+  hoseRow('P2-6.3.3', 'Valve body', ['P2-6.3.3'])
+];
+
+// Documents & complaints category (Annex A.1 and A.7): the general procedure,
+// the complaints register, and the Documents register itself (which is also
+// where every procedure in the other categories is uploaded and tagged).
+function registerDocs(){
+  return slEntries('A-7.2').filter(e=>e.fileURL).map(e=>({ label:`${e.docRef ? e.docRef+' — ' : ''}${e.title || 'Document'}${e.version ? ' (v'+e.version+')' : ''}`, url:e.fileURL }));
+}
+function complaintDocs(){
+  return slEntries('A-7.1').filter(e=>e.fileURL).map(e=>({ label:`${e.complainant || 'Complaint'}${e.complaintDate ? ' ('+e.complaintDate+')' : ''}`, url:e.fileURL }));
+}
+const DOCUMENTS_CATEGORY_ROWS = [
+  { headingText:'General' },
+  docRow('A-1', ['A-1']),
+  { headingText:'Documentation (Annex A clause 7)' },
+  { key:'A-7.1', standards:['A-7.1'], open:"openSans1475Form('A-7.1')", openLabel:'Open complaints register',
+    status:SL.register('A-7.1','complaint'), autoDocs:complaintDocs },
+  { key:'A-7.2', title:'Reference documents and document control (documents register)', standards:['A-7.2','A-7.3'],
+    open:goDocsRegister, openLabel:'Open documents register', autoDocs:registerDocs,
+    status:()=>{ const n = slEntries('A-7.2').length; return slStat(n>0, `${slPlural(n,'document')} registered; ${SL.documentControl().text}`); } }
+];
+
+/* ---- The audit categories, progress and the clause lookup ----
+   AUDIT_CATEGORIES is the one list of category tabs. Progress is counted in ROWS
+   (things to fill in or upload) that are in scope and not marked not applicable —
+   not in clauses, since one row covers many clauses. The clause index is built
+   from the rows' standards, so "where do I record clause 5.3.4?" always agrees
+   with what the tables actually show. */
+const AUDIT_CATEGORIES = [
+  { tab:'employees',  name:'Employees',                   rows:EMPLOYEE_CATEGORY_ROWS },
+  { tab:'vehicles',   name:'Vehicles',                    rows:VEHICLE_CATEGORY_ROWS },
+  { tab:'tools',      name:'Tools & equipment',           rows:TOOLS_CATEGORY_ROWS },
+  { tab:'recon',      name:'Reconditioning & production', rows:RECON_CATEGORY_ROWS },
+  { tab:'facilities', name:'Facilities & safety',         rows:FACILITIES_CATEGORY_ROWS },
+  { tab:'labels',     name:'Labels & marking',            rows:LABELS_CATEGORY_ROWS },
+  { tab:'hose',       name:'Hose reels & hydrants',       rows:HOSE_CATEGORY_ROWS },
+  { tab:'docsreg',    name:'Documents & complaints',      rows:DOCUMENTS_CATEGORY_ROWS }
+];
+const auditCategoryByTab = tab => AUDIT_CATEGORIES.find(c=>c.tab===tab);
+function categoryProgress(cat){
+  const live = cat.rows.filter(r=>r.key).map(categoryRowState).filter(s=>!s.na);
+  return { done:live.filter(s=>s.documented).length, total:live.length };
+}
+function auditOverallProgress(){
+  return AUDIT_CATEGORIES.reduce((a,cat)=>{ const p = categoryProgress(cat); return { done:a.done+p.done, total:a.total+p.total }; }, { done:0, total:0 });
+}
+function renderAuditSummary(){
+  const el = document.getElementById('auditSummary');
+  if(!el) return;
+  const p = auditOverallProgress();
+  const pct = p.total ? Math.round(p.done / p.total * 100) : 0;
+  el.innerHTML = `<div class="card" style="padding:12px 14px;">
+    <div style="display:flex; justify-content:space-between; gap:10px; font-size:0.85rem;"><strong>Evidence on file</strong><span>${p.done} of ${p.total} applicable items</span></div>
+    <div style="height:6px; background:var(--paper-dim); border-radius:3px; margin-top:8px; overflow:hidden;"><div style="height:100%; width:${pct}%; background:var(--green);"></div></div>
+    <div class="hint" style="margin-top:6px;">Each item is a row on the tabs below; one row can cover many clauses. Compliance is the auditor's call — this only shows what is on file.</div>
+  </div>`;
+}
+// clause key -> the row (and tab) that covers it. First row wins where a
+// standard is listed on several (e.g. A.6.4 on every vehicle row).
+let auditClauseIndexCache = null;
+function auditClauseIndex(){
+  if(auditClauseIndexCache) return auditClauseIndexCache;
+  const idx = {};
+  AUDIT_CATEGORIES.forEach(cat=>cat.rows.forEach(r=>{
+    if(r.headingText) return;
+    if(r.heading){ if(!idx[r.heading]) idx[r.heading] = { tab:cat.tab, cat:cat.name, rowKey:null, rowTitle:null, row:null }; return; }
+    (r.standards || [r.key]).forEach(k=>{ if(!idx[k] || !idx[k].rowKey) idx[k] = { tab:cat.tab, cat:cat.name, rowKey:r.key, rowTitle:r.title || sans1475ClauseTitle(r.key), row:r }; });
+  }));
+  return auditClauseIndexCache = idx;
+}
+// "5.3.4" (Part 1 and Part 2), "A.8.2.5" / "a8.2" (Annex A), "pt 2 6.1.3" / "p2 6.1.3"
+// (Part 2 only), "pt 1 5.3" (Part 1 only), or any word in a clause title.
+function clauseFindMatches(input){
+  let q = (input || '').trim().toLowerCase();
+  if(!q) return [];
+  let part = null;
+  const p2 = q.match(/^(?:part\s*2|pt\s*2|p2)\s*[:\-]?\s*(.*)$/), p1 = q.match(/^(?:part\s*1|pt\s*1|p1)\s*[:\-]?\s*(.*)$/), an = q.match(/^(?:annex\s*)?a[\s.]*(\d[\d.]*)$/);
+  if(p2){ part = 'p2'; q = p2[1]; } else if(p1){ part = 'p1'; q = p1[1]; } else if(an){ part = 'annex'; q = an[1]; }
+  const isNumber = /^\d[\d.]*$/.test(q);
+  const partOf = key => sans1475IsAnnex(key) ? 'annex' : (sans1475IsPart2(key) ? 'p2' : 'p1');
+  const order = { p1:0, annex:1, p2:2 };
+  return SANS1475_ALL_CLAUSES.filter(([key,title])=>{
+    const kp = partOf(key);
+    if(part && kp!==part) return false;
+    if(isNumber){
+      const dk = sans1475DisplayKey(key).toLowerCase().replace(/^a\./,'');
+      if(!part && kp==='annex') return false;   // a bare number means Part 1 / Part 2; Annex A needs the "A."
+      return dk===q || dk.startsWith(q+'.');
+    }
+    return q.length>=3 && title.toLowerCase().includes(q);
+  }).sort((a,b)=>order[partOf(a[0])]-order[partOf(b[0])]).slice(0,15);
+}
+function renderClauseFind(){
+  const wrap = document.getElementById('clauseFindResults');
+  const input = document.getElementById('clauseFind');
+  if(!wrap || !input) return;
+  const q = input.value.trim();
+  if(!q){ wrap.innerHTML = ''; return; }
+  const matches = clauseFindMatches(q), idx = auditClauseIndex();
+  if(!matches.length){ wrap.innerHTML = `<div class="hint" style="margin:8px 0 0;">No clause matches “${escapeHtml(q)}”. Try a number such as 5.3.4, A.8.2.5 or Pt 2 6.1.3, or a word from the title.</div>`; return; }
+  wrap.innerHTML = matches.map(([key,title])=>{
+    const t = idx[key];
+    const where = t ? `→ ${escapeHtml(t.cat)}${t.rowTitle ? ' · '+escapeHtml(t.rowTitle) : ' (group heading)'}` : 'Group heading — evidenced by the clauses under it';
+    return `<div class="insp-row" ${t ? `onclick="goToClause('${key}')"` : 'style="cursor:default;"'}>
+      <div class="top"><span class="date">${escapeHtml(sans1475ShortLabel(key))} — ${escapeHtml(title)}</span></div>
+      <div class="sub">${where}</div>
+    </div>`;
+  }).join('');
+}
+function goToClause(key){
+  const t = auditClauseIndex()[key];
+  if(!t) return;
+  const input = document.getElementById('clauseFind');
+  if(input) input.value = '';
+  renderClauseFind();
+  setCompanyTab(t.tab);   // paints synchronously, so the row exists straight away
+  const el = t.rowKey ? document.getElementById('catrow-'+t.rowKey) : null;
+  if(el){
+    el.scrollIntoView({behavior:'smooth', block:'center'});
+    el.classList.add('cat-flash');
+    setTimeout(()=>el.classList.remove('cat-flash'), 2000);
+  }
+}
 
 /* ---- Reconditioning Jobs (clause 5.1, records kept per 5.4) ----
    In-workshop reconditioning is its own job, separate from a site
@@ -3088,7 +4004,8 @@ const RECON_CHECKLIST = [
   ['seals','O-rings and seals renewed'],
   ['recharged','Recharged with the correct extinguishing medium'],
   ['tested','Pressure and leak tested'],
-  ['reassembled','Reassembled and relabelled']
+  ['reassembled','Reassembled and relabelled'],
+  ['finalinspect','Final inspection carried out (including ±5% tolerance check)']   // Annex A.6.2
 ];
 let reconditioningJobsCache = [];
 let editingReconJobId = null;
@@ -3266,49 +4183,16 @@ async function openPressureTestAnalysisReport(){
     <div class="tablewrap"><table><thead><tr><th>Type</th><th>Serial</th><th>Site</th><th>Location</th><th>Due</th></tr></thead><tbody>${rowsFor(failed)}</tbody></table></div>`, 'view-audit');
 }
 
-function renderSans1475(wrapId, clauses){
-  const wrap = document.getElementById(wrapId);
-  if(!wrap) return;
-  wrap.innerHTML = clauses.map(([key,title])=>{
-    const rec = sans1475Cache.find(c=>c.clause===key);
-    const depth = (key.match(/\./g)||[]).length;
-    const na = rec && rec.status==='na';
-    const pill = na
-      ? `<span class="pill" style="margin:0;">Not applicable</span>`
-      : (sans1475IsDocumented(key, rec)
-        ? `<span class="pill pass" style="margin:0;">Documented</span>`
-        : `<span class="pill due" style="margin:0;">No evidence yet</span>`);
-    const metaBits = [];
-    if(rec && rec.fileURL) metaBits.push('evidence attached');
-    if(rec && rec.notes) metaBits.push(rec.notes);
-    const checklistDef = sans1475ClauseChecklist(key);
-    if(checklistDef){
-      const checked = (rec && rec.checklist) ? Object.keys(rec.checklist).filter(k=>rec.checklist[k]).length : 0;
-      metaBits.push(`${checked}/${checklistDef.length} checklist items`);
-    }
-    if(SANS1475_REGISTERS[key]){
-      const n = sans1475RegisterCache.filter(e=>e.clause===key).length;
-      metaBits.push(`${n} ${n===1?'entry':'entries'} logged`);
-    }
-    if(key==='5.1'){
-      metaBits.push(`${reconditioningJobsCache.length} reconditioning ${reconditioningJobsCache.length===1?'job':'jobs'}`);
-    }
-    return `<div class="card tech-card" onclick="openSans1475Form('${key}')" style="cursor:pointer; margin-left:${depth*14}px;">
-      <div>
-        <div class="name">${escapeHtml(sans1475DisplayKey(key))} — ${escapeHtml(title)}</div>
-        ${metaBits.length ? `<div class="meta">${escapeHtml(metaBits.join(' · '))}</div>` : ''}
-      </div>
-      ${pill}
-    </div>`;
-  }).join('');
-}
 let editingSans1475Clause = null;
-function openSans1475Form(clause){
+// `preset` ({fieldId: value}) pre-selects register fields — e.g. the label
+// photos row for hose reels opens the 6.1 register with "Fire hose reel" chosen.
+function openSans1475Form(clause, preset){
   editingSans1475Clause = clause;
   workshopPendingFiles = {};
   const title = (SANS1475_ALL_CLAUSES.find(c=>c[0]===clause) || [clause,''])[1];
   const rec = sans1475Cache.find(c=>c.clause===clause);
-  document.getElementById('sans1475FormTitle').textContent = `${sans1475IsPart2(clause)?'Part 2 · ':''}${sans1475DisplayKey(clause)} — ${title}`;
+  // 5.1 is a heading in the lists, but its page is where the reconditioning jobs live.
+  document.getElementById('sans1475FormTitle').textContent = clause==='5.1' ? '5.1 — Reconditioning jobs' : `${sans1475IsPart2(clause)?'Part 2 · ':''}${sans1475DisplayKey(clause)} — ${title}`;
   document.getElementById('sans1475Status').value = rec ? (rec.status||'') : '';
   document.getElementById('sans1475Notes').value = rec ? (rec.notes||'') : '';
   document.getElementById('sans1475FileInput').value = '';
@@ -3319,6 +4203,8 @@ function openSans1475Form(clause){
   const linksSection = document.getElementById('sans1475LinksSection');
   if(linksConfig){
     document.getElementById('sans1475LinksHint').textContent = linksConfig.hint;
+    const linkStatus = linksConfig.status ? linksConfig.status() : null;
+    document.getElementById('sans1475LinksStatus').textContent = linkStatus ? `Recorded in ${linksConfig.record}: ${linkStatus.text}${linkStatus.documented ? '.' : ' — nothing recorded yet.'}` : '';
     document.getElementById('sans1475LinksButtons').innerHTML = linksConfig.buttons.map(b=>`<button class="btn secondary" onclick="${b.onclick}">${escapeHtml(b.label)}</button>`).join('');
     linksSection.style.display = 'block';
   } else {
@@ -3329,6 +4215,7 @@ function openSans1475Form(clause){
   const checklistSection = document.getElementById('sans1475ChecklistSection');
   if(checklistDef){
     renderCheckboxList('sans1475ChecklistWrap', checklistDef, (rec && rec.checklist) || {});
+    document.getElementById('sans1475ChecklistDraft').textContent = sans1475ChecklistIsDraft(clause) ? SANS1475_DRAFT_NOTE : '';
     checklistSection.style.display = 'block';
   } else {
     checklistSection.style.display = 'none';
@@ -3341,6 +4228,8 @@ function openSans1475Form(clause){
     document.getElementById('sans1475RegisterHint').textContent = regConfig.hint;
     document.getElementById('sans1475RegisterFields').innerHTML = regConfig.fields.map(sans1475RegisterFieldHtml).join('');
     sans1475FillStaffSelects(regConfig);
+    sans1475FillClauseChecks(regConfig);
+    Object.entries(preset || {}).forEach(([fieldId, value])=>{ const el = document.getElementById(`s1475rf_${fieldId}`); if(el) el.value = value; });
     document.getElementById('sans1475EntryFileWrap').style.display = regConfig.entryFile ? 'block' : 'none';
     const entryFileInput = document.getElementById('sans1475EntryFileInput');
     if(entryFileInput) entryFileInput.value = '';
@@ -3403,6 +4292,17 @@ function renderSans1475RegisterList(){
     </div>`;
   }).join('');
 }
+// Checkbox list of every clause a document can evidence (the ones marked
+// `docs` in SANS1475_LINKS); ticked keys are saved comma-separated.
+function sans1475DocsCoverableClauses(){
+  return SANS1475_ALL_CLAUSES.filter(([key])=>SANS1475_LINKS[key] && SANS1475_LINKS[key].docs);
+}
+function sans1475FillClauseChecks(regConfig){
+  regConfig.fields.forEach(f=>{
+    if(f.type!=='clauseChecks') return;
+    renderCheckboxList(`s1475rf_${f.id}`, sans1475DocsCoverableClauses().map(([key,title])=>[key, `${sans1475ShortLabel(key)} — ${title}`]), {});
+  });
+}
 function sans1475FillStaffSelects(regConfig){
   regConfig.fields.forEach(f=>{
     if(f.type!=='staffSelect') return;
@@ -3421,8 +4321,9 @@ async function addSans1475RegisterEntry(){
   const payload = { companyId: currentCompanyId, clause, createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdByName: currentProfile.name || '' };
   let hasValue = false;
   config.fields.forEach(f=>{
-    const el = document.getElementById(`s1475rf_${f.id}`);
-    const v = el ? el.value.trim() : '';
+    let v;
+    if(f.type==='clauseChecks') v = Object.keys(collectCheckboxList(`s1475rf_${f.id}`)).join(',');
+    else { const el = document.getElementById(`s1475rf_${f.id}`); v = el ? el.value.trim() : ''; }
     payload[f.id] = v;
     if(v) hasValue = true;
   });
@@ -3435,7 +4336,8 @@ async function addSans1475RegisterEntry(){
       payload.fileURL = await uploadWorkshopFile(workshopPendingFiles.sans1475entry, `company-files/${currentCompanyId}/sans1475/${sans1475SafeKey(clause)}/${ref.id}.${fileExt(workshopPendingFiles.sans1475entry)}`);
     }
     await ref.set(payload);
-    config.fields.forEach(f=>{ const el = document.getElementById(`s1475rf_${f.id}`); if(el && f.type!=='select' && f.type!=='staffSelect') el.value = ''; });
+    config.fields.forEach(f=>{ const el = document.getElementById(`s1475rf_${f.id}`); if(el && f.type!=='select' && f.type!=='staffSelect' && f.type!=='clauseChecks') el.value = ''; });
+    sans1475FillClauseChecks(config);
     if(config.entryFile){ const fi = document.getElementById('sans1475EntryFileInput'); if(fi) fi.value=''; delete workshopPendingFiles.sans1475entry; }
     toast('Entry added');
   }catch(e){ toast('Error: ' + e.message); }
@@ -3483,7 +4385,60 @@ function openVehicleForm(id){
   setFileLink('vehLicenceFileLink', v && v.licenceDiskFileURL);
   setFileLink('vehApprovalFileLink', v && v.approvalLetterFileURL);
   document.getElementById('vehDeleteBtn').style.display = v ? 'block' : 'none';
+  const purposeSel = document.getElementById('vehPurpose');
+  purposeSel.innerHTML = '<option value="">— select —</option>' + VEHICLE_PURPOSES.map(([k,label])=>`<option value="${k}">${escapeHtml(label)}</option>`).join('');
+  purposeSel.value = v ? g('purpose') : (vehiclesFilter || '');   // a new vehicle added from a filtered section starts with that purpose
+  renderVehicleAssignmentHistory(v);
+  syncVehApprovalVisibility();
   showView('view-vehicle-form');
+}
+// Annex A.8.2 splits vehicles by purpose. The mobile-workshop approval only
+// applies to mobile workshops, so hide it otherwise — but keep it visible for
+// a vehicle that already has approval details, so nothing recorded is hidden.
+const VEHICLE_PURPOSES = [['delivery','Delivery vehicle'],['maintenance','Maintenance vehicle'],['mobileworkshop','Mobile workshop']];
+function vehiclePurposeLabel(k){ const p = VEHICLE_PURPOSES.find(x=>x[0]===k); return p ? p[1] : ''; }
+/* Assignment history. `assignments` on the vehicle is [{staffId, name, from, to}],
+   `to` blank meaning "still assigned". It is written automatically whenever the
+   assigned technician changes on save, so admins never keep it by hand. */
+function assignmentDays(a){
+  const end = a.to ? new Date(a.to+'T00:00:00') : new Date(toLocalISO(new Date())+'T00:00:00');
+  return Math.max(0, Math.round((end - new Date(a.from+'T00:00:00')) / 86400000));
+}
+function formatDuration(days){
+  if(days < 60) return `${days} day${days===1?'':'s'}`;
+  const months = Math.round(days/30.4);
+  return months < 24 ? `${months} months` : `${(months/12).toFixed(1)} years`;
+}
+function renderVehicleAssignmentHistory(v){
+  const wrap = document.getElementById('vehAssignHistory');
+  const list = (v && v.assignments) ? [...v.assignments].sort((a,b)=>(b.from||'').localeCompare(a.from||'')) : [];
+  wrap.innerHTML = list.length
+    ? `<label>Assignment history</label>` + list.map(a=>`<div class="kv"><span class="k">${escapeHtml(a.name||'Technician')}</span><span class="v">${escapeHtml(a.from)} → ${a.to ? escapeHtml(a.to) : 'present'} · ${formatDuration(assignmentDays(a))}</span></div>`).join('')
+    : '';
+}
+// Returns the vehicle's assignment list after this save: closes the open
+// assignment if the technician changed or was cleared, and opens a new one.
+function nextVehicleAssignments(existing, newTechId){
+  const today = toLocalISO(new Date());
+  const list = existing && existing.assignments ? existing.assignments.map(a=>({...a})) : [];
+  let open = list.find(a=>!a.to);
+  if(!open && existing && existing.assignedTechnicianId){   // vehicle predates the history — start it from when the vehicle was added
+    open = { staffId: existing.assignedTechnicianId, name: (allStaffCache.find(s=>s.id===existing.assignedTechnicianId)||{}).name||'', from: (existing.createdAt && existing.createdAt.toDate) ? toLocalISO(existing.createdAt.toDate()) : today, to:'' };
+    list.push(open);
+  }
+  if(open && open.staffId !== newTechId){ open.to = today; open = null; }
+  if(!open && newTechId){
+    list.push({ staffId:newTechId, name:(allStaffCache.find(s=>s.id===newTechId)||{}).name||'', from:today, to:'' });
+  }
+  return list;
+}
+function syncVehApprovalVisibility(){
+  const linkShown = id=>{ const a = document.getElementById(id); return a && a.style.display!=='none'; };
+  const show = document.getElementById('vehPurpose').value==='mobileworkshop'
+    || document.getElementById('vehApprovalRef').value.trim() || document.getElementById('vehApprovalExpiry').value
+    || linkShown('vehApprovalFileLink');
+  document.getElementById('vehApprovalWrap').style.display = show ? 'block' : 'none';
+  document.getElementById('vehApprovalFileWrap').style.display = show ? 'block' : 'none';
 }
 async function saveVehicle(){
   const registrationNo = document.getElementById('vehReg').value.trim();
@@ -3491,6 +4446,7 @@ async function saveVehicle(){
   const payload = {
     companyId: currentCompanyId, registrationNo,
     description: document.getElementById('vehDescription').value.trim(),
+    purpose: document.getElementById('vehPurpose').value || '',
     branchId: document.getElementById('vehBranch').value || '',
     assignedTechnicianId: document.getElementById('vehTechnician').value || '',
     licenceDiskExpiry: document.getElementById('vehLicenceExpiry').value || '',
@@ -3504,6 +4460,7 @@ async function saveVehicle(){
   };
   try{
     const ref = editingVehicleId ? db.collection('vehicles').doc(editingVehicleId) : db.collection('vehicles').doc();
+    payload.assignments = nextVehicleAssignments(editingVehicleId ? vehiclesCache.find(x=>x.id===editingVehicleId) : null, payload.assignedTechnicianId);
     if(!editingVehicleId){ payload.createdAt = firebase.firestore.FieldValue.serverTimestamp(); payload.active = true; }
     if(workshopPendingFiles.vehLicence || workshopPendingFiles.vehApproval) toast('Uploading…');
     if(workshopPendingFiles.vehLicence){
@@ -3627,6 +4584,9 @@ function openEmployeeCompliance(id){
     .sort((a,b)=>(a.name||'').localeCompare(b.name||''))
     .map(x=>`<option value="${x.id}">${escapeHtml(x.name||'')}</option>`).join('');
   delegateSel.value = s.delegateId || '';
+  onEmpDelegateChange();
+  const covers = employeesCoveredBy(id).map(x=>x.name);
+  document.getElementById('empCoversFor').textContent = covers.length ? `${s.name||'This person'} is the delegate for: ${covers.join(', ')}.` : '';
   ['empIdFileInput','empMedicalFileInput','empContractFileInput'].forEach(x=> document.getElementById(x).value = '');
   setFileLink('empIdFileLink', s.idDocumentPhotoURL);
   setFileLink('empMedicalFileLink', s.medicalCertPhotoURL);
@@ -3637,8 +4597,21 @@ function openEmployeeCompliance(id){
     : '';
   showView('view-employee-compliance');
 }
+// A trainee works under supervision, so being left in charge in someone's
+// absence is a red flag — warn on the form and again on save, but don't block
+// it (the admin knows their business).
+function empDelegateIsTrainee(){
+  const d = allStaffCache.find(x=>x.id===document.getElementById('empDelegate').value);
+  return d && d.role==='trainee' ? d : null;
+}
+function onEmpDelegateChange(){
+  const d = empDelegateIsTrainee();
+  document.getElementById('empDelegateWarn').textContent = d ? `⚠ ${d.name||'This person'} is a trainee. A trainee shouldn't normally be left in charge — choose a technician or competent person if you can.` : '';
+}
 async function saveEmployeeCompliance(){
   if(!editingEmployeeId) return;
+  const trainee = empDelegateIsTrainee();
+  if(trainee && !confirm(`${trainee.name||'This person'} is a trainee. A trainee shouldn't normally be left in charge when someone is absent. Save anyway?`)) return;
   const update = {
     branchId: document.getElementById('empBranch').value || '',
     saqccRegExpiry: document.getElementById('empSaqccExpiry').value || '',
@@ -3988,9 +4961,9 @@ async function deleteToolCheck(id){
 async function openCompliancePack(){
   toast('Building pack…');
   await loadCompanySettings();
-  let branches = [], vehicles = [], docs = [], staff = [], certs = [], training = { topics:[], roster:[], rows:[] }, tools = [], toolChecks = [], sans1475 = [], sans1475Registers = [], reconJobs = [];
+  let branches = [], vehicles = [], docs = [], staff = [], certs = [], training = { topics:[], roster:[], rows:[] }, tools = [], toolChecks = [], sans1475Registers = [], reconJobs = [];
   try{
-    const [b, v, d, s, cc, tc, tl, tk, sc, sr, rj] = await Promise.all([
+    const [b, v, d, s, cc, tc, tl, tk, sr, rj] = await Promise.all([
       db.collection('branches').where('companyId','==',currentCompanyId).get(),
       db.collection('vehicles').where('companyId','==',currentCompanyId).get(),
       db.collection('companyDocuments').where('companyId','==',currentCompanyId).get(),
@@ -3999,7 +4972,6 @@ async function openCompliancePack(){
       computeTrainingCompliance(),
       db.collection('tools').where('companyId','==',currentCompanyId).get(),
       db.collection('toolChecks').where('companyId','==',currentCompanyId).get(),
-      db.collection('sans1475Checklist').where('companyId','==',currentCompanyId).get(),
       db.collection('sans1475RegisterEntries').where('companyId','==',currentCompanyId).get(),
       db.collection('reconditioningJobs').where('companyId','==',currentCompanyId).get()
     ]);
@@ -4011,7 +4983,6 @@ async function openCompliancePack(){
     training = tc;
     tools = tl.docs.map(x=>({id:x.id, ...x.data()}));
     toolChecks = tk.docs.map(x=>({id:x.id, ...x.data()}));
-    sans1475 = sc.docs.map(x=>({id:x.id, ...x.data()}));
     sans1475Registers = sr.docs.map(x=>({id:x.id, ...x.data()}));
     reconJobs = rj.docs.map(x=>({id:x.id, ...x.data()}));
   }catch(e){ toast('Could not load: ' + e.message); return; }
@@ -4065,13 +5036,14 @@ async function openCompliancePack(){
     return `<tr>
       <td>${escapeHtml(x.registrationNo||'')}</td>
       <td>${escapeHtml(x.description||'—')}</td>
+      <td>${escapeHtml(vehiclePurposeLabel(x.purpose)||'—')}</td>
       <td>${escapeHtml(bn(x.branchId)||'—')}</td>
       <td>${t?escapeHtml(t.name):'—'}</td>
       <td>${expCell(x.licenceDiskExpiry)}</td>
       <td>${escapeHtml(x.mobileWorkshopApprovalRef||'—')}</td>
       <td>${expCell(x.mobileWorkshopApprovalExpiry)}</td>
     </tr>`;
-  }).join('') : `<tr><td colspan="7">No vehicles recorded.</td></tr>`;
+  }).join('') : `<tr><td colspan="8">No vehicles recorded.</td></tr>`;
 
   const brRows = branches.length ? branches.map(x=>`<tr>
     <td>${escapeHtml(x.name||'')}</td>
@@ -4132,27 +5104,19 @@ async function openCompliancePack(){
     </tr>`;
   }).join('') : `<tr><td colspan="5">No tools registered.</td></tr>`;
 
-  const sans1475RowsFor = clauses => clauses.map(([key,title])=>{
-    const rec = sans1475.find(x=>x.clause===key);
-    const applicability = rec && rec.status==='na' ? 'Not applicable' : 'Applicable';
-    const hasRegisterEntries = !!(SANS1475_REGISTERS[key] && sans1475Registers.some(x=>x.clause===key));
-    const checklistDef = sans1475ClauseChecklist(key);
-    const checklistHtml = checklistDef ? checklistUL(checklistDef, (rec && rec.checklist) || {}) : '—';
-    const documented = !!(rec && (rec.notes || rec.fileURL || (rec.checklist && Object.keys(rec.checklist).length))) || hasRegisterEntries;
-    return `<tr>
-      <td>${escapeHtml(sans1475DisplayKey(key))}</td>
-      <td>${escapeHtml(title)}</td>
-      <td>${escapeHtml(applicability)}</td>
-      <td>${escapeHtml((rec && rec.notes) || '—')}</td>
-      <td>${rec && rec.fileURL ? 'Yes' : 'No'}</td>
-      <td>${documented ? 'Yes' : 'No'}</td>
-      <td>${checklistHtml}</td>
-    </tr>`;
-  }).join('');
-  const sans1475Rows = sans1475RowsFor(SANS1475_CLAUSES);
-  const sans1475P2Rows = sans1475RowsFor(SANS1475_P2_CLAUSES);
+  // Row state is read from the live audit caches — the pack is opened from the
+  // Audit tab, whose listeners keep them current.
+  const overallProgress = auditOverallProgress();
+  const declaredFacilityNames = FACILITIES.filter(([k])=>hasFacility(k)).map(f=>f[1]);
+  const facilitiesLine = facilitiesDeclared()
+    ? `Administration / office${declaredFacilityNames.length?(', '+declaredFacilityNames.join(', ')):''}`
+    : 'Not declared — all clauses are shown as applicable';
 
   const sans1475RegisterSections = Object.entries(SANS1475_REGISTERS).map(([clause,config])=>{
+    if(!sans1475ClauseInScope(clause)){
+      return `<h3 style="margin-top:18px; font-size:0.95rem;">${escapeHtml(config.title)} (${sans1475IsPart2(clause)?'Part 2 ':''}clause ${escapeHtml(sans1475DisplayKey(clause))})</h3>
+      ${scopeNoteHtml(sans1475RequiredFacilities(clause))}`;
+    }
     const entries = sans1475Registers.filter(x=>x.clause===clause)
       .sort((a,b)=>((b.createdAt&&b.createdAt.seconds)||0)-((a.createdAt&&a.createdAt.seconds)||0));
     const rows = entries.length ? entries.map(x=>{
@@ -4168,7 +5132,7 @@ async function openCompliancePack(){
 
   showReport('Company compliance pack', `${letterheadHTML(co)}
     <h2 style="margin-top:16px; font-size:1rem;">Company Compliance Pack — SANS 1475 servicing organisation</h2>
-    <div class="meta"><strong>Generated:</strong> ${today}</div>
+    <div class="meta"><strong>Generated:</strong> ${today}<br><strong>Declared facilities:</strong> ${escapeHtml(facilitiesLine)}</div>
     ${alertBlock}
     <h3 style="margin-top:18px; font-size:0.95rem;">Company documents</h3>
     <div class="tablewrap"><table>
@@ -4181,16 +5145,19 @@ async function openCompliancePack(){
       <tbody>${empRows}</tbody>
     </table></div>
     <h3 style="margin-top:18px; font-size:0.95rem;">Service vehicles</h3>
+    ${scopeNoteHtml(COMPANY_TAB_FACILITIES.vehicles)}
     <div class="tablewrap"><table>
-      <thead><tr><th>Registration</th><th>Description</th><th>Workshop</th><th>Technician</th><th>Licence expiry</th><th>Approval ref</th><th>Approval expiry</th></tr></thead>
+      <thead><tr><th>Registration</th><th>Description</th><th>Purpose</th><th>Workshop</th><th>Technician</th><th>Licence expiry</th><th>Approval ref</th><th>Approval expiry</th></tr></thead>
       <tbody>${vehRows}</tbody>
     </table></div>
     <h3 style="margin-top:18px; font-size:0.95rem;">Workshops / branches</h3>
+    ${scopeNoteHtml(COMPANY_TAB_FACILITIES.workshops)}
     <div class="tablewrap"><table>
       <thead><tr><th>Name</th><th>Address</th><th>Mark Permit no.</th><th>Issued</th><th>Expiry</th></tr></thead>
       <tbody>${brRows}</tbody>
     </table></div>
     <h3 style="margin-top:18px; font-size:0.95rem;">Calibration — reference instruments (SANAS-accredited)</h3>
+    ${scopeNoteHtml(COMPANY_TAB_FACILITIES.calibration)}
     <div class="meta" style="margin-top:0;"><strong>Laboratory:</strong> ${escapeHtml(co.calibrationLabName||'—')}${co.calibrationLabAccreditationNo?(' (accreditation '+escapeHtml(co.calibrationLabAccreditationNo)+')'):''}</div>
     <div class="tablewrap"><table>
       <thead><tr><th>Instrument</th><th>Type</th><th>Laboratory</th><th>Certificate no.</th><th>Calibrated</th><th>Next due</th><th>Certificate on file</th></tr></thead>
@@ -4202,31 +5169,78 @@ async function openCompliancePack(){
       <tbody>${trainingRows}</tbody>
     </table></div>
     <h3 style="margin-top:18px; font-size:0.95rem;">Tools</h3>
+    ${scopeNoteHtml(COMPANY_TAB_FACILITIES.tools)}
     <div class="tablewrap"><table>
       <thead><tr><th>Tool</th><th>Serial</th><th>Held by</th><th>Last checked</th><th>Result</th></tr></thead>
       <tbody>${toolRows}</tbody>
     </table></div>
-    <h3 style="margin-top:18px; font-size:0.95rem;">SANS 1475 Part 1:2025 clause evidence register</h3>
-    <div class="meta" style="margin-top:0;">Applicability is self-declared by the business; compliance against each clause is determined by the SAQCC/SABS auditor, not recorded here.</div>
-    <div class="tablewrap"><table>
-      <thead><tr><th>Clause</th><th>Requirement</th><th>Applicability</th><th>Notes</th><th>Evidence on file</th><th>Documented</th><th>Checklist</th></tr></thead>
-      <tbody>${sans1475Rows}</tbody>
-    </table></div>
-    <h3 style="margin-top:18px; font-size:0.95rem;">SANS 1475 Part 2:2024 (fire hose reels and hydrants) clause evidence register</h3>
-    <div class="meta" style="margin-top:0;">Applicability is self-declared by the business; compliance against each clause is determined by the SAQCC/SABS auditor, not recorded here.</div>
-    <div class="tablewrap"><table>
-      <thead><tr><th>Clause</th><th>Requirement</th><th>Applicability</th><th>Notes</th><th>Evidence on file</th><th>Documented</th><th>Checklist</th></tr></thead>
-      <tbody>${sans1475P2Rows}</tbody>
-    </table></div>
+    <h2 style="margin-top:22px; font-size:1rem;">SANS 1475 evidence by category</h2>
+    <div class="meta" style="margin-top:0;"><strong>Evidence on file:</strong> ${overallProgress.done} of ${overallProgress.total} applicable items. Each item is something recorded once and counted against every clause listed beside it, across Part 1:2025, Annex A and Part 2:2024. Applicability follows the facilities declared above; compliance against each clause is determined by the SAQCC/SABS auditor, not recorded here. A clause-by-clause cross-reference follows at the end.</div>
+    ${packCategorySections()}
+    <h2 style="margin-top:22px; font-size:1rem;">Registers</h2>
     ${sans1475RegisterSections}
     <h3 style="margin-top:18px; font-size:0.95rem;">Reconditioning jobs (clauses 5.1 &amp; 5.4)</h3>
+    ${scopeNoteHtml(['reconditioning'])}
     <div class="tablewrap"><table>
       <thead><tr><th>Serial</th><th>Type</th><th>Status</th><th>Received</th><th>Completed</th><th>Technician</th></tr></thead>
       <tbody>${reconJobs.length ? reconJobs.map(j=>{
         const tech = staff.find(s=>s.id===j.assignedTechnicianId);
         return `<tr><td>${escapeHtml(j.serial||'')}</td><td>${escapeHtml(typeLabel(j.equipmentType||''))}</td><td>${escapeHtml(reconStatusLabel(j.status))}</td><td>${escapeHtml(j.receivedDate||'—')}</td><td>${escapeHtml(j.completedDate||'—')}</td><td>${tech?escapeHtml(tech.name):'—'}</td></tr>`;
       }).join('') : '<tr><td colspan="6">No reconditioning jobs recorded.</td></tr>'}</tbody>
-    </table></div>`, 'view-audit');
+    </table></div>
+    ${packClauseXref()}`, 'view-audit');
+}
+// The category sections of the pack: one table per category, the printed form
+// of the on-screen tables (same row state, so the two can't disagree). Files
+// are named, not linked — they are held in the app.
+function packCategorySections(){
+  return AUDIT_CATEGORIES.map(cat=>{
+    const p = categoryProgress(cat);
+    const rows = cat.rows.map(r=>{
+      if(r.headingText) return `<tr><td colspan="4"><strong>${escapeHtml(r.headingText)}</strong></td></tr>`;
+      if(r.heading) return `<tr><td colspan="4"><strong>${escapeHtml(categoryRowLabel(r))}</strong></td></tr>`;
+      const s = categoryRowState(r);
+      const status = !s.inScope ? 'Not applicable — facility not declared' : (s.manualNA ? 'Not applicable' : (s.documented ? 'Documented' : 'No evidence yet'));
+      const def = sans1475ClauseChecklist(r.key);
+      const checklist = def && !s.na
+        ? (sans1475ChecklistIsDraft(r.key) ? `<em>${escapeHtml(SANS1475_DRAFT_NOTE)}</em>` : '') + checklistUL(def, (s.rec && s.rec.checklist) || {})
+        : '';
+      const docs = s.auto.map(d=>d.label).concat(s.manual.map(d=>d.name));
+      // Notes typed on any clause's own form still print, against the row that now covers it.
+      const notes = s.standards.map(k=>({ k, rec:sans1475Cache.find(c=>c.clause===k) })).filter(x=>x.rec && x.rec.notes)
+        .map(x=>`Notes (${escapeHtml(sans1475ShortLabel(x.k))}): ${escapeHtml(x.rec.notes)}`);
+      const evidence = [
+        s.st && s.st.text ? escapeHtml(s.st.text) : '',
+        notes.join('<br>'),
+        checklist,
+        docs.length ? 'Documents: ' + docs.map(escapeHtml).join('; ') : ''
+      ].filter(Boolean).join('<br>');
+      return `<tr><td>${escapeHtml(categoryRowLabel(r))}</td><td>${s.standards.map(k=>escapeHtml(sans1475ShortLabel(k))).join(', ')}</td><td>${escapeHtml(status)}</td><td>${evidence || '—'}</td></tr>`;
+    }).join('');
+    return `<h3 style="margin-top:18px; font-size:0.95rem;">${escapeHtml(cat.name)} — ${p.done} of ${p.total} items on file</h3>
+    ${scopeNoteHtml(COMPANY_TAB_FACILITIES[cat.tab])}
+    <div class="tablewrap"><table>
+      <thead><tr><th>Item</th><th>Relevant standards</th><th>Status</th><th>Evidence</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  }).join('');
+}
+// Every clause in the three parts, and the row that covers it — the printed
+// counterpart of the "find a clause" lookup.
+function packClauseXref(){
+  const idx = auditClauseIndex();
+  const rows = SANS1475_ALL_CLAUSES.filter(c=>!(c[2] && c[2].heading)).map(([key,title])=>{
+    const t = idx[key];
+    const manualNA = !!(t && t.row && categoryRowState(t.row).manualNA);
+    const applicability = !sans1475ClauseInScope(key) ? `Not applicable — facility not declared (${facilityNames(sans1475RequiredFacilities(key))})` : (manualNA ? 'Not applicable' : 'Applicable');
+    return `<tr><td>${escapeHtml(sans1475ShortLabel(key))}</td><td>${escapeHtml(title)}</td><td>${escapeHtml(applicability)}</td><td>${t ? escapeHtml(t.cat + (t.rowTitle ? ' — ' + t.rowTitle : '')) : '—'}</td></tr>`;
+  }).join('');
+  return `<h2 style="margin-top:22px; font-size:1rem;">Clause cross-reference</h2>
+    <div class="meta" style="margin-top:0;">Every clause of SANS 1475 Part 1:2025 (including Annex A) and Part 2:2024, and where its evidence is recorded above.</div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Clause</th><th>Requirement</th><th>Applicability</th><th>Covered in</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
 }
 
 function renderCompanyLogoPreview(){
