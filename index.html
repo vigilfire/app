@@ -1032,8 +1032,6 @@
       <p class="hint" style="margin:0 0 12px 0;">Your business's own compliance evidence for a SAQCC / SABS audit — separate from the client-facing site registers and certificates under Reports, and never sent to a client.</p>
       <div class="row" style="margin-bottom:12px;">
         <button class="btn secondary" onclick="openCompliancePack()">Print compliance pack</button>
-        <button class="btn secondary" onclick="openTrainingComplianceReport()">Print training compliance report</button>
-        <button class="btn secondary" onclick="openCondemnedUnitsSummaryReport()">Condemned units summary</button>
       </div>
       <div id="auditSummary"></div>
       <div class="card" style="padding:10px 12px;">
@@ -1421,7 +1419,13 @@
         <div class="hint">Choose a single site above. The site register here is the same one you generate from the site itself. The pressure test and recharge reports cover the equipment whose latest record shows that work was performed.</div>
         <label style="margin-top:16px;">Workshop reports</label>
         <button class="btn secondary" style="margin-top:6px;" onclick="openCalibrationReport('view-export')">Weekly verification register</button>
-        <div class="hint">Covers all test equipment, not a single site — also on the Verify tab, where technicians with the verification permission can print it too.</div>
+        <button class="btn secondary" id="reportTrainingBtn" style="margin-top:8px;" onclick="openTrainingComplianceReport()">Training compliance report</button>
+        <div class="hint">The verification register covers all test equipment, not a single site — also on the Verify tab, where technicians with the verification permission can print it too. The training compliance report shows every mandatory health &amp; safety topic for each technician and trainee, and what is overdue.</div>
+        <div id="reportsCompanyGroup">
+          <label style="margin-top:16px;">Company-wide reports</label>
+          <button class="btn secondary" style="margin-top:6px;" onclick="openCondemnedUnitsSummaryReport()">Condemned units summary</button>
+          <div class="hint">Every condemned unit across all sites, past and present, with the client notice and response for each.</div>
+        </div>
       </div>
       <div class="section-title"><h2>Recent emails</h2></div>
       <div id="emailLogList"><div class="empty">Choose a site above to see its email history.</div></div>
@@ -2021,7 +2025,7 @@ function showView(id){
   if(id==='view-technicians') renderTechnicians();
   if(id==='view-company') loadCompanySettings();
   if(id==='view-audit'){ loadCompanySettings(); startWorkshopFileListeners(); paintCompanyTab(); }
-  if(id==='view-export'){ refreshExport(); loadCompanySettings(); }
+  if(id==='view-export'){ refreshExport(); loadCompanySettings(); applyReportModules(); }
   if(id==='view-calibration') renderCalibrationView();
   if(id==='view-trainees') renderTrainees();
   if(id==='view-trainee-detail') renderTraineeDetail();
@@ -3404,7 +3408,7 @@ const SL_BTN = {
   employees:     { label:'View employees', onclick:goTab('employees') },
   employeeSummary:{ label:'Print employee summary', onclick:'openEmployeeSummaryReport()' },
   talks:         { label:'Open toolbox talks', onclick:"openModuleView('view-talks')" },
-  trainingReport:{ label:'Print training compliance report', onclick:'openTrainingComplianceReport()' },
+  trainingReport:{ label:'Print training compliance report', onclick:"openTrainingComplianceReport('view-audit')" },
   trainees:      { label:'View trainees', onclick:"openModuleView('view-trainees')" },
   tools:         { label:'View tools', onclick:goTab('tools') },
   calibration:   { label:'View calibration', onclick:goTab('calibration') },
@@ -3412,7 +3416,7 @@ const SL_BTN = {
   vehicles:      { label:'View service vehicles', onclick:goTab('vehicles') },
   jobs:          { label:'Go to reconditioning jobs (clause 5.1)', onclick:"openSans1475Form('5.1')" },
   reconReport:   { label:'Print reconditioning register', onclick:'openReconditioningReport()' },
-  condemned:     { label:'Condemned units summary', onclick:'openCondemnedUnitsSummaryReport()' },
+  condemned:     { label:'Condemned units summary', onclick:"openCondemnedUnitsSummaryReport('view-audit')" },
   ppe:           { label:'Go to PPE register (clause 4.9)', onclick:"openSans1475Form('4.9')" },
   materials:     { label:'Go to materials & components log (clause 4.4)', onclick:"openSans1475Form('4.4')" },
   labels:        { label:'Go to label photos (clause 6.1)', onclick:"openSans1475Form('6.1')" },
@@ -3712,7 +3716,7 @@ const employeeRow = (key, standards, filter, kinds, roles, extra)=>Object.assign
 }, extra||{});
 const EMPLOYEE_CATEGORY_ROWS = [
   employeeRow('A-2', ['A-2'], null, [], null),
-  employeeRow('4.2', ['4.2','P2-4.2'], null, [], null, { open:"openModuleView('view-talks')", openLabel:'Open toolbox talks' }),
+  employeeRow('4.2', ['4.2','P2-4.2'], null, [], null, { open:"openModuleView('view-talks')", openLabel:'Open toolbox talks', also:[SL_BTN.trainingReport] }),
   { heading:'A-3' },
   employeeRow('A-3.1', ['A-3.1'], null, ['id','contract','medical'], null),
   employeeRow('A-3.2', ['A-3.2'], null, ['saqcc','photo'], null),
@@ -3791,7 +3795,7 @@ const RECON_CATEGORY_ROWS = [
   { heading:'5.2' },
   checklistRow('5.2.1'), checklistRow('5.2.2'), checklistRow('5.2.3'), checklistRow('5.2.4'), checklistRow('5.2.5'), checklistRow('5.2.6'),
   { key:'5.2.7', title:'Rejection and condemned units', standards:['5.2.7','5.2.8','5.3.5','P2-5.5'],
-    open:'openCondemnedUnitsSummaryReport()', openLabel:'Condemned units summary' },
+    open:"openCondemnedUnitsSummaryReport('view-audit')", openLabel:'Condemned units summary' },
   { heading:'5.3' },
   { key:'5.3.1', title:'Pressure testing — recorded on each unit', standards:['5.3','5.3.1','5.3.2.1','5.3.2.2','5.3.3'],
     open:'openPressureTestAnalysisReport()', openLabel:'Pressure-test analysis' },
@@ -4962,6 +4966,11 @@ async function openCompliancePack(){
   toast('Building pack…');
   await loadCompanySettings();
   let branches = [], vehicles = [], docs = [], staff = [], certs = [], training = { topics:[], roster:[], rows:[] }, tools = [], toolChecks = [], sans1475Registers = [], reconJobs = [];
+  // Mandatory training data (topics, talks, attendance) belongs to the Workshop
+  // module, not Auditing. A company with Audit but no Workshop module must still
+  // get its pack, so that section is skipped — or, if the module is on but the
+  // load fails, replaced by a note — instead of the whole pack failing to build.
+  let trainingNote = hasWorkshopModule() ? '' : 'Not applicable — mandatory training records are part of the Workshop module, which isn’t switched on for this company.';
   try{
     const [b, v, d, s, cc, tc, tl, tk, sr, rj] = await Promise.all([
       db.collection('branches').where('companyId','==',currentCompanyId).get(),
@@ -4969,7 +4978,7 @@ async function openCompliancePack(){
       db.collection('companyDocuments').where('companyId','==',currentCompanyId).get(),
       db.collection('technicians').where('companyId','==',currentCompanyId).get(),
       db.collection('calibrationCertificates').where('companyId','==',currentCompanyId).get(),
-      computeTrainingCompliance(),
+      trainingNote ? Promise.resolve(null) : computeTrainingCompliance().catch(e=>{ trainingNote = 'Training records could not be loaded (' + e.message + ').'; return null; }),
       db.collection('tools').where('companyId','==',currentCompanyId).get(),
       db.collection('toolChecks').where('companyId','==',currentCompanyId).get(),
       db.collection('sans1475RegisterEntries').where('companyId','==',currentCompanyId).get(),
@@ -4980,7 +4989,7 @@ async function openCompliancePack(){
     docs = d.docs.map(x=>({id:x.id, ...x.data()}));
     staff = s.docs.map(x=>({id:x.id, ...x.data()}));
     certs = cc.docs.map(x=>({id:x.id, ...x.data()}));
-    training = tc;
+    if(tc) training = tc;
     tools = tl.docs.map(x=>({id:x.id, ...x.data()}));
     toolChecks = tk.docs.map(x=>({id:x.id, ...x.data()}));
     sans1475Registers = sr.docs.map(x=>({id:x.id, ...x.data()}));
@@ -5164,10 +5173,10 @@ async function openCompliancePack(){
       <tbody>${certRows}</tbody>
     </table></div>
     <h3 style="margin-top:18px; font-size:0.95rem;">Mandatory health &amp; safety training</h3>
-    <div class="tablewrap"><table>
+    ${trainingNote ? `<div class="meta" style="margin-top:0;">${escapeHtml(trainingNote)}</div>` : `<div class="tablewrap"><table>
       <thead><tr><th>Topic</th><th>Name</th><th>Role</th><th>Last completed</th><th>Next due</th><th>Status</th></tr></thead>
       <tbody>${trainingRows}</tbody>
-    </table></div>
+    </table></div>`}
     <h3 style="margin-top:18px; font-size:0.95rem;">Tools</h3>
     ${scopeNoteHtml(COMPANY_TAB_FACILITIES.tools)}
     <div class="tablewrap"><table>
@@ -8022,6 +8031,15 @@ function showReport(title, innerHTML, backView){
   document.getElementById('reportContent').innerHTML = `<div class="cert">${innerHTML}</div>`;
   showView('view-report');
 }
+// The training report reads toolbox-talk data (Workshop module) and the
+// condemned units summary reads sites and equipment (Client module); neither
+// needs the Auditing module, so they live under Reports for any company that has
+// the module its data belongs to. Hide the buttons for one that doesn't.
+function applyReportModules(){
+  const t = document.getElementById('reportTrainingBtn'), c = document.getElementById('reportsCompanyGroup');
+  if(t) t.style.display = hasWorkshopModule() ? '' : 'none';
+  if(c) c.style.display = hasClientModule() ? '' : 'none';
+}
 function reportSiteId(){
   const v = document.getElementById('exportSiteFilter').value;
   return (v && v !== 'all') ? v : null;
@@ -8539,11 +8557,13 @@ async function loadTrainingCompliance(){
     </table>
   </div>`;
 }
-// Standalone printable version of the same compliance data, launched from the
-// Audit tab — mandatory training is a required record, so it belongs in the
-// audit package alongside Company Documents/Employees/Vehicles/Workshops/
-// Calibration, not just the on-screen table under Talks.
-async function openTrainingComplianceReport(){
+// Standalone printable version of the same compliance data. It is offered in two
+// places: under Reports (any company with the Workshop module — no Audit module
+// needed) and on the Audit tab's Employees training row. `backView` is where the
+// report's Back returns to, so each entry point lands back where it started;
+// the Audit tab passes 'view-audit', Reports passes nothing.
+async function openTrainingComplianceReport(backView){
+  if(!hasWorkshopModule()){ toast('Training records are part of the Workshop module, which isn\'t switched on for your company'); return; }
   toast('Building report…');
   await loadCompanySettings();
   let topics, roster, rows;
@@ -8572,16 +8592,19 @@ async function openTrainingComplianceReport(){
     <div class="tablewrap"><table>
       <thead><tr><th>Topic</th><th>Name</th><th>Role</th><th>Last completed</th><th>Next due</th><th>Status</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
-    </table></div>`, 'view-audit');
+    </table></div>`, backView || 'view-export');
 }
 
-/* ---------- Condemned units summary (audit record) ----------
+/* ---------- Condemned units summary ----------
    Company-wide, every condemned unit past or present — not just the ones
    still awaiting a response — so this stays the permanent record of what was
    sent to each client and how they responded. Shares its status wording with
    the equipment form's own status line via condemnedResponseStatus(), so the
-   two can never drift apart. */
-async function openCondemnedUnitsSummaryReport(){
+   two can never drift apart. Offered under Reports (Client module — it reads
+   sites and equipment, not audit data) and on the Audit tab's rejection row;
+   `backView` is where Back returns to ('view-audit' from Audit, else Reports). */
+async function openCondemnedUnitsSummaryReport(backView){
+  if(!hasClientModule()){ toast('Condemned units are part of the Client Module, which isn\'t switched on for your company'); return; }
   toast('Building report…');
   await loadCompanySettings();
   let items = [];
@@ -8619,7 +8642,7 @@ async function openCondemnedUnitsSummaryReport(){
     <div class="tablewrap"><table>
       <thead><tr><th>Site</th><th>Equipment</th><th>Condemned</th><th>Reason</th><th>Client notice &amp; response</th></tr></thead>
       <tbody>${rows}</tbody>
-    </table></div>`, 'view-audit');
+    </table></div>`, backView || 'view-export');
 }
 
 /* ---------- Monthly responsible-person inspection (SANS 10105-1) ----------
