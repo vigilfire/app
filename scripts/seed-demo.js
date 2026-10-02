@@ -547,10 +547,10 @@ async function buildTraineeRecords(adminUid, techUid, traineeUid) {
     { daysBack: 110, type: "workshop", site: "Riverside Office Park", work: "Assisted with inspection and maintenance of 6x DCP units, observed pressure gauge checks." },
     { daysBack: 95, type: "on-the-job", site: "Riverside Office Park", work: "Carried out visual inspections under supervision; recorded findings on maintenance labels." },
     { daysBack: 80, type: "workshop", site: "Blue Harbour Warehouse", work: "Observed CO2 weight check procedure and cylinder handling safety precautions." },
-    { daysBack: 65, type: "on-the-job", site: "Blue Harbour Warehouse", work: "Assisted with de-pressurising and disassembly of a 9kg DCP unit for servicing." },
+    { daysBack: 65, type: "on-the-job", site: "Blue Harbour Warehouse", work: "Assisted with de-pressurising and disassembly of a 9kg DCP unit for maintenance." },
     { daysBack: 50, type: "workshop", site: "Riverside Office Park", work: "Practised internal/external cylinder inspection and identifying condemning criteria." },
-    { daysBack: 35, type: "on-the-job", site: "Riverside Office Park", work: "Assisted reassembly and re-pressurising of two extinguishers after service." },
-    { daysBack: 3, type: "workshop", site: "Blue Harbour Warehouse", work: "Observed final inspection and labelling of serviced units — awaiting witness sign-off." },
+    { daysBack: 35, type: "on-the-job", site: "Riverside Office Park", work: "Assisted reassembly and re-pressurising of two extinguishers after maintenance." },
+    { daysBack: 3, type: "workshop", site: "Blue Harbour Warehouse", work: "Observed final inspection and labelling of maintained units — awaiting witness sign-off." },
   ];
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
@@ -682,15 +682,17 @@ async function buildAuditData(techUid, competentUid, adminUid) {
     });
   }
 
+  // Only mass pieces are reference instruments; scales and gauges are
+  // production control equipment and are seeded as Production tools below.
   await db.collection("calibrationCertificates").doc().set({
-    companyId: COMPANY_ID, instrumentType: "master", instrument: "Master pressure gauge #1", instrumentSerial: "MPG-001",
+    companyId: COMPANY_ID, instrumentType: "masspieces", instrument: "Reference mass piece set", instrumentSerial: "RM-006",
     labName: "SANAS Test Lab (Pty) Ltd", labAccreditationNo: "T0999",
     calibrationDate: iso(monthsAgo(10)), nextDueDate: iso(monthsFromNow(2)),
     certificateNumber: "CAL-2025-0134", notes: "", certificateFileURL: "",
     updatedAt: ts(monthsAgo(10)), createdAt: ts(monthsAgo(10)),
   });
   await db.collection("calibrationCertificates").doc().set({
-    companyId: COMPANY_ID, instrumentType: "scale", instrument: "Digital platform scale", instrumentSerial: "SCL-014",
+    companyId: COMPANY_ID, instrumentType: "masspieces", instrument: "Reference mass piece 20 kg", instrumentSerial: "RM-007",
     labName: "SANAS Test Lab (Pty) Ltd", labAccreditationNo: "T0999",
     calibrationDate: iso(monthsAgo(14)), nextDueDate: iso(monthsAgo(2)),
     certificateNumber: "CAL-2024-0876", notes: "Overdue for renewal.", certificateFileURL: "",
@@ -705,19 +707,22 @@ async function buildAuditData(techUid, competentUid, adminUid) {
       equipment: i % 2 === 0 ? "Working pressure gauge WG-02" : "Digital platform scale",
       reference: "Master pressure gauge MPG-001", reading: isFail ? "off by 4%" : "within tolerance",
       deviation: isFail ? "4%" : "<1%", result: isFail ? "fail" : "pass",
-      action: isFail ? "Gauge withdrawn from service, replaced with spare, workshop notified for recalibration." : "",
+      action: isFail ? "Gauge withdrawn from use, replaced with spare, workshop notified for recalibration." : "",
       technicianName: TECH_NAME, technicianSaqcc: TECH_SAQCC,
       createdBy: techUid, companyId: COMPANY_ID, createdAt: ts(checkDate),
     });
   }
 
+  // ownerType: workshop → Workshop tools, technician → Maintenance vehicle
+  // tools, production → Production tools (production control equipment).
   const tools = [
-    ["Hydrostatic low-pressure test unit", "workshop", "HLP-2201"],
-    ["Acceptable high-pressure test unit", "workshop", "HHP-1187"],
+    ["Hydrostatic low-pressure test unit", "production", "HLP-2201"],
+    ["Acceptable high-pressure test unit", "production", "HHP-1187"],
     ["2mm sieve", "workshop", "SV-004"],
     ["Drying cabinet", "workshop", "DC-002"],
     ["Inspection light", "workshop", "IL-011"],
-    ["Calibrated reference masspieces set", "workshop", "RM-006"],
+    ["Digital platform scale", "production", "SCL-014"],
+    ["Master pressure gauge #1", "production", "MPG-001"],
     ["Massmeter (0.1kg accuracy)", "technician", "MM-0.1-009"],
   ];
   const toolIds = [];
@@ -725,9 +730,9 @@ async function buildAuditData(techUid, competentUid, adminUid) {
     const ref = db.collection("tools").doc();
     await ref.set({
       companyId: COMPANY_ID, name, ownerType, serial,
-      branchId: ownerType === "workshop" ? branchId : "",
+      branchId: ownerType !== "technician" ? branchId : "",
       assignedTechnicianId: ownerType === "technician" ? techUid : "",
-      responsibleTechnicianId: ownerType === "workshop" ? techUid : "",
+      responsibleTechnicianId: ownerType !== "technician" ? techUid : "",
       notes: "", updatedAt: ts(NOW), createdAt: ts(monthsAgo(18)), active: true,
     });
     toolIds.push({ id: ref.id, name });
@@ -850,8 +855,8 @@ async function buildSans1475Data(adminUid, techUid, competentUid) {
   await entry("6.2", { description: "Pressure test label, current design", photoDate: iso(monthsAgo(2)), notes: "" }, monthsAgo(2));
 
   // Complaints register (Annex A.7.1): one closed, one still open.
-  await entry("A-7.1", { complaintDate: iso(monthsAgo(3)), complainant: "Riverside Office Park", reference: "Cert CM-0412", description: "Extinguisher on the 3rd floor found without its tamper seal after service.", actionTaken: "Revisited within 24 hours, seal fitted and unit re-inspected.", staffId: competentUid, status: "Closed", closedDate: iso(daysAgo(87)) }, monthsAgo(3));
-  await entry("A-7.1", { complaintDate: iso(daysAgo(6)), complainant: "Bellville Depot", reference: "Cert CM-0519", description: "Service certificate issued with the wrong serial number.", actionTaken: "Corrected certificate requested from the workshop.", staffId: techUid, status: "Open", closedDate: "" }, daysAgo(6));
+  await entry("A-7.1", { complaintDate: iso(monthsAgo(3)), complainant: "Riverside Office Park", reference: "Cert CM-0412", description: "Extinguisher on the 3rd floor found without its tamper seal after maintenance.", actionTaken: "Revisited within 24 hours, seal fitted and unit re-inspected.", staffId: competentUid, status: "Closed", closedDate: iso(daysAgo(87)) }, monthsAgo(3));
+  await entry("A-7.1", { complaintDate: iso(daysAgo(6)), complainant: "Bellville Depot", reference: "Cert CM-0519", description: "Maintenance certificate issued with the wrong serial number.", actionTaken: "Corrected certificate requested from the workshop.", staffId: techUid, status: "Open", closedDate: "" }, daysAgo(6));
 
   // Documents register (Annex A.7.2 / A.7.3): one row per procedure, tagged with
   // the clauses it covers so it shows up against each of them. 5.1.5, 5.5.3 and

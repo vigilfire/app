@@ -583,7 +583,7 @@
         </select>
         <div class="hint" id="monthlyCategoryHint">Informational only — tag a site this way if it needs a monthly SANS 10105-1 site-control check. Who actually performs it is set below, under "Assign competent persons", separately from who's assigned for maintenance.</div>
         <label>Assign technicians</label>
-        <div class="hint" style="margin-top:0;">For maintenance and equipment servicing only.</div>
+        <div class="hint" style="margin-top:0;">For equipment maintenance only.</div>
         <div id="assignTechList" class="card" style="background:var(--paper); padding:10px 14px;"></div>
         <label>Assign competent persons</label>
         <div class="hint" style="margin-top:0;">For the monthly SANS 10105-1 site-control check only — kept completely separate from maintenance access. A Competent Person assigned here never sees this site's equipment or maintenance screens.</div>
@@ -862,7 +862,7 @@
       <div class="card">
         <label style="margin-top:0;">Role</label>
         <select id="techRole" onchange="onTechRoleChange()">
-          <option value="technician">Technician — SANS 1475 maintenance &amp; servicing</option>
+          <option value="technician">Technician — SANS 1475 maintenance</option>
           <option value="competent">Competent Person — SANS 10105-1 monthly site-control checks only</option>
         </select>
         <div class="hint" id="techRoleHint">A Competent Person has no access to equipment, maintenance or the register/certificate — only the monthly check for whichever sites they're assigned to, kept completely separate from technician access.</div>
@@ -1067,7 +1067,7 @@
         <button class="btn" style="margin-top:12px;" onclick="openBranchForm()">+ Add workshop</button>
       </div>
       <div id="companyTab-calibration" style="display:none;">
-        <p class="hint" style="margin:0 0 10px;">The <strong>annual</strong> calibration of the workshop's reference instruments (master gauge, test weights) by a SANAS-accredited laboratory. This is separate from the weekly verification log on the Verify tab.</p>
+        <p class="hint" style="margin:0 0 10px;">The <strong>annual</strong> calibration of the workshop's reference instruments — the <strong>mass pieces (reference weights)</strong> only — by a SANAS-accredited laboratory. Scales and pressure gauges are production control equipment and are recorded under Production tools. This is separate from the weekly verification log on the Verify tab.</p>
         <div class="card">
           <label style="margin-top:0;">SANAS-accredited calibration laboratory</label>
           <input id="calLabName" placeholder="e.g. National Metrology Institute of SA">
@@ -1080,7 +1080,7 @@
         <button class="btn secondary" style="margin-top:8px;" onclick="openCalibrationCertRegister()">Print calibration register</button>
       </div>
       <div id="companyTab-tools" style="display:none;">
-        <p class="hint" style="margin:0 0 10px;">Each row lists every standard it satisfies. Calibration certificates already uploaded are collected here automatically, and you can add more. Workshop tools and each technician's issued kit are tracked together below — who holds a tool tells the two apart.</p>
+        <p class="hint" style="margin:0 0 10px;">Each row lists every standard it satisfies. Calibration certificates already uploaded are collected here automatically, and you can add more. Tools are listed below in three groups — Workshop tools, Maintenance vehicle tools (each technician's issued kit) and Production tools (production control equipment such as scales and gauges) — set by who holds each tool.</p>
         <div id="toolsCategoryTable"></div>
         <div class="card">
           <label style="margin-top:0;">Log a check</label>
@@ -1126,12 +1126,10 @@
       <div class="card">
         <label style="margin-top:0;">Instrument type</label>
         <select id="calCertType">
-          <option value="master">Master pressure gauge</option>
-          <option value="gauge">Working pressure gauge</option>
-          <option value="scale">Weighing scale / test weight</option>
-          <option value="other">Other reference instrument</option>
+          <option value="masspieces">Mass pieces (reference weights)</option>
         </select>
-        <label>Instrument</label><input id="calCertInstrument" placeholder="e.g. Master pressure gauge A">
+        <div class="hint" id="calCertTypeHint" style="display:none;">Only mass pieces are reference instruments. Scales and pressure gauges are production control equipment — record them as Production tools.</div>
+        <label>Instrument</label><input id="calCertInstrument" placeholder="e.g. Reference mass piece set A">
         <label>Serial number</label><input id="calCertSerial" placeholder="Optional">
         <label>Calibration laboratory</label><input id="calCertLab" placeholder="SANAS-accredited lab">
         <label>Lab SANAS accreditation no.</label><input id="calCertLabAccreditation" placeholder="e.g. CAL 0001">
@@ -1208,7 +1206,7 @@
         </div>
         <div class="row">
           <div><label>Carried extinguisher — serial</label><input id="vehExtSerial" placeholder="Optional"></div>
-          <div><label>Its last service</label><input id="vehExtServiceDate" type="date"></div>
+          <div><label>Its last maintenance</label><input id="vehExtServiceDate" type="date"></div>
         </div>
         <label>Licence disk (photo)</label>
         <input id="vehLicenceFileInput" type="file" accept="application/pdf,image/*" onchange="handleWorkshopFilePick(event,'vehLicence')">
@@ -1235,8 +1233,9 @@
         <label>Serial / asset number</label><input id="toolSerial" placeholder="Optional">
         <label>Held by</label>
         <select id="toolOwnerType" onchange="onToolOwnerTypeChange()">
-          <option value="workshop">Workshop</option>
-          <option value="technician">A technician</option>
+          <option value="workshop">Workshop — workshop tool</option>
+          <option value="technician">A technician — maintenance vehicle tool</option>
+          <option value="production">Production — production control equipment (scales, gauges)</option>
         </select>
         <div id="toolBranchWrap">
           <label>Workshop / branch</label><select id="toolBranch"></select>
@@ -2393,7 +2392,7 @@ const ROLE_LABEL = { admin:'Administrator', technician:'Technician', trainee:'Tr
 const SANS1475_HEADING = {heading:true};
 const SANS1475_CLAUSES = [
   ['4.1','Facilities',{checklist:[
-    ['intake','Designated intake / receiving area for extinguishers arriving for service'],
+    ['intake','Designated intake / receiving area for extinguishers arriving for maintenance'],
     ['emptying','Designated emptying / discharge area'],
     ['inprocess','Designated in-process area — strip-down, inspection and repair'],
     ['dispatch','Designated finished-goods / dispatch area'],
@@ -2462,7 +2461,7 @@ const SANS1475_CLAUSES = [
     ['stockrotation','Expiry-dated stock used first']
   ]}],
   ['4.9','Protection of workmen'],
-  ['4.10','People'],
+  ['4.10','Employees'],
   ['5','Requirements for reconditioning',SANS1475_HEADING],
   ['5.1','General requirements',SANS1475_HEADING],   // the reconditioning jobs page still opens under this key; 5.1.1 to 5.1.8 are the rows
   ['5.1.1','Reconditioning'],
@@ -2501,10 +2500,12 @@ const SANS1475_CLAUSES = [
     ['dustmask','Respiratory protection worn when discharging residual powder'],
     ['dispose','Residual powder handled per the storage/disposal checklist (4.7 / 4.7.2)']
   ]}],
+  // Internal cartridge-operated extinguishers are obsolete: they are not
+  // maintained or reconditioned, only condemned and replaced immediately.
   ['5.2.6','Internal cartridge-operated extinguishers',{checklist:[
-    ['cartridgeremoved','Gas cartridge removed and rendered safe before further disassembly'],
-    ['depressurise','Extinguisher body depressurised before opening'],
-    ['inspectcartridge','Cartridge inspected and weighed before reuse or disposal']
+    ['notmaintained','Obsolete type — not maintained, recharged or reconditioned'],
+    ['condemned','Any unit found is condemned (see Condemned units summary)'],
+    ['replacedimmediately','Replacement is done immediately']
   ]}],
   ['5.2.7','Rejection of the cylinder',{checklist:[
     ['corrosion','Checked for corrosion, pitting or mechanical damage beyond acceptable limits'],
@@ -2577,8 +2578,8 @@ const P2_CHK_SEALS = {draft:true, checklist:[
   ['leaktest','No leakage under water pressure']
 ]};
 const P2_CHK_SEALING = {draft:true, checklist:[
-  ['sealed','Seal or tamper indicator fitted after servicing'],
-  ['identified','Seal identifies the servicing organisation'],
+  ['sealed','Seal or tamper indicator fitted after maintenance'],
+  ['identified','Seal identifies the maintenance organisation'],
   ['intact','Seal intact and undamaged when the unit is next inspected']
 ]};
 const P2_CHK_SUPPLY = {draft:true, checklist:[
@@ -2649,7 +2650,7 @@ const SANS1475_P2_CLAUSES = [
   ['6.3.4','Component parts',P2_CHK_COMPONENTS],
   ['6.3.5','Water control fittings',P2_CHK_CONTROL],
   ['6.3.6','Water seals',P2_CHK_SEALS],
-  ['6.3.7','Service labels'],
+  ['6.3.7','Maintenance labels'],
   ['6.3.8','Sealing',P2_CHK_SEALING],
   ['6.3.9','Water supply',P2_CHK_SUPPLY],
   ['7','Marking',SANS1475_HEADING],
@@ -2711,14 +2712,14 @@ const SANS1475_ALL_CLAUSES = SANS1475_CLAUSES.concat(SANS1475_A_CLAUSES, SANS147
    records stay reachable and come back into scope if the facility is re-ticked.
    Administration / office is always on, so it isn't stored. */
 const FACILITIES = [
-  ['workshop','Extinguisher workshop','servicing and maintenance premises, powder storage, labelling'],
+  ['workshop','Extinguisher workshop','maintenance premises, powder storage, labelling'],
   ['pressuretest','Pressure test area','pressure testing of extinguisher cylinders'],
   ['charging','Charging / filling area','recharging with extinguishing medium and propellant'],
   ['reconditioning','Reconditioning','stripping down and reconditioning extinguishers'],
   ['hosereels','Fire hose reels','maintenance and reconditioning (SANS 1475 Part 2)'],
   ['aghydrants','Above-ground hydrants','maintenance and reconditioning (SANS 1475 Part 2)'],
   ['ughydrants','Underground hydrants','maintenance and reconditioning (SANS 1475 Part 2)'],
-  ['siteservicing','Site servicing only','servicing at client premises from service vehicles, with no workshop of your own']
+  ['siteservicing','Site maintenance only','maintenance at client premises from maintenance vehicles, with no workshop of your own']
 ];
 const FACILITY_NAME = Object.fromEntries(FACILITIES.map(([k,name])=>[k,name]));
 const FACILITY_KEYS = FACILITIES.map(f=>f[0]);
@@ -2766,7 +2767,7 @@ function sans1475RequiredFacilities(key){
     if(under('6.3') || k==='7.2.3') return ['ughydrants'];
     return P2_FACILITIES;
   }
-  if(k==='4.2' || k==='4.10') return null;   // training and people (designations, delegates) apply to every business with staff
+  if(k==='4.2' || k==='4.10') return null;   // training and employees (designations, delegates) apply to every business with staff
   if(k==='4.6') return ['workshop','siteservicing'];
   if(under('4.3') || under('5.3')) return ['pressuretest'];
   if(under('4.5') || under('4.8') || under('5.5')) return ['charging'];
@@ -2802,7 +2803,7 @@ function onFacilityToggle(e){
     const other = document.querySelector(`#coFacilitiesList input[data-k="${c}"]`);
     if(other && other.checked){ other.checked = false; other.closest('.chk').classList.remove('on'); cleared = true; }
   });
-  if(cleared) toast(k==='siteservicing' ? 'Site servicing is for businesses with no workshop — workshop facilities unticked' : 'You have a workshop — Site servicing only unticked');
+  if(cleared) toast(k==='siteservicing' ? 'Site maintenance is for businesses with no workshop — workshop facilities unticked' : 'You have a workshop — Site maintenance only unticked');
 }
 async function saveFacilities(){
   const ticked = collectCheckboxList('coFacilitiesList');
@@ -3413,7 +3414,7 @@ const SL_BTN = {
   tools:         { label:'View tools', onclick:goTab('tools') },
   calibration:   { label:'View calibration', onclick:goTab('calibration') },
   verification:  { label:'Weekly verification log', onclick:'openWeeklyVerification()' },
-  vehicles:      { label:'View service vehicles', onclick:goTab('vehicles') },
+  vehicles:      { label:'View vehicles', onclick:goTab('vehicles') },
   jobs:          { label:'Go to reconditioning jobs (clause 5.1)', onclick:"openSans1475Form('5.1')" },
   reconReport:   { label:'Print reconditioning register', onclick:'openReconditioningReport()' },
   condemned:     { label:'Condemned units summary', onclick:"openCondemnedUnitsSummaryReport('view-audit')" },
@@ -3453,9 +3454,15 @@ const SL = {
   saqcc(){ const tech = slActiveStaff().filter(s=>s.role!=='admin'), n = tech.filter(s=>s.saqcc).length; return slStat(n>0, `${n} of ${tech.length} technical staff have a SAQCC number`); },
   competent(){ const n = slActiveStaff().filter(s=>s.role==='competent').length; return slStat(n>0, slPlural(n,'registered competent person')); },
   trainees(){ const n = slActiveStaff().filter(s=>s.role==='trainee').length; return slStat(n>0, slPlural(n,'registered trainee')); },
-  tools(){ const n = toolsCache.length; return slStat(n>0, slPlural(n,'tool')+' registered'); },
-  calibration(){ const n = calCertsCache.length; return slStat(n>0, slPlural(n,'calibration certificate')+' on file'); },
-  toolsAndCalibration(){ const t = toolsCache.length, c = calCertsCache.length; return slStat(t>0 && c>0, `${slPlural(t,'tool')} registered, ${slPlural(c,'calibration certificate')} on file`); },
+  // Hand tools and maintenance equipment = workshop + maintenance vehicle tools.
+  tools(){ const w = toolsCache.filter(t=>toolGroup(t)==='workshop').length, v = toolsCache.filter(t=>toolGroup(t)==='technician').length;
+    return slStat(w+v>0, `${slPlural(w,'workshop tool')}, ${slPlural(v,'maintenance vehicle tool')} registered`); },
+  // Reference instruments are the mass pieces only.
+  calibration(){ const n = calCertsCache.filter(c=>isMassPieceType(c.instrumentType)).length; return slStat(n>0, slPlural(n,'mass-piece calibration certificate')+' on file'); },
+  // Production control equipment and reference instruments.
+  productionControl(){ const p = toolsCache.filter(t=>toolGroup(t)==='production').length, c = calCertsCache.filter(x=>isMassPieceType(x.instrumentType)).length;
+    return slStat(p>0 && c>0, `${slPlural(p,'production tool')} registered, ${slPlural(c,'mass-piece calibration certificate')} on file`); },
+  toolsAndCalibration(){ const t = toolsCache.length, c = calCertsCache.filter(x=>isMassPieceType(x.instrumentType)).length; return slStat(t>0 && c>0, `${slPlural(t,'tool')} registered, ${slPlural(c,'mass-piece calibration certificate')} on file`); },
   vehicles(){ const n = vehiclesCache.length; return slStat(n>0, slPlural(n,'vehicle')+' registered'); },
   vehiclePurpose(purpose){ return ()=>{ const n = vehiclesCache.filter(v=>v.purpose===purpose).length; return slStat(n>0, slPlural(n, vehiclePurposeLabel(purpose).toLowerCase())+' registered'); }; },
   vehiclesManaged(){ const n = vehiclesCache.length, m = vehiclesCache.filter(v=>v.licenceDiskExpiry && v.roadworthyDate).length; return slStat(n>0 && m===n, `${m} of ${n} vehicles have licence and roadworthy dates`); },
@@ -3475,8 +3482,8 @@ const SL_DOCS_HINT = 'This clause is evidenced by a document (procedure or polic
 const SANS1475_LINKS = {
   // ---- Part 1:2025
   '4.2':  { record:'Employees & training', hint:'Training and toolbox-talk records already live in their own tabs — open them directly rather than duplicating them here.', buttons:[SL_BTN.talks, SL_BTN.trainingReport, SL_BTN.employees], status:SL.employees },
-  '4.6':  { record:'Service vehicles', hint:'Evidence of how extinguishers are transported to and from site lives on each service vehicle’s record.', buttons:[SL_BTN.vehicles], status:SL.vehicles },
-  '4.10': { record:'Employees', hint:'Designation, appointments/authorities and delegate (who covers this person when absent) are set on each employee’s record under the Employees tab.', buttons:[SL_BTN.employees, SL_BTN.employeeSummary], status:SL.designations },
+  '4.6':  { record:'Vehicles', hint:'Evidence of how extinguishers are transported to and from site lives on each vehicle’s record.', buttons:[SL_BTN.vehicles], status:SL.vehicles },
+  '4.10': { record:'Employees', hint:'Designation, appointments/authorities and delegate (who covers this person when absent) are set on each employee’s record under the Employees tab. A valid COIDA letter of good standing (Company documents) is also evidence for this clause.', buttons:[SL_BTN.employees, SL_BTN.employeeSummary], status:SL.designations },
   '5.4':  { record:'Reconditioning jobs', hint:'Reconditioning records are kept under clause 5.1 (Reconditioning), including the printable Reconditioning register.', buttons:[SL_BTN.jobs, SL_BTN.reconReport], status:SL.jobs },
   '5.3':  { record:'Equipment records', hint:'This is an analysis pulled from pressure-test due dates across all sites and the weekly gauge/master verification log, rather than a separate manual record.', buttons:[SL_BTN.pressureAnalysis], status:SL.auto('generated from your equipment and verification records') },
   '5.5':  { record:'Charging (clause 4.8)', hint:'Recharging is recorded on each unit and through the charging checks under clause 4.8 (Charging of extinguishers).', buttons:[SL_BTN.charging], status:SL.clauseDocumented(['4.8.1','4.8.2','4.8.3','4.8.4','4.8.5']) },
@@ -3485,16 +3492,16 @@ const SANS1475_LINKS = {
   '5.1.2': { record:'Reconditioning jobs', hint:'The extent of reconditioning is the checklist completed on every reconditioning job, and printed on the Reconditioning register.', buttons:[SL_BTN.jobs, SL_BTN.reconReport], status:SL.jobs },
   '5.1.4': { record:'Conversion & modification register', hint:'Conversions are logged in the conversion & modification register under clause 5.1.6.', buttons:[SL_BTN.modifications], status:SL.register('5.1.6','entry','entries') },
   // Pressure testing (5.3.x) — every unit's service record already holds the pressure test
-  '5.3.1': { record:'Unit pressure-test records', hint:'Each pressure test is recorded on the extinguisher’s own record (Annex G checklist, test pressure, technician, SAQCC number and label fitted) — nothing to type here.', buttons:[SL_BTN.pressureAnalysis], status:SL.auto('recorded on each unit’s service record') },
+  '5.3.1': { record:'Unit pressure-test records', hint:'Each pressure test is recorded on the extinguisher’s own record (Annex G checklist, test pressure, technician, SAQCC number and label fitted) — nothing to type here.', buttons:[SL_BTN.pressureAnalysis], status:SL.auto('recorded on each unit’s maintenance record') },
   '5.3.2.1':{ record:'Equipment records', hint:'Due dates are worked out from each unit’s last pressure test; the pressure-test analysis lists what is overdue or coming due.', buttons:[SL_BTN.pressureAnalysis], status:SL.auto('worked out from your equipment records') },
   '5.3.2.2':{ record:'Equipment records', hint:'Due dates are worked out per equipment type from each unit’s last pressure test; the pressure-test analysis lists what is overdue or coming due.', buttons:[SL_BTN.pressureAnalysis], status:SL.auto('worked out from your equipment records') },
-  '5.3.3': { record:'Unit pressure-test records', hint:'The test pressure (kPa) used is recorded on each unit’s pressure test.', buttons:[SL_BTN.pressureAnalysis], status:SL.auto('recorded on each unit’s service record') },
+  '5.3.3': { record:'Unit pressure-test records', hint:'The test pressure (kPa) used is recorded on each unit’s pressure test.', buttons:[SL_BTN.pressureAnalysis], status:SL.auto('recorded on each unit’s maintenance record') },
   '5.3.4': { record:'Calibration & weekly verification', hint:'Test equipment is evidenced by the annual calibration certificates and the weekly gauge / master verification log.', buttons:[SL_BTN.calibration, SL_BTN.verification], status:SL.calibration },
   '5.3.5': { record:'Condemned units', hint:'A unit that fails its pressure test is condemned on its own record, which feeds the Condemned units summary.', buttons:[SL_BTN.condemned], status:SL.auto('generated from your inspection records') },
   // Recharging (5.5.x) — the recharge is recorded on each unit
-  '5.5.1': { record:'Unit recharge records', hint:'Each recharge is recorded on the extinguisher’s own record (medium and charge, pressures, technician, SAQCC number and checklist) — nothing to type here.', buttons:[SL_BTN.charging], status:SL.auto('recorded on each unit’s service record') },
+  '5.5.1': { record:'Unit recharge records', hint:'Each recharge is recorded on the extinguisher’s own record (medium and charge, pressures, technician, SAQCC number and checklist) — nothing to type here.', buttons:[SL_BTN.charging], status:SL.auto('recorded on each unit’s maintenance record') },
   '5.5.2': { record:'Materials & components log', hint:'Extinguishing mediums are logged in the materials & components log (clause 4.4).', buttons:[SL_BTN.materials], status:SL.register('4.4','entry','entries') },
-  '5.5.4': { record:'Unit recharge records', hint:'The leak test after pressurisation is a step on each unit’s recharge checklist.', buttons:[SL_BTN.charging], status:SL.auto('recorded on each unit’s service record') },
+  '5.5.4': { record:'Unit recharge records', hint:'The leak test after pressurisation is a step on each unit’s recharge checklist.', buttons:[SL_BTN.charging], status:SL.auto('recorded on each unit’s maintenance record') },
   // Rejection (5.2.7, 5.2.8) and discarded powder (4.7.2)
   '5.2.7': { record:'Condemned units', hint:'Cylinders rejected for corrosion, damage or age are condemned on their own record against the condemning criteria — nothing to type here.', buttons:[SL_BTN.condemned], status:SL.auto('generated from your inspection records') },
   '5.2.8': { record:'Condemned units', hint:'A cylinder taken out of service is recorded as condemned, with the date, reason and any replacement.', buttons:[SL_BTN.condemned], status:SL.auto('generated from your inspection records') },
@@ -3509,8 +3516,8 @@ const SANS1475_LINKS = {
   'A-3.4': { record:'Trainee logbooks', hint:'On-the-job training is evidenced by each trainee’s logbook, competency record and sign-offs under Trainees.', buttons:[SL_BTN.trainees, SL_BTN.trainingReport], status:SL.trainees },
   'A-3.5': { record:'Employees', hint:'The printable employee summary is the register of technical personnel.', buttons:[SL_BTN.employeeSummary, SL_BTN.employees], status:SL.employees },
   'A-4':   { record:'Materials & components log', hint:'Components are logged with the extinguishing mediums in the materials & components log (clause 4.4).', buttons:[SL_BTN.materials], status:SL.register('4.4','entry','entries') },
-  'A-5.1': { record:'Tools', hint:'Hand tools are registered and checked under the Tools tab.', buttons:[SL_BTN.tools], status:SL.tools },
-  'A-5.2': { record:'Calibration & weekly verification', hint:'Production control equipment (scales and gauges) is evidenced by its annual calibration certificates and the weekly verification log.', buttons:[SL_BTN.calibration, SL_BTN.verification], status:SL.calibration },
+  'A-5.1': { record:'Tools', hint:'Hand tools and maintenance equipment — the Workshop tools and Maintenance vehicle tools — are registered and checked under the Tools tab.', buttons:[SL_BTN.tools], status:SL.tools },
+  'A-5.2': { record:'Production tools, calibration & weekly verification', hint:'Production control equipment (scales and gauges) is registered as Production tools and verified on the weekly verification log. The reference instruments — the mass pieces — are evidenced by their annual calibration certificates.', buttons:[SL_BTN.tools, SL_BTN.calibration, SL_BTN.verification], status:SL.productionControl },
   // Final inspection is evidenced either by the final-inspection step on the
   // reconditioning jobs or, for a business that doesn't recondition, by its
   // final inspection procedure uploaded to the Documents register.
@@ -3522,14 +3529,14 @@ const SANS1475_LINKS = {
              if(d) parts.push(`${slPlural(d,'final inspection procedure')} uploaded`);
              return slStat(n>0 || d>0, parts.join('; ') || 'no final inspection recorded yet');
            } },
-  'A-6.4': { record:'Service vehicles', hint:'Transportation of pressurizing cylinders is evidenced on the service vehicle records.', buttons:[SL_BTN.vehicles], status:SL.vehicles },
+  'A-6.4': { record:'Vehicles', hint:'Transportation of pressurizing cylinders is evidenced on the vehicle records.', buttons:[SL_BTN.vehicles], status:SL.vehicles },
   'A-7.3': { record:'Documents register', hint:'Document control is shown by giving each document in the Documents register a reference number, version and issue date.', buttons:[SL_BTN.docs], status:SL.documentControl },
-  'A-8.1': { record:'Tools & calibration', hint:'Workshop tools and production control equipment are recorded under Tools and Calibration.', buttons:[SL_BTN.tools, SL_BTN.calibration, SL_BTN.verification], status:SL.toolsAndCalibration },
-  'A-8.2.1':{ record:'Service vehicles', hint:'Every vehicle used for reconditioning work is recorded once under Vehicles.', buttons:[SL_BTN.vehicles], status:SL.vehicles },
-  'A-8.2.2.1':{ record:'Service vehicles', hint:'Delivery vehicles are vehicles with the purpose “Delivery vehicle”. Mark this clause Not applicable if you have none.', buttons:[SL_BTN.vehicles], status:SL.vehiclePurpose('delivery') },
-  'A-8.2.3':{ record:'Service vehicles', hint:'Maintenance vehicles are vehicles with the purpose “Maintenance vehicle”. Mark this clause Not applicable if you have none.', buttons:[SL_BTN.vehicles], status:SL.vehiclePurpose('maintenance') },
-  'A-8.2.4':{ record:'Service vehicles', hint:'Mobile workshops are vehicles with the purpose “Mobile workshop”, with their SABS approval reference, expiry and letter. Mark this clause Not applicable if you have none.', buttons:[SL_BTN.vehicles], status:SL.vehiclePurpose('mobileworkshop') },
-  'A-8.2.5':{ record:'Service vehicles', hint:'Management of vehicles is shown by each vehicle’s assigned technician, licence disk expiry and last roadworthy date.', buttons:[SL_BTN.vehicles], status:SL.vehiclesManaged },
+  'A-8.1': { record:'Tools & calibration', hint:'Workshop tools, maintenance vehicle tools and production tools are recorded under Tools; the mass pieces under Calibration.', buttons:[SL_BTN.tools, SL_BTN.calibration, SL_BTN.verification], status:SL.toolsAndCalibration },
+  'A-8.2.1':{ record:'Vehicles', hint:'Every vehicle used for reconditioning work is recorded once under Vehicles.', buttons:[SL_BTN.vehicles], status:SL.vehicles },
+  'A-8.2.2.1':{ record:'Vehicles', hint:'Delivery vehicles are vehicles with the purpose “Delivery vehicle”. Mark this clause Not applicable if you have none.', buttons:[SL_BTN.vehicles], status:SL.vehiclePurpose('delivery') },
+  'A-8.2.3':{ record:'Vehicles', hint:'Maintenance vehicles are vehicles with the purpose “Maintenance vehicle”. Mark this clause Not applicable if you have none.', buttons:[SL_BTN.vehicles], status:SL.vehiclePurpose('maintenance') },
+  'A-8.2.4':{ record:'Vehicles', hint:'Mobile workshops are vehicles with the purpose “Mobile workshop”, with their SABS approval reference, expiry and letter. Mark this clause Not applicable if you have none.', buttons:[SL_BTN.vehicles], status:SL.vehiclePurpose('mobileworkshop') },
+  'A-8.2.5':{ record:'Vehicles', hint:'Management of vehicles is shown by each vehicle’s assigned technician, licence disk expiry and last roadworthy date.', buttons:[SL_BTN.vehicles], status:SL.vehiclesManaged },
   // ---- Part 2:2024 (hose reels and hydrants)
   'P2-4.1':{ record:'Facilities checklist', hint:'Facilities are checked once, under Part 1 clause 4.1, and that checklist serves this clause too.', buttons:[SL_BTN.facilities], status:SL.clauseDocumented(['4.1']) },
   'P2-4.2':{ record:'Employees & training', hint:'Training and toolbox-talk records already live in their own tabs — open them directly rather than duplicating them here.', buttons:[SL_BTN.talks, SL_BTN.trainingReport, SL_BTN.employees], status:SL.employees },
@@ -3710,6 +3717,15 @@ SL.delegations = ()=>{
   const t = need.filter(s=>{ const d = delegateOf(s); return d && d.role==='trainee'; }).length;
   return slStat(n>0, `${n} of ${need.length} employees have an active delegate${t ? `; ${t} ${t===1?'delegate is a':'delegates are'} trainee${t===1?'':'s'}` : ''}`);
 };
+// 4.10 also rests on a valid COIDA letter of good standing (Company documents).
+function coidaLetters(){ return companyDocsCache.filter(d=>d.type==='coida-good-standing'); }
+function coidaDocs(){ return coidaLetters().filter(d=>d.fileURL).map(d=>({ label:`COIDA letter of good standing${d.expiryDate ? ' (expires '+d.expiryDate+')' : ''}`, url:d.fileURL })); }
+SL.employeesClause = ()=>{
+  const d = SL.delegations();
+  const valid = coidaLetters().some(x=>!x.expiryDate || expiryStatus(x.expiryDate)!=='expired');
+  const coida = coidaLetters().length ? (valid ? 'valid COIDA letter of good standing on file' : 'COIDA letter of good standing EXPIRED') : 'no COIDA letter of good standing on file';
+  return slStat(d.documented && valid, `${d.text}; ${coida}`);
+};
 const employeeRow = (key, standards, filter, kinds, roles, extra)=>Object.assign({
   key, standards, open:`openEmployeesSection(${filter ? `'${filter}'` : 'null'})`, openLabel:'Open employees',
   autoDocs:()=>employeeDocs(roles, kinds)
@@ -3725,7 +3741,8 @@ const EMPLOYEE_CATEGORY_ROWS = [
   { heading:'A-3.3' },
   employeeRow('A-3.3.1', ['A-3.3.1'], 'competent', ['appointment','saqcc'], ['competent']),
   employeeRow('A-3.3.2', ['A-3.3.2'], 'trainee', ['training'], ['trainee']),
-  employeeRow('4.10', ['4.10','A-3.3'], 'delegations', ['appointment'], null, { title:'People — designation, authorities and delegate (who is in charge when absent)', status:SL.delegations })
+  employeeRow('4.10', ['4.10','A-3.3'], 'delegations', ['appointment'], null, { title:'Employees — designation, authorities, delegate (who is in charge when absent) and COIDA letter of good standing', status:SL.employeesClause,
+    autoDocs:()=>employeeDocs(null, ['appointment']).concat(coidaDocs()) })
 ];
 
 // Tools & equipment category: hand tools, and the production control equipment
@@ -3739,11 +3756,13 @@ function openToolsSection(){
 function calibrationDocs(){
   return calCertsCache.filter(c=>c.certificateFileURL).map(c=>({ label:`${c.instrument||'Instrument'} — calibration certificate`, url:c.certificateFileURL }));
 }
+// A.5 is split in two: hand tools and maintenance equipment (5.1), and
+// production control equipment and reference instruments (5.2).
 const TOOLS_CATEGORY_ROWS = [
   { heading:'A-5' },
-  { key:'A-5.1', standards:['A-5.1','A-8.1'], open:'openToolsSection()', openLabel:'Open tools' },
-  { key:'A-5.2', standards:['A-5.2','A-8.1','5.3.4'], open:goTab('calibration'), openLabel:'Open calibration',
-    also:[SL_BTN.verification], autoDocs:calibrationDocs },
+  { key:'A-5.1', title:'Hand tools and maintenance equipment — workshop and maintenance vehicle tools', standards:['A-5.1','A-8.1'], open:'openToolsSection()', openLabel:'Open tools' },
+  { key:'A-5.2', title:'Production control equipment and reference instruments — production tools and mass pieces', standards:['A-5.2','A-8.1','5.3.4'], open:goTab('calibration'), openLabel:'Open calibration',
+    also:[{ label:'Open tools', onclick:'openToolsSection()' }, SL_BTN.verification], autoDocs:calibrationDocs },
   { heading:'A-8' },
   { key:'A-8.1', standards:['A-8.1','A-5.1','A-5.2'], open:'openToolsSection()', openLabel:'Open tools',
     also:[SL_BTN.calibration], autoDocs:calibrationDocs }
@@ -3845,7 +3864,7 @@ const LABELS_CATEGORY_ROWS = [
   { headingText:'Hose reels and hydrants (Part 2 clauses 6 and 7)' },
   labelRow('P2-6.1.7', 'Maintenance labels and their positioning — hose reels', ['P2-6.1.7','P2-7.2.1'], ['Fire hose reel']),
   labelRow('P2-6.2.6', 'Maintenance labels and their positioning — above-ground hydrants', ['P2-6.2.6','P2-7.2.2'], ['Above-ground hydrant']),
-  labelRow('P2-6.3.7', 'Service labels and their positioning — underground hydrants', ['P2-6.3.7','P2-7.2.3'], ['Underground hydrant']),
+  labelRow('P2-6.3.7', 'Maintenance labels and their positioning — underground hydrants', ['P2-6.3.7','P2-7.2.3'], ['Underground hydrant']),
   labelRow('P2-7.1', 'Maintenance labels — all hose reels and hydrants', ['P2-7.1'], ['Fire hose reel','Above-ground hydrant','Underground hydrant'])
 ];
 
@@ -4686,7 +4705,7 @@ function renderCalibrationRegister(){
   wrap.innerHTML = calCertsCache.map(c=>`<div class="card tech-card" onclick="openCalibrationCertForm('${c.id}')" style="cursor:pointer;">
     <div>
       <div class="name">${escapeHtml(c.instrument||'—')}</div>
-      <div class="meta">${escapeHtml(calTypeLabel(c.instrumentType))}${c.certificateNumber?(' &middot; cert '+escapeHtml(c.certificateNumber)):''}${c.labName?(' &middot; '+escapeHtml(c.labName)):''}${c.certificateFileURL?' &middot; file attached':''}</div>
+      <div class="meta">${escapeHtml(calTypeLabel(c.instrumentType))}${isMassPieceType(c.instrumentType) ? '' : ' &middot; production control equipment — printed under Production tools, not Calibration'}${c.certificateNumber?(' &middot; cert '+escapeHtml(c.certificateNumber)):''}${c.labName?(' &middot; '+escapeHtml(c.labName)):''}${c.certificateFileURL?' &middot; file attached':''}</div>
     </div>
     ${c.nextDueDate ? expiryPill(c.nextDueDate, 'Next due') : ''}
   </div>`).join('');
@@ -4711,7 +4730,15 @@ function openCalibrationCertForm(id){
   const c = id ? calCertsCache.find(x=>x.id===id) : null;
   const co = companySettings || {};
   document.getElementById('calCertFormTitle').textContent = c ? 'Edit calibration certificate' : 'New calibration certificate';
-  document.getElementById('calCertType').value = c ? (c.instrumentType||'master') : 'master';
+  // Only mass pieces are reference instruments now. A certificate saved earlier
+  // against a scale or gauge keeps its type (shown, with a note) so editing it
+  // doesn't silently relabel it as mass pieces.
+  const typeSel = document.getElementById('calCertType');
+  const legacyType = c && !isMassPieceType(c.instrumentType) ? c.instrumentType : '';
+  typeSel.innerHTML = `<option value="masspieces">${escapeHtml(calTypeLabel('masspieces'))}</option>`
+    + (legacyType ? `<option value="${escapeHtml(legacyType)}">${escapeHtml(calTypeLabel(legacyType))} (production control equipment)</option>` : '');
+  typeSel.value = legacyType || 'masspieces';
+  document.getElementById('calCertTypeHint').style.display = legacyType ? 'block' : 'none';
   document.getElementById('calCertInstrument').value = c ? (c.instrument||'') : '';
   document.getElementById('calCertSerial').value = c ? (c.instrumentSerial||'') : '';
   document.getElementById('calCertLab').value = c ? (c.labName||'') : (co.calibrationLabName||'');
@@ -4768,7 +4795,8 @@ async function openCalibrationCertRegister(){
   let certs = [];
   try{
     const snap = await db.collection('calibrationCertificates').where('companyId','==',currentCompanyId).get();
-    certs = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    // Reference instruments are the mass pieces only.
+    certs = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(c=>isMassPieceType(c.instrumentType));
     certs.sort((a,b)=>(a.instrument||'').localeCompare(b.instrument||''));
   }catch(e){ toast('Could not load: ' + e.message); return; }
   const co = companySettings || {};
@@ -4787,29 +4815,39 @@ async function openCalibrationCertRegister(){
     <td>${escapeHtml(c.calibrationDate||'—')}</td>
     <td>${expCell(c.nextDueDate)}</td>
     <td>${c.certificateFileURL?'Yes':'No'}</td>
-  </tr>`).join('') : `<tr><td colspan="8">No calibration certificates recorded yet.</td></tr>`;
+  </tr>`).join('') : `<tr><td colspan="8">No mass-piece calibration certificates recorded yet.</td></tr>`;
   showReport('Calibration register', `${letterheadHTML(co)}
-    <h2 style="margin-top:16px; font-size:1rem;">Calibration Register — Reference Instruments (SANS 1475 Annex A)</h2>
+    <h2 style="margin-top:16px; font-size:1rem;">Calibration Register — Reference Instruments: Mass Pieces (SANS 1475 Annex A)</h2>
     <div class="meta">
       <strong>Generated:</strong> ${today}<br>
       <strong>SANAS-accredited laboratory:</strong> ${escapeHtml(co.calibrationLabName||'—')}${co.calibrationLabAccreditationNo?(' (accreditation '+escapeHtml(co.calibrationLabAccreditationNo)+')'):''}<br>
       ${co.calibrationLabContact ? '<strong>Contact:</strong> '+escapeHtml(co.calibrationLabContact)+'<br>' : ''}
       <strong>Instruments:</strong> ${certs.length}
     </div>
-    <div class="hint" style="margin:6px 0 10px;">The workshop's reference instruments are calibrated by the SANAS-accredited laboratory above; the certificate issued for each is on file. Day-to-day production equipment is verified against these instruments weekly (see the Weekly verification register).</div>
+    <div class="hint" style="margin:6px 0 10px;">The workshop's reference instruments — the mass pieces (reference weights) — are calibrated by the SANAS-accredited laboratory above; the certificate issued for each is on file. Scales and pressure gauges are production control equipment, verified weekly (see the Weekly verification register).</div>
     <div class="tablewrap"><table>
       <thead><tr><th>Instrument</th><th>Type</th><th>Serial</th><th>Laboratory</th><th>Certificate no.</th><th>Calibrated</th><th>Next due</th><th>Certificate on file</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`, 'view-audit');
 }
 
-/* ---- Tools: workshop + technician-issued register and check log ---- */
+/* ---- Tools: workshop, maintenance vehicle (technician-issued) and production
+   control equipment, one register and check log. "Held by" (ownerType) sorts a
+   tool into its group: workshop → Workshop tools, technician → Maintenance
+   vehicle tools, production → Production tools. ---- */
+const TOOL_GROUPS = [
+  ['workshop','Workshop tools'],
+  ['technician','Maintenance vehicle tools'],
+  ['production','Production tools']
+];
+function toolGroup(t){ return t.ownerType==='technician' || t.ownerType==='production' ? t.ownerType : 'workshop'; }
 function toolHolderLabel(t){
   if(t.ownerType==='technician'){
     const tech = allStaffCache.find(s=>s.id===t.assignedTechnicianId);
     return tech ? `${escapeHtml(tech.name)} (technician)` : 'Unassigned technician';
   }
-  const base = t.branchId ? `${escapeHtml(branchName(t.branchId))} (workshop)` : 'Workshop';
+  const kind = t.ownerType==='production' ? 'production' : 'workshop';
+  const base = t.branchId ? `${escapeHtml(branchName(t.branchId))} (${kind})` : (kind==='production' ? 'Production' : 'Workshop');
   if(!t.responsibleTechnicianId) return base;
   const resp = allStaffCache.find(s=>s.id===t.responsibleTechnicianId);
   return resp ? `${base} — ${escapeHtml(resp.name)} in charge` : base;
@@ -4818,13 +4856,16 @@ function renderTools(){
   const wrap = document.getElementById('toolsList');
   if(!wrap) return;
   if(toolsCache.length===0){ wrap.innerHTML = `<div class="empty">No tools registered yet.</div>`; return; }
-  wrap.innerHTML = toolsCache.map(t=>`<div class="card tech-card" onclick="openToolForm('${t.id}')" style="cursor:pointer;">
+  wrap.innerHTML = TOOL_GROUPS.map(([g, name])=>{
+    const list = toolsCache.filter(t=>toolGroup(t)===g);
+    return `<h3 style="margin:14px 0 6px; font-size:0.9rem;">${name} (${list.length})</h3>` + (list.length ? list.map(t=>`<div class="card tech-card" onclick="openToolForm('${t.id}')" style="cursor:pointer;">
     <div>
       <div class="name">${escapeHtml(t.name||'')}</div>
       <div class="meta">${t.serial?(escapeHtml(t.serial)+' · '):''}${toolHolderLabel(t)}</div>
     </div>
     ${t.ownerType!=='technician' ? `<span onclick="event.stopPropagation(); openToolAssign('${t.id}')" style="color:var(--red-dark); cursor:pointer; font-weight:700; font-size:0.8rem; white-space:nowrap;">Assign to technician</span>` : ''}
-  </div>`).join('');
+  </div>`).join('') : `<div class="empty">None registered.</div>`);
+  }).join('');
   fillToolCheckSelect();
 }
 function fillToolCheckSelect(){
@@ -4865,11 +4906,11 @@ function openToolForm(id){
 async function saveTool(){
   const name = document.getElementById('toolName').value.trim();
   if(!name){ toast('Name the tool'); return; }
-  const ownerType = document.getElementById('toolOwnerType').value === 'technician' ? 'technician' : 'workshop';
+  const ownerType = toolGroup({ ownerType: document.getElementById('toolOwnerType').value });
   const payload = {
     companyId: currentCompanyId, name, ownerType,
     serial: document.getElementById('toolSerial').value.trim(),
-    branchId: ownerType==='workshop' ? (document.getElementById('toolBranch').value || '') : '',
+    branchId: ownerType!=='technician' ? (document.getElementById('toolBranch').value || '') : '',
     assignedTechnicianId: ownerType==='technician' ? (document.getElementById('toolTechnician').value || '') : '',
     notes: document.getElementById('toolNotes').value.trim(),
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -5067,6 +5108,10 @@ async function openCompliancePack(){
     ${scan.map(r=>`${escapeHtml(r[0])} — ${escapeHtml(r[1]||'')}${r[2]==='expired'?' (EXPIRED)':''}`).join('<br>')}
   </div>` : `<div class="meta">No documents or registrations are expired or expiring within 60 days.</div>`;
 
+  // Calibration (reference instruments) is the mass pieces only; a scale or
+  // gauge certificate on file prints with the Production tools instead.
+  const productionCerts = certs.filter(x=>!isMassPieceType(x.instrumentType));
+  certs = certs.filter(x=>isMassPieceType(x.instrumentType));
   const certRows = certs.length ? [...certs].sort((a,b)=>(a.instrument||'').localeCompare(b.instrument||'')).map(x=>`<tr>
     <td>${escapeHtml(x.instrument||'')}</td>
     <td>${escapeHtml(calTypeLabel(x.instrumentType))}</td>
@@ -5075,7 +5120,7 @@ async function openCompliancePack(){
     <td>${escapeHtml(x.calibrationDate||'—')}</td>
     <td>${expCell(x.nextDueDate)}</td>
     <td>${x.certificateFileURL?'Yes':'No'}</td>
-  </tr>`).join('') : `<tr><td colspan="7">No calibration certificates recorded.</td></tr>`;
+  </tr>`).join('') : `<tr><td colspan="7">No mass-piece calibration certificates recorded.</td></tr>`;
 
   const trainingStatusText = r => !r.last ? 'Never completed' : (expiryStatus(r.nextDue)==='expired' ? 'Overdue' : (expiryStatus(r.nextDue)==='soon' ? 'Due soon' : 'OK'));
   const trainingRows = training.rows.length ? training.rows.map(r=>`<tr>
@@ -5097,21 +5142,37 @@ async function openCompliancePack(){
       const tech = staff.find(s=>s.id===t.assignedTechnicianId);
       return tech ? `${escapeHtml(tech.name)} (technician)` : 'Unassigned technician';
     }
-    const base = t.branchId ? `${bn(t.branchId)} (workshop)` : 'Workshop';
+    const kind = t.ownerType==='production' ? 'production' : 'workshop';
+    const base = t.branchId ? `${bn(t.branchId)} (${kind})` : (kind==='production' ? 'Production' : 'Workshop');
     if(!t.responsibleTechnicianId) return base;
     const resp = staff.find(s=>s.id===t.responsibleTechnicianId);
     return resp ? `${base} — ${escapeHtml(resp.name)} in charge` : base;
   };
-  const toolRows = tools.length ? tools.map(t=>{
-    const last = latestCheckByTool[t.id];
-    return `<tr>
-      <td>${escapeHtml(t.name||'')}</td>
-      <td>${escapeHtml(t.serial||'—')}</td>
-      <td>${toolHolder(t)}</td>
-      <td>${last ? escapeHtml(last.checkDate) : 'Never'}</td>
-      <td>${last ? (last.result==='issue'?'Issue found':'OK') : '—'}</td>
-    </tr>`;
-  }).join('') : `<tr><td colspan="5">No tools registered.</td></tr>`;
+  // One table per tool group: Workshop / Maintenance vehicle / Production tools.
+  const toolSections = TOOL_GROUPS.map(([g, name])=>{
+    const list = tools.filter(t=>toolGroup(t)===g);
+    const rows = list.length ? list.map(t=>{
+      const last = latestCheckByTool[t.id];
+      return `<tr>
+        <td>${escapeHtml(t.name||'')}</td>
+        <td>${escapeHtml(t.serial||'—')}</td>
+        <td>${toolHolder(t)}</td>
+        <td>${last ? escapeHtml(last.checkDate) : 'Never'}</td>
+        <td>${last ? (last.result==='issue'?'Issue found':'OK') : '—'}</td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="5">No ${name.toLowerCase()} registered.</td></tr>`;
+    const certTable = g==='production' && productionCerts.length ? `<div class="meta" style="margin-top:8px;"><strong>Production control equipment calibration certificates</strong></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Instrument</th><th>Type</th><th>Laboratory</th><th>Certificate no.</th><th>Calibrated</th><th>Next due</th><th>Certificate on file</th></tr></thead>
+      <tbody>${productionCerts.map(x=>`<tr><td>${escapeHtml(x.instrument||'')}</td><td>${escapeHtml(calTypeLabel(x.instrumentType))}</td><td>${escapeHtml(x.labName||'—')}</td><td>${escapeHtml(x.certificateNumber||'—')}</td><td>${escapeHtml(x.calibrationDate||'—')}</td><td>${expCell(x.nextDueDate)}</td><td>${x.certificateFileURL?'Yes':'No'}</td></tr>`).join('')}</tbody>
+    </table></div>` : '';
+    return `<h3 style="margin-top:18px; font-size:0.95rem;">${escapeHtml(name)}</h3>
+    ${scopeNoteHtml(COMPANY_TAB_FACILITIES.tools)}
+    <div class="tablewrap"><table>
+      <thead><tr><th>Tool</th><th>Serial</th><th>Held by</th><th>Last checked</th><th>Result</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>${certTable}`;
+  }).join('');
 
   // Row state is read from the live audit caches — the pack is opened from the
   // Audit tab, whose listeners keep them current.
@@ -5140,7 +5201,7 @@ async function openCompliancePack(){
   }).join('');
 
   showReport('Company compliance pack', `${letterheadHTML(co)}
-    <h2 style="margin-top:16px; font-size:1rem;">Company Compliance Pack — SANS 1475 servicing organisation</h2>
+    <h2 style="margin-top:16px; font-size:1rem;">Company Compliance Pack — SANS 1475 maintenance organisation</h2>
     <div class="meta"><strong>Generated:</strong> ${today}<br><strong>Declared facilities:</strong> ${escapeHtml(facilitiesLine)}</div>
     ${alertBlock}
     <h3 style="margin-top:18px; font-size:0.95rem;">Company documents</h3>
@@ -5153,7 +5214,7 @@ async function openCompliancePack(){
       <thead><tr><th>Name</th><th>Role</th><th>No.</th><th>SAQCC</th><th>Workshop</th><th>SAQCC expiry</th><th>Medical expiry</th><th>Status</th></tr></thead>
       <tbody>${empRows}</tbody>
     </table></div>
-    <h3 style="margin-top:18px; font-size:0.95rem;">Service vehicles</h3>
+    <h3 style="margin-top:18px; font-size:0.95rem;">Vehicles</h3>
     ${scopeNoteHtml(COMPANY_TAB_FACILITIES.vehicles)}
     <div class="tablewrap"><table>
       <thead><tr><th>Registration</th><th>Description</th><th>Purpose</th><th>Workshop</th><th>Technician</th><th>Licence expiry</th><th>Approval ref</th><th>Approval expiry</th></tr></thead>
@@ -5165,7 +5226,7 @@ async function openCompliancePack(){
       <thead><tr><th>Name</th><th>Address</th><th>Mark Permit no.</th><th>Issued</th><th>Expiry</th></tr></thead>
       <tbody>${brRows}</tbody>
     </table></div>
-    <h3 style="margin-top:18px; font-size:0.95rem;">Calibration — reference instruments (SANAS-accredited)</h3>
+    <h3 style="margin-top:18px; font-size:0.95rem;">Calibration — reference instruments: mass pieces (SANAS-accredited)</h3>
     ${scopeNoteHtml(COMPANY_TAB_FACILITIES.calibration)}
     <div class="meta" style="margin-top:0;"><strong>Laboratory:</strong> ${escapeHtml(co.calibrationLabName||'—')}${co.calibrationLabAccreditationNo?(' (accreditation '+escapeHtml(co.calibrationLabAccreditationNo)+')'):''}</div>
     <div class="tablewrap"><table>
@@ -5177,12 +5238,7 @@ async function openCompliancePack(){
       <thead><tr><th>Topic</th><th>Name</th><th>Role</th><th>Last completed</th><th>Next due</th><th>Status</th></tr></thead>
       <tbody>${trainingRows}</tbody>
     </table></div>`}
-    <h3 style="margin-top:18px; font-size:0.95rem;">Tools</h3>
-    ${scopeNoteHtml(COMPANY_TAB_FACILITIES.tools)}
-    <div class="tablewrap"><table>
-      <thead><tr><th>Tool</th><th>Serial</th><th>Held by</th><th>Last checked</th><th>Result</th></tr></thead>
-      <tbody>${toolRows}</tbody>
-    </table></div>
+    ${toolSections}
     <h2 style="margin-top:22px; font-size:1rem;">SANS 1475 evidence by category</h2>
     <div class="meta" style="margin-top:0;"><strong>Evidence on file:</strong> ${overallProgress.done} of ${overallProgress.total} applicable items. Each item is something recorded once and counted against every clause listed beside it, across Part 1:2025, Annex A and Part 2:2024. Applicability follows the facilities declared above; compliance against each clause is determined by the SAQCC/SABS auditor, not recorded here. A clause-by-clause cross-reference follows at the end.</div>
     ${packCategorySections()}
@@ -6513,7 +6569,7 @@ const CONDEMN_CRITERIA = [
   ['fire','Cylinder has been exposed to fire'],
   ['markings','Unauthorised markings, modifications or non-approved parts'],
   ['spec','Cannot be maintained to the manufacturer’s specification'],
-  ['obsolete','Obsolete / withdrawn type (e.g. halon) or beyond serviceable life']
+  ['obsolete','Obsolete / withdrawn type (e.g. halon, internal cartridge-operated) or beyond serviceable life — replace immediately']
 ];
 
 /* ---------- Equipment form — identity + current inspection, all in one ---------- */
@@ -7399,20 +7455,20 @@ async function qualifyTrainee(){
    [key, competency statement, category]
    ======================================================================== */
 const TRAINEE_COMPETENCIES = [
-  ['ext_safety','Understands general safety precautions when servicing fire extinguishers','Extinguisher servicing'],
-  ['ext_docs','Understands documentary requirements to record an extinguisher service','Extinguisher servicing'],
-  ['ext_inspect','Able to inspect an extinguisher to assess the work required','Extinguisher servicing'],
-  ['ext_depressurise','De-pressurise an extinguisher safely','Extinguisher servicing'],
-  ['ext_components_stp','Able to identify all components of a stored pressure extinguisher','Extinguisher servicing'],
-  ['ext_disassemble','Disassemble an extinguisher of its components','Extinguisher servicing'],
-  ['ext_cylinder_inspect','Carry out external and internal inspection of the cylinder body','Extinguisher servicing'],
-  ['ext_condemn','Understands the criteria to condemn an extinguisher','Extinguisher servicing'],
-  ['ext_reassemble','Reassemble a fire extinguisher','Extinguisher servicing'],
-  ['ext_recharge_stp','Recharge all types of STP fire extinguishers','Extinguisher servicing'],
-  ['ext_repressurise','Re-pressurise a fire extinguisher safely','Extinguisher servicing'],
-  ['ext_final_inspect','Carry out a final inspection of all types of fire extinguishers (including +/-5% tolerance)','Extinguisher servicing'],
-  ['ext_sift_powder','Sift dry powder and identify the condition of the powder','Extinguisher servicing'],
-  ['ext_foam_mix','Understands the foam/water mixing proportions for refilling a foam unit','Extinguisher servicing'],
+  ['ext_safety','Understands general safety precautions when maintaining fire extinguishers','Extinguisher maintenance'],
+  ['ext_docs','Understands documentary requirements to record extinguisher maintenance','Extinguisher maintenance'],
+  ['ext_inspect','Able to inspect an extinguisher to assess the work required','Extinguisher maintenance'],
+  ['ext_depressurise','De-pressurise an extinguisher safely','Extinguisher maintenance'],
+  ['ext_components_stp','Able to identify all components of a stored pressure extinguisher','Extinguisher maintenance'],
+  ['ext_disassemble','Disassemble an extinguisher of its components','Extinguisher maintenance'],
+  ['ext_cylinder_inspect','Carry out external and internal inspection of the cylinder body','Extinguisher maintenance'],
+  ['ext_condemn','Understands the criteria to condemn an extinguisher','Extinguisher maintenance'],
+  ['ext_reassemble','Reassemble a fire extinguisher','Extinguisher maintenance'],
+  ['ext_recharge_stp','Recharge all types of STP fire extinguishers','Extinguisher maintenance'],
+  ['ext_repressurise','Re-pressurise a fire extinguisher safely','Extinguisher maintenance'],
+  ['ext_final_inspect','Carry out a final inspection of all types of fire extinguishers (including +/-5% tolerance)','Extinguisher maintenance'],
+  ['ext_sift_powder','Sift dry powder and identify the condition of the powder','Extinguisher maintenance'],
+  ['ext_foam_mix','Understands the foam/water mixing proportions for refilling a foam unit','Extinguisher maintenance'],
   ['co2_markings','Understands markings stamped on the CO₂ extinguisher shoulder','CO₂ & cartridge'],
   ['co2_hp_test','Understands a CO₂ cylinder high pressure test requirements','CO₂ & cartridge'],
   ['co2_filling','Understands CO₂ gas filling procedures and weight tolerances','CO₂ & cartridge'],
@@ -7420,14 +7476,14 @@ const TRAINEE_COMPETENCIES = [
   ['cart_components','Can identify all components of a cartridge operated fire extinguisher','CO₂ & cartridge'],
   ['cart_weights','Can calculate the cartridge weights and tolerances','CO₂ & cartridge'],
   ['cart_condemn','Understands the criteria to condemn a cartridge or its extinguisher','CO₂ & cartridge'],
-  ['hr_docs','Understands documentary requirements to record a hose reel service','Hose reel'],
+  ['hr_docs','Understands documentary requirements to record hose reel maintenance','Hose reel'],
   ['hr_jet_distance','Understands the minimum water jet distance in terms of SANS 1475','Hose reel'],
   ['hr_pressure','Understands the minimum pressure in terms of SANS 10105','Hose reel'],
   ['hr_components','Can identify all components of a hose reel','Hose reel'],
   ['hr_inspect','Able to inspect a hose reel to assess the work required','Hose reel'],
   ['hr_faults','Take correct action on faults as they are detected','Hose reel'],
   ['hr_condemn','Understands the criteria to condemn a hose reel','Hose reel'],
-  ['hy_docs','Understands documentary requirements to record a hydrant service','Hydrant'],
+  ['hy_docs','Understands documentary requirements to record hydrant maintenance','Hydrant'],
   ['hy_pressure','Understands water pressure requirements for hydrants','Hydrant'],
   ['hy_components','Can identify all components of a hydrant installation','Hydrant'],
   ['hy_inspect','Able to inspect a hydrant to assess work required','Hydrant'],
@@ -8144,8 +8200,11 @@ async function openRechargeReport(){
    in firestore.rules and currentCompanyAddons here). */
 let calibrationsCache = [];
 function calTypeLabel(t){
-  return { scale:'Weighing scale', gauge:'Working pressure gauge', master:'Master pressure gauge', other:'Other test equipment' }[t] || t || '';
+  return { masspieces:'Mass pieces (reference weights)', scale:'Weighing scale', gauge:'Working pressure gauge', master:'Master pressure gauge', other:'Other test equipment' }[t] || t || '';
 }
+// Only mass pieces are reference instruments (calibration section). Scale and
+// gauge certificates saved before that rule print under Production tools.
+function isMassPieceType(t){ return t==='masspieces'; }
 function renderCalibrationView(){
   const dEl = document.getElementById('calDate');
   if(dEl && !dEl.value) dEl.value = toLocalISO(new Date());
