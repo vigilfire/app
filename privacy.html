@@ -63,7 +63,8 @@
       <p>Depending on how you interact with a servicing company using Vigil Fire, this can include:</p>
       <ul>
         <li><strong>Technicians and trainees (set up by an administrator):</strong> name, phone number, email address, SAQCC (Fire) registration number, a login credential, and records of work performed (inspections, services, pressure tests, recharges, logbook entries, competency sign-offs).</li>
-        <li><strong>Technicians and trainees (added by you, once, on your own device):</strong> ID number, cell number, a personal email address, and a profile photo. A technician also gives a photo of their SAQCC registration card; a trainee instead gives the date on and a photo of their training certificate (used to work out the SAQCC 6–24 month training-completion window). Alongside these, the app records a device identifier and IP address for the device you used, and captures the same two things again each time you log or sign off a logbook entry. This exists specifically so a training centre can check that a logbook entry or sign-off genuinely came from the person named on it, not someone else using their login — see "Why it's collected" below.</li>
+        <li><strong>Technicians, trainees and Competent Persons (added by you, once, on your own device):</strong> ID number, cell number, a personal email address, and a profile photo. A technician also gives a photo of their SAQCC registration card; a trainee instead gives the date on and a photo of their training certificate (used to work out the SAQCC 6–24 month training-completion window); a Competent Person gives a photo of their appointment letter. Alongside these, the app records a device identifier and IP address for the device you used, and captures the same two things again each time you log or sign off a logbook entry, save a monthly site check, or sign a toolbox talk. This exists specifically so a training centre can check that an entry or sign-off genuinely came from the person named on it, not someone else using their login — see "Why it's collected" below.</li>
+        <li><strong>Employee compliance records (if the servicing company uses the Audit section):</strong> designation, appointments and delegations, SAQCC registration and medical-certificate expiry dates, and copies of an ID document, a medical certificate and an employment contract or appointment, uploaded by the company's administrator. A medical certificate is health information — special personal information under POPIA — and is visible only to that company's administrators and the employee themselves. PPE issued to a named employee, and tools or vehicles assigned to them, are also recorded.</li>
         <li><strong>Site contacts:</strong> a contact person's name and phone number recorded against a site, so the servicing company can reach them.</li>
         <li><strong>Equipment records:</strong> service history and, optionally, a photo of the equipment or its location — these are about the equipment, not a person, though a photo could incidentally show someone in the background.</li>
       </ul>
@@ -77,7 +78,8 @@
 
     <section>
       <h2>Who can see it</h2>
-      <p>Only people at the same servicing company — its administrators and the technicians it employs — can see that company's records. Vigil Fire's platform operator can access data only as needed to run and support the service (for example, troubleshooting a fault), never to browse it for its own sake. No company can see another company's data.</p>
+      <p>Only people at the same servicing company can see that company's records, and within a company, access depends on role. Technicians see the sites they're assigned to; colleagues see each other's names and roles only. Your ID number, contact details, photos and documents, device and IP records, and any employee compliance documents are visible only to you and your company's administrators. Vigil Fire's platform operator can access data only as needed to run and support the service (for example, troubleshooting a fault), never to browse it for its own sake. No company can see another company's data.</p>
+      <p>Vigil Fire uses these service providers, who process information on our behalf: <strong>Google (Firebase / Google Cloud)</strong> to store data and run the app's server functions, and <strong>Resend</strong> to deliver documents the servicing company emails to a site. Their servers may be located outside South Africa — the app's server functions run in the United States — so your information may be transferred across borders.</p>
     </section>
 
     <section>
@@ -87,16 +89,21 @@
 
     <section>
       <h2>Security</h2>
-      <p>Access is controlled per account (technician, administrator) and strictly separated by company — one company's staff cannot read another's records, enforced at the database level, not just hidden in the app's screens. Data is transmitted and stored via Google Firebase's infrastructure.</p>
+      <p>Access is controlled per account (technician, trainee, Competent Person, administrator) and strictly separated by company — one company's staff cannot read another's records, enforced at the database level, not just hidden in the app's screens. A deactivated account loses access immediately. Data is encrypted in transit and stored on Google Firebase's infrastructure.</p>
+    </section>
+
+    <section>
+      <h2>Information Officer</h2>
+      <p>Vigil Fire is the Information Officer for the Vigil Fire platform: <a href="mailto:vigilfire1@gmail.com">vigilfire1@gmail.com</a>. Each servicing company that uses Vigil Fire has its own Information Officer for the records it keeps.</p>
     </section>
 
     <section>
       <h2>Your rights</h2>
       <p>Under POPIA, you can ask to see the information held about you, ask for it to be corrected if it's wrong, or object to how it's used. You can also ask for it to be deleted, though a servicing company may need to keep certain records for the SANS 1475 retention period regardless, as explained above. Start by contacting the servicing company whose name is on your certificate, register, or account — they hold the records and can act on most requests directly.</p>
-      <p>If you can't reach them, or you have a question about Vigil Fire as the platform operator, contact <a href="mailto:vigilfire1@gmail.com">vigilfire1@gmail.com</a>. You also have the right to complain to South Africa's Information Regulator (<a href="https://inforegulator.org.za" target="_blank" rel="noopener">inforegulator.org.za</a>) if you believe your information has been mishandled.</p>
+      <p>If you can't reach them, or you have a question about Vigil Fire as the platform operator, contact Vigil Fire's Information Officer at <a href="mailto:vigilfire1@gmail.com">vigilfire1@gmail.com</a>. You also have the right to complain to South Africa's Information Regulator (<a href="https://inforegulator.org.za" target="_blank" rel="noopener">inforegulator.org.za</a>) if you believe your information has been mishandled.</p>
     </section>
 
-    <p class="hint">This notice was last updated 2026-09-07. It's a general description of how the Vigil Fire platform handles information — a specific servicing company may have its own additional privacy practices for information it collects outside the app.</p>
+    <p class="hint">This notice was last updated 2026-10-28. It's a general description of how the Vigil Fire platform handles information — a specific servicing company may have its own additional privacy practices for information it collects outside the app.</p>
   </div>
 </main>
 </body>

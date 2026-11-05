@@ -247,23 +247,22 @@ const db = firebase.firestore();
 // Keep in sync with functions/pricing.js and vigilfire.github.io's pricing
 // page — no shared build step exists between this static page, the Cloud
 // Functions source, and the marketing site, so all three must be updated
-// together when a price or allowance changes. Prices are placeholders (no
-// Rand figures were given for this pricing round) — replace before relying
-// on the MRR figure.
-const CORE_PRICE = 499;
+// together when a price or allowance changes. Prices are the published Rand
+// figures (excl. VAT) on the marketing site's #pricing section.
+const CORE_PRICE = 2499;
 const CORE_INCLUDED_ADMINS = 1;
 const CORE_INCLUDED_TECHNICIANS = 3;
-const CLIENT_MODULE_PRICE = 349;
-const TRAINEE_MODULE_PRICE = 249;              // includes 2 trainees
+const CLIENT_MODULE_PRICE = 1599;
+const TRAINEE_MODULE_PRICE = 1449;             // includes 2 trainees
 const TRAINEE_MODULE_INCLUDED_TRAINEES = 2;
-const WORKSHOP_MODULE_PRICE = 349;
-const AUDITING_MODULE_PRICE = 399;             // includes 1 workshop
+const WORKSHOP_MODULE_PRICE = 1899;
+const AUDITING_MODULE_PRICE = 1999;            // includes 1 workshop
 const AUDITING_MODULE_INCLUDED_WORKSHOPS = 1;
 const ADDON_PRICES = {
   extraTechnician: 249,
   extraAdmin: 149,
-  extraTrainee: 99,
-  extraWorkshop: 279,
+  extraTrainee: 149,
+  extraWorkshop: 1279,
 };
 const MODULE_LABEL = { clientModule: 'Client', traineeModule: 'Trainee', workshopModule: 'Workshop', auditingModule: 'Auditing' };
 const STATUS_LABEL = { trialing: 'Trialing', active: 'Active', past_due: 'Past due', canceled: 'Canceled' };
@@ -491,7 +490,11 @@ async function onDetailStatusChange(){
   const status = document.getElementById('detailStatusSelect').value;
   try{
     await db.collection('companies').doc(detailCompanyId).update({ status });
-    toast('Status updated');
+    // Mirrored onto the doc the company's own app can read, so it can show
+    // the "read-only" banner. The rules enforce read-only from companies/{id}
+    // itself, so this mirror is display-only.
+    await db.collection('companyAddons').doc(detailCompanyId).set({ status }, {merge:true});
+    toast(status === 'canceled' ? 'Status updated — the company is now read-only' : 'Status updated');
   }catch(e){ toast('Error: ' + e.message); }
 }
 async function onDetailNotesBlur(){

@@ -8,7 +8,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -283,12 +283,15 @@
     <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg></div>
     <h1>Vigil Fire</h1>
     <div class="sub">SANS 1475 fire equipment register</div>
-    <label>Technician number or email</label>
-    <input id="loginIdentifier" type="text" placeholder="Technician number or admin email">
-    <label>Password</label>
-    <input id="loginPassword" type="password" placeholder="••••••••">
-    <button class="btn" style="margin-top:18px;" onclick="doLogin()">Sign in</button>
-    <div id="authError"></div>
+    <form onsubmit="event.preventDefault(); doLogin();" novalidate>
+    <label for="loginIdentifier">Technician number or email</label>
+    <input id="loginIdentifier" type="text" placeholder="Technician number or admin email" autocomplete="username" autocapitalize="none" spellcheck="false">
+    <label for="loginPassword">Password</label>
+    <input id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password">
+    <button class="btn" id="loginBtn" type="submit" style="margin-top:18px;">Sign in</button>
+    </form>
+    <div id="authError" role="alert"></div>
+    <div class="hint" style="text-align:center; margin-top:10px;"><a href="#" onclick="event.preventDefault(); sendAdminPasswordReset();" style="color:inherit;">Administrator? Forgot your password</a></div>
     <div class="hint" style="text-align:center; margin-top:14px;">Accounts are created by your administrator. Contact them if you don't have a login.</div>
     <div class="hint" style="text-align:center; margin-top:8px;"><a href="privacy.html" style="color:inherit;">Privacy notice</a></div>
   </div>
@@ -306,7 +309,7 @@
     </div>
     <div class="right">
       <span id="syncPill">Online</span>
-      <button id="myDataBtn" onclick="downloadMyData()" title="Download the personal information Vigil Fire holds about you">My data</button>
+      <button id="myDataBtn" onclick="openAccount()" title="Change your password or download the personal information Vigil Fire holds about you">Account</button>
       <button id="logoutBtn" onclick="doLogout()">Log out</button>
     </div>
   </header>
@@ -317,6 +320,10 @@
       <button class="chip" onclick="downloadFullBackup(true)">Download</button>
       <button class="chip" onclick="dismissBackupBanner()">Later</button>
     </span>
+  </div>
+
+  <div id="readOnlyBanner" style="display:none; background:var(--paper-dim); color:var(--ink); border-bottom:1px solid var(--line-strong); padding:10px 16px; font-size:0.85rem; font-weight:600;">
+    This account has been canceled and is read-only. You can still view and print every record and download a full backup (Company → Records backup), but nothing can be changed. Contact Vigil Fire to reactivate it.
   </div>
 
   <div id="profileBanner" style="display:none; background:var(--amber-bg); color:var(--amber); border-bottom:1px solid var(--amber); padding:10px 16px; font-size:0.85rem; font-weight:600; align-items:center; justify-content:space-between; gap:10px;">
@@ -367,6 +374,27 @@
         </div>
         <label class="chk" style="margin-top:14px;"><input type="checkbox" id="cpConsent"><span>I understand this information — including my ID number and photos — is stored to verify that entries I make or sign really came from me, and may be reviewed by my training centre. See the <a href="privacy.html" target="_blank" style="color:inherit;">Privacy notice</a>.</span></label>
         <button class="btn" style="margin-top:16px;" onclick="submitCompleteProfile()">Save my profile</button>
+      </div>
+    </section>
+
+    <!-- ===== ACCOUNT (every role) — change password, download my data ===== -->
+    <section id="view-account" class="view">
+      <div class="backbar"><button onclick="showView(accountBackView)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2>Account</h2></div>
+      <div class="card">
+        <label style="margin-top:0;">Change password</label>
+        <label>Current password</label>
+        <input id="acctCurrentPw" type="password" autocomplete="current-password">
+        <label>New password</label>
+        <input id="acctNewPw" type="password" autocomplete="new-password" placeholder="At least 8 characters">
+        <label>Confirm new password</label>
+        <input id="acctConfirmPw" type="password" autocomplete="new-password">
+        <div class="hint">Change the temporary password your administrator gave you to one only you know.</div>
+        <button class="btn" style="margin-top:14px;" onclick="changeMyPassword()">Change password</button>
+      </div>
+      <div class="card">
+        <label style="margin-top:0;">Your information</label>
+        <div class="hint" style="margin-top:0;">Download a copy of the personal information Vigil Fire holds about you (POPIA). See the <a href="privacy.html" target="_blank" style="color:inherit;">Privacy notice</a>.</div>
+        <button class="btn secondary" style="margin-top:12px;" onclick="downloadMyData()">Download my data</button>
       </div>
     </section>
 
@@ -869,7 +897,7 @@
         <label>Full name</label><input id="techName" placeholder="e.g. Thabo Nkosi">
         <label>Technician number</label><input id="techNumber" type="text" placeholder="e.g. 12345">
         <label>Temporary password</label><input id="techPassword" type="text" placeholder="Set an initial password">
-        <div class="hint" id="techPasswordHint">Share this technician number and password with the technician — they can log in immediately with it. There's no in-app way to change it yet, so use a real password you're comfortable sharing.</div>
+        <div class="hint" id="techPasswordHint">Share this technician number and password with the technician — they can log in immediately with it, then change it under Account.</div>
         <div id="techSaqccWrap">
           <label>SAQCC registration no. (optional)</label><input id="techSaqcc" placeholder="e.g. SAQCC/F/12345">
         </div>
@@ -890,7 +918,7 @@
           <button class="btn" onclick="saveTechnician()">Save technician</button>
         </div>
         <button class="btn ghost" id="deactivateTechBtn" style="margin-top:10px; display:none;">Deactivate this technician</button>
-        <div class="hint" style="margin-top:10px;">Deactivating blocks sign-in and clears site assignments but keeps the technician's inspection records for compliance history. Reactivate at any time. To fully remove the login, also disable the user in Firebase Console → Authentication.</div>
+        <div class="hint" style="margin-top:10px;">Deactivating disables their login straight away and clears their site assignments, but keeps the technician's inspection records for compliance history. Reactivate at any time.</div>
       </div>
     </section>
 
@@ -1006,9 +1034,9 @@
 
       <div class="card">
         <label style="margin-top:0;">Records backup</label>
-        <p class="hint" style="margin:0 0 10px;">A complete machine-readable snapshot of every site, equipment record, maintenance-history entry, monthly check, weekly verification entry and trainee placement. Keep it filed with your printed registers — SANS 1475 clause 5.4 requires records to be kept for at least 5 years.</p>
+        <p class="hint" style="margin:0 0 10px;">A complete machine-readable snapshot of every site, equipment record, maintenance-history entry, monthly check, weekly verification entry, trainee record, and your Audit and Workshop records. Photos and uploaded documents aren't included — they stay in your account's file storage. Keep it filed with your printed registers — SANS 1475 clause 5.4 requires records to be kept for at least 5 years.</p>
         <div class="row">
-          <div><label>Automatic backup</label>
+          <div><label>Backup reminder</label>
             <select id="coBackupEvery">
               <option value="0">Off — I'll back up manually</option>
               <option value="1">Every month</option>
@@ -1019,9 +1047,9 @@
           </div>
           <div><label>On day of month</label><input id="coBackupDay" type="number" min="1" max="28" value="1"></div>
         </div>
-        <div class="hint" style="margin-top:6px;">When off, nothing is downloaded automatically and there's no reminder — use "Download backup now" whenever you want a copy.</div>
+        <div class="hint" style="margin-top:6px;">When a reminder is set, a banner asks the administrator to download the backup on that day — the download itself is always done by you, from this device. When off, there's no reminder — use "Download backup now" whenever you want a copy.</div>
         <div class="hint" id="coBackupStatus" style="margin-top:8px;">No backup taken yet.</div>
-        <button class="btn secondary" style="margin-top:12px;" onclick="saveBackupSettings()">Save backup schedule</button>
+        <button class="btn secondary" style="margin-top:12px;" onclick="saveBackupSettings()">Save reminder</button>
         <button class="btn" style="margin-top:8px;" onclick="downloadFullBackup()">Download backup now</button>
       </div>
     </section>
@@ -1560,7 +1588,7 @@
 
   </main>
 
-  <div id="toast"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
 
   <nav class="bottom" id="bottomNav">
     <button id="navSites" class="active" onclick="showView('view-sites')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4M10 10h4M10 14h4M10 18h4"/></svg></span><span id="navSitesLabel">Sites</span></button>
@@ -1673,8 +1701,13 @@ function toast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(()=>t.classList.remove('show'), 2200);
+  // Long enough to actually read: a flat 2.2s cut off longer messages such as
+  // the certificate's "N units are non-compliant…" explanation or a save error.
+  const ms = Math.min(9000, Math.max(2200, String(msg).length * 55));
+  toastTimer = setTimeout(()=>t.classList.remove('show'), ms);
 }
+// Every screen's back button is an icon only — give each one a spoken name.
+document.querySelectorAll('.backbar > button:not([aria-label])').forEach(b=>b.setAttribute('aria-label','Back'));
 
 /* ---------- Auth state ---------- */
 let currentUser = null;   // firebase auth user
@@ -1705,6 +1738,9 @@ function hasWorkshopModule(){
 function hasAuditPack(){
   const m = currentCompanyAddons && currentCompanyAddons.modules;
   return !!(m && m.auditingModule);
+}
+function isCompanyReadOnly(){
+  return !!(currentCompanyAddons && currentCompanyAddons.status === 'canceled');
 }
 
 auth.onAuthStateChanged(async (user)=>{
@@ -1752,8 +1788,12 @@ auth.onAuthStateChanged(async (user)=>{
   setupRoleUI();
   updateSyncPill();
   updateProfileBanner();
+  // A canceled company is read-only (enforced by firestore.rules, storage.rules
+  // and the Cloud Functions) — this just tells people why saves are refused.
+  document.getElementById('readOnlyBanner').style.display = isCompanyReadOnly() ? 'block' : 'none';
   showView(currentRole === 'trainee' ? 'view-my-training' : (currentRole === 'competent' ? 'view-competent-sites' : 'view-sites'));
   maybeAutoBackup();
+  uploadPendingPhotos();   // any equipment photos taken offline in an earlier session
   // Best-effort — shown on the internal admin dashboard's technician list.
   // Never blocks sign-in on failure (e.g. while offline).
   db.collection('technicians').doc(user.uid).update({ lastLoginAt: firebase.firestore.FieldValue.serverTimestamp() }).catch(()=>{});
@@ -1773,23 +1813,90 @@ function doLogin(){
   const identifier = document.getElementById('loginIdentifier').value.trim();
   const password = document.getElementById('loginPassword').value;
   const errEl = document.getElementById('authError');
-  errEl.style.display='none';
+  errEl.style.display='none'; errEl.style.color='';
   if(!identifier || !password){ errEl.textContent='Enter your technician number or email and password.'; errEl.style.display='block'; return; }
-  if(identifier.includes('@')){
-    auth.signInWithEmailAndPassword(identifier, password).catch(e=>{
-      errEl.textContent = e.message; errEl.style.display='block';
-    });
+  const btn = document.getElementById('loginBtn');
+  if(btn.disabled) return;   // a second tap while the first sign-in is still running
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  const signIn = identifier.includes('@')
+    ? auth.signInWithEmailAndPassword(identifier, password)
+    : db.collection('technicianLookup').doc(identifier).get().then(doc=>{
+        if(!doc.exists){ const err = new Error(); err.code = 'vf/no-tech-number'; throw err; }
+        return auth.signInWithEmailAndPassword(doc.data().email, password);
+      });
+  signIn.catch(e=>{
+    errEl.textContent = friendlyAuthError(e); errEl.style.display='block';
+  }).finally(()=>{ btn.disabled = false; btn.textContent = 'Sign in'; });
+}
+// Firebase's raw messages ("Firebase: Error (auth/invalid-credential).") mean
+// nothing to someone on site — say what happened and what to do instead.
+function friendlyAuthError(e){
+  const code = (e && e.code) || '';
+  if(!navigator.onLine || code === 'auth/network-request-failed' || code === 'unavailable')
+    return 'You\'re offline. Signing in needs a connection the first time on this device — try again when you have signal.';
+  if(code === 'vf/no-tech-number') return 'That technician number wasn\'t found. Check it with your administrator.';
+  if(code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found' || code === 'auth/invalid-email' || code === 'auth/invalid-login-credentials')
+    return 'That number or email and password don\'t match. Check them and try again.';
+  if(code === 'auth/user-disabled') return 'This login has been deactivated. Contact your administrator.';
+  if(code === 'auth/too-many-requests') return 'Too many attempts. Wait a few minutes, then try again.';
+  return 'Could not sign in: ' + ((e && e.message) || 'unknown error');
+}
+// Admins sign in with a real email, so they can reset their own password.
+// Technicians, trainees and Competent Persons use a made-up login address
+// with no inbox, so their administrator resets theirs (Techs → edit person).
+function sendAdminPasswordReset(){
+  const errEl = document.getElementById('authError');
+  const email = document.getElementById('loginIdentifier').value.trim();
+  if(!email.includes('@')){
+    errEl.style.color = '';
+    errEl.textContent = 'Enter your administrator email address above, then tap "Forgot your password" again. Technicians and trainees: ask your administrator to set a new password for you.';
+    errEl.style.display = 'block';
     return;
   }
-  db.collection('technicianLookup').doc(identifier).get().then(doc=>{
-    if(!doc.exists){ throw new Error('No technician found for that number.'); }
-    const email = doc.data().email;
-    return auth.signInWithEmailAndPassword(email, password);
+  errEl.style.color = '';
+  auth.sendPasswordResetEmail(email).then(()=>{
+    errEl.style.color = 'var(--ink)';   // a confirmation, not an error
+    errEl.textContent = 'If ' + email + ' has a Vigil Fire administrator account, a password reset link is on its way. Check your inbox and spam folder.';
+    errEl.style.display = 'block';
   }).catch(e=>{
-    errEl.textContent = e.message; errEl.style.display='block';
+    errEl.textContent = (e && e.code === 'auth/invalid-email') ? 'That isn\'t a valid email address.' : friendlyAuthError(e);
+    errEl.style.display = 'block';
   });
 }
 function doLogout(){ auth.signOut(); }
+
+/* ---------- Account: change my own password ----------
+   Firebase requires a recent sign-in to change a password, so the current
+   password is re-checked first. Works for every role — a technician's login
+   email is the made-up tech<number>@technicians.invalid one, which is still
+   the account's real Auth email. */
+let accountBackView = 'view-sites';
+function openAccount(){
+  const current = document.querySelector('.view.active');
+  if(current && current.id !== 'view-account') accountBackView = current.id;
+  ['acctCurrentPw','acctNewPw','acctConfirmPw'].forEach(id=>{ document.getElementById(id).value = ''; });
+  showView('view-account');
+}
+async function changeMyPassword(){
+  const cur = document.getElementById('acctCurrentPw').value;
+  const next = document.getElementById('acctNewPw').value;
+  const confirmPw = document.getElementById('acctConfirmPw').value;
+  if(!cur){ toast('Enter your current password'); return; }
+  if(next.length < 8){ toast('The new password needs at least 8 characters'); return; }
+  if(next !== confirmPw){ toast('The new passwords don\'t match'); return; }
+  if(!navigator.onLine){ toast('You are offline — reconnect to change your password'); return; }
+  try{
+    const cred = firebase.auth.EmailAuthProvider.credential(currentUser.email, cur);
+    await currentUser.reauthenticateWithCredential(cred);
+    await currentUser.updatePassword(next);
+    ['acctCurrentPw','acctNewPw','acctConfirmPw'].forEach(id=>{ document.getElementById(id).value = ''; });
+    toast('Password changed');
+    showView(accountBackView);
+  }catch(e){
+    const wrong = e && (e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential');
+    toast(wrong ? 'Your current password is incorrect' : ('Error: ' + e.message));
+  }
+}
 
 /* ---------- POPIA data-subject access request: "download my information" ----------
    Self-service export of the signed-in user's own personal data — their
@@ -2141,7 +2248,10 @@ async function loadTechsCache(){
   // — Firestore rejects a whole list query outright unless it can prove every
   // possible result satisfies the rule, which for a get()-derived value like
   // companyId means the query has to filter on it directly.
-  const snap = await db.collection('technicians').where('role','==','technician').where('companyId','==',currentCompanyId).get();
+  // Only an admin may read full technicians docs; anyone else (a trainee
+  // picking their witness) gets the name-only staffDirectory mirror.
+  const coll = currentRole === 'admin' ? 'technicians' : 'staffDirectory';
+  const snap = await db.collection(coll).where('role','==','technician').where('companyId','==',currentCompanyId).get();
   techsCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
 }
 
@@ -2289,29 +2399,27 @@ async function completeSite(){
   if(!currentSiteId) return;
   if(!confirm('Mark this site as complete? This signs it off as of today and unlocks the certificate. You can still add or edit equipment, and reopen the site later.')) return;
   const today = toLocalISO(new Date());
-  try{
-    await db.collection('sites').doc(currentSiteId).update({
-      completed: true,
-      completedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      lastCompletedDate: today,
-      lastCompletedBy: currentProfile.name || ''
-    });
-    const site = sitesCache.find(s=>s.id===currentSiteId);
-    if(site){ site.completed = true; site.lastCompletedDate = today; site.lastCompletedBy = currentProfile.name || ''; }
-    renderSiteDetailChrome();
-    toast('Site marked as complete');
-  }catch(e){ toast('Error: ' + e.message); }
+  // Not awaited — see saveEquipment(): offline, the promise wouldn't settle
+  // until the device reconnects, though the write is already applied locally.
+  db.collection('sites').doc(currentSiteId).update({
+    completed: true,
+    completedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    lastCompletedDate: today,
+    lastCompletedBy: currentProfile.name || ''
+  }).catch(e=>toast('Error: ' + e.message));
+  const site = sitesCache.find(s=>s.id===currentSiteId);
+  if(site){ site.completed = true; site.lastCompletedDate = today; site.lastCompletedBy = currentProfile.name || ''; }
+  renderSiteDetailChrome();
+  toast(navigator.onLine ? 'Site marked as complete' : 'Site marked as complete — will sync when you\'re back online');
 }
 
 async function reopenSite(){
   if(!currentSiteId) return;
-  try{
-    await db.collection('sites').doc(currentSiteId).update({ completed: false });
-    const site = sitesCache.find(s=>s.id===currentSiteId);
-    if(site) site.completed = false;
-    renderSiteDetailChrome();
-    toast('Site reopened');
-  }catch(e){ toast('Error: ' + e.message); }
+  db.collection('sites').doc(currentSiteId).update({ completed: false }).catch(e=>toast('Error: ' + e.message));
+  const site = sitesCache.find(s=>s.id===currentSiteId);
+  if(site) site.completed = false;
+  renderSiteDetailChrome();
+  toast('Site reopened');
 }
 
 /* ---------- Company profile ----------
@@ -5451,7 +5559,7 @@ async function saveBackupSettings(){
   try{
     await db.collection('settings').doc(currentCompanyId).set(payload, {merge:true});
     companySettings = Object.assign({}, companySettings, payload);
-    toast('Backup schedule saved');
+    toast('Backup reminder saved');
     maybeAutoBackup();
   }catch(e){ toast('Error: ' + e.message); }
 }
@@ -5475,20 +5583,27 @@ function downloadJSON(filename, data){
 
 async function downloadFullBackup(fromSchedule){
   toast('Gathering records…');
-  const out = { app:'Vigil Fire', schemaVersion:6, exportedAt:new Date().toISOString(),
+  // Module collections the company doesn't have read as empty (the rules
+  // refuse the query, caught below) rather than failing the whole backup.
+  const MODULE_COLLECTIONS = ['branches','vehicles','companyDocuments','calibrationCertificates','tools','toolChecks',
+    'sans1475Checklist','sans1475RegisterEntries','reconditioningJobs','toolboxTalks','mandatoryTopics'];
+  const out = { app:'Vigil Fire', schemaVersion:7, exportedAt:new Date().toISOString(),
     exportedBy: currentProfile.name || currentUser.uid,
     company:{}, sites:[], technicians:[], equipment:[], serviceEvents:[], monthlyChecks:[], calibrations:[], emailLog:[],
-    traineeAssignments:[], logbookEntries:[], traineeCompetencies:[] };
+    traineeAssignments:[], logbookEntries:[], traineeCompetencies:[], toolboxTalkAttendees:[] };
+  MODULE_COLLECTIONS.forEach(c=>{ out[c] = []; });
   const asRows = snap => snap.docs.map(d=>({id:d.id, ...d.data()}));
+  const byCompany = c => db.collection(c).where('companyId','==',currentCompanyId).get().catch(()=>({docs:[]}));
   try{
     out.company = companySettings || {};   // already kept fresh at login / on the Company tab — no need to re-fetch
-    const [siteSnap, techSnap, calSnap, trSnap, lbSnap, tcSnap] = await Promise.all([
+    const [siteSnap, techSnap, calSnap, trSnap, lbSnap, tcSnap, ...moduleSnaps] = await Promise.all([
       db.collection('sites').where('companyId','==',currentCompanyId).get(),
-      db.collection('technicians').where('companyId','==',currentCompanyId).get().catch(()=>({docs:[]})),
-      db.collection('calibrations').where('companyId','==',currentCompanyId).get().catch(()=>({docs:[]})),
-      db.collection('traineeAssignments').where('companyId','==',currentCompanyId).get().catch(()=>({docs:[]})),
-      db.collection('logbookEntries').where('companyId','==',currentCompanyId).get().catch(()=>({docs:[]})),
-      db.collection('traineeCompetencies').where('companyId','==',currentCompanyId).get().catch(()=>({docs:[]}))
+      byCompany('technicians'),
+      byCompany('calibrations'),
+      byCompany('traineeAssignments'),
+      byCompany('logbookEntries'),
+      byCompany('traineeCompetencies'),
+      ...MODULE_COLLECTIONS.map(byCompany)
     ]);
     out.sites = asRows(siteSnap);
     out.technicians = asRows(techSnap);
@@ -5496,6 +5611,13 @@ async function downloadFullBackup(fromSchedule){
     out.traineeAssignments = asRows(trSnap);
     out.logbookEntries = asRows(lbSnap);
     out.traineeCompetencies = asRows(tcSnap);
+    MODULE_COLLECTIONS.forEach((c, i)=>{ out[c] = asRows(moduleSnaps[i]); });
+    // Each talk's signed attendance lives in its own subcollection.
+    const attendeeSnaps = await Promise.all(out.toolboxTalks.map(t=>
+      db.collection('toolboxTalks').doc(t.id).collection('attendees').get().catch(()=>({docs:[]}))));
+    attendeeSnaps.forEach((snap, i)=>{
+      snap.docs.forEach(d=>out.toolboxTalkAttendees.push({ talkId: out.toolboxTalks[i].id, id: d.id, ...d.data() }));
+    });
 
     // companyId is included alongside siteId on every query below — an admin
     // who isn't personally in a site's assignedTo can only be proven to have
@@ -5605,6 +5727,30 @@ async function openCertificate(siteId, opts){
   items = items.filter(e=>!e.condemned);
   items.sort((a,b)=>(a.location||'').localeCompare(b.location||''));
 
+  // The certificate declares every unit in service was maintained to SANS
+  // 1475, so it can't be issued while any of them plainly wasn't: failed,
+  // never inspected, or overdue for maintenance or a pressure test. Fix,
+  // recharge or condemn those first — the same gate the register applies to
+  // outstanding recharges. "Needs attention" units don't block it but are
+  // listed on the certificate, so nothing is certified silently.
+  const blockers = items.filter(e=>{
+    const d = dueStatus(e);
+    return e.status==='fail' || !e.inspectionDate || d.serviceOverdue || d.pressureOverdue
+      || (e.rechargeRequired && !e.rechargeDate);
+  });
+  if(blockers.length){
+    const msg = `${blockers.length} unit${blockers.length===1?' is':'s are'} non-compliant, not yet inspected, overdue or awaiting recharge — resolve or condemn ${blockers.length===1?'it':'them'} before issuing the certificate`;
+    say(msg);
+    return opts.silent ? {error:msg} : undefined;
+  }
+  const attention = items.filter(e=>e.status==='attention');
+  const attentionTable = attention.length ? `
+    <h3>Units noted for attention</h3>
+    <table>
+      <thead><tr><th>Equipment type</th><th>Serial / tag</th><th>Location</th><th>Notes</th></tr></thead>
+      <tbody>${attention.map(e=>`<tr><td>${escapeHtml(typeLabel(e.type))}</td><td>${escapeHtml(e.serial||'')}</td><td>${escapeHtml(e.location||'')}</td><td>${escapeHtml(e.notes||'')}</td></tr>`).join('')}</tbody>
+    </table>` : '';
+
   const co = companySettings || {};
   const today = toLocalISO(new Date());
   const stLabel = serviceTypeLabel(site.serviceType);
@@ -5651,6 +5797,7 @@ async function openCertificate(siteId, opts){
         <tr><td><strong>Total in service</strong></td><td style="text-align:right;"><strong>${items.length}</strong></td></tr>
       </tbody>
     </table>
+    ${attentionTable}
 
     <div class="declaration">This maintenance was conducted in accordance with the latest edition of SANS 1475 and other applicable South African National Standards.</div>
     <div class="declaration">Records to be kept for 5 years in accordance with SANS 1475 clause 5.4.</div>
@@ -6688,23 +6835,17 @@ async function saveEquipment(){
   const type = document.getElementById('eqType').value;
   if(!type){ toast('Select an equipment type'); return; }
   const e = editingAssetId ? equipmentCache.find(x=>x.id===editingAssetId) : null;
-  const ref = editingAssetId ? db.collection('equipment').doc(editingAssetId) : null;
+  // A new item gets its id up front, so the photo path and the record agree
+  // and a second tap on Save can never create a duplicate.
+  const ref = editingAssetId ? db.collection('equipment').doc(editingAssetId) : db.collection('equipment').doc();
+  const eqId = ref.id;
 
   let photoURL = currentPhotoURL;
-  try{
-    if(currentPhotoDataUrl){
-      toast('Uploading photo…');
-      // Company-scoped path — Storage rules can't cheaply prove a new photo
-      // belongs to a caller's own tenant without it (the equipment doc for a
-      // brand-new item doesn't exist yet at upload time, so there's no
-      // Firestore record yet to check against).
-      const sref = storage.ref('equipment-photos/' + currentCompanyId + '/' + (editingAssetId || Date.now()) + '.jpg');
-      await sref.putString(currentPhotoDataUrl, 'data_url');
-      photoURL = await sref.getDownloadURL();
-    }
-  }catch(err){
-    toast('Photo upload failed, saving without it: ' + err.message);
-    photoURL = currentPhotoURL;
+  let photoQueued = false;
+  if(currentPhotoDataUrl){
+    const uploaded = await uploadEquipmentPhotoOrQueue(eqId, currentPhotoDataUrl);
+    if(uploaded) photoURL = uploaded;
+    else photoQueued = true;
   }
 
   const rechargeRequired = document.getElementById('eqRechargeReq').value === 'yes';
@@ -6795,77 +6936,102 @@ async function saveEquipment(){
     payload.saqcc = e.saqcc || '';
   }
 
-  try{
-    let eqId = editingAssetId;
-    if(editingAssetId){
-      await ref.update(payload);
-      toast('Equipment saved');
-    } else {
-      payload.siteId = currentSiteId;
-      payload.companyId = currentCompanyId;
-      payload.createdBy = currentUser.uid;
-      payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-      const newRef = await db.collection('equipment').add(payload);
-      eqId = newRef.id;
-      toast('Equipment added');
-    }
-    // Append an immutable service-history entry when something on the compliance
-    // record changed (not for pure identity edits). Best-effort — never blocks.
-    if(!e || serviceFieldsChanged(payload, e)){
-      logServiceEvent(eqId, payload, e);
-    }
-    showView('view-site-detail');
-  }catch(err){ toast('Error saving: ' + err.message); }
+  // Not awaited: Firestore applies the write to its local (offline-persisted)
+  // cache at once, but the promise only settles when the server confirms —
+  // which, with no signal, is whenever the device next reconnects. Awaiting it
+  // left the form stuck on Save for the whole offline visit. The write itself
+  // is kept on the device and syncs automatically; a server-side rejection
+  // (e.g. a permission error) still surfaces as a toast when it arrives.
+  const isNew = !editingAssetId;
+  if(isNew){
+    payload.siteId = currentSiteId;
+    payload.companyId = currentCompanyId;
+    payload.createdBy = currentUser.uid;
+    payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+  }
+  // The immutable service-history entry is written server-side by the
+  // `recordServiceEvent` trigger when this write reaches the database.
+  (isNew ? ref.set(payload) : ref.update(payload))
+    .catch(err=>toast('Could not save ' + (payload.serial || typeLabel(type)) + ': ' + err.message));
+  const offline = !navigator.onLine;
+  toast(photoQueued ? 'Saved — the photo will upload when you\'re back online'
+    : offline ? 'Saved on this device — will sync when you\'re back online'
+    : (isNew ? 'Equipment added' : 'Equipment saved'));
+  showView('view-site-detail');
 }
 
-/* ---------- Immutable service-history log (`serviceEvents`) ----------
-   One snapshot per substantive change to an equipment record, so the app keeps
-   a full audit trail even though the equipment doc itself holds only current
-   state. Entries are write-once (see firestore.rules). */
-const SVC_FIELDS = ['serviceDate','inspectionDate','nextServiceDue','pressureTestDate','pressureTestDue',
-  'weightCheckDate','hoseReplacedDate','rechargeDate','condemnedDate','status','serviceMass',
-  'ptPerformed','rechargeRequired','condemned','condemnedActionPlan'];
-function serviceFieldsChanged(payload, e){
-  if(!e) return true;
-  return SVC_FIELDS.some(k => (payload[k]||'') !== (e[k]||''));
+/* ---------- Equipment photos taken offline ----------
+   Storage uploads, unlike Firestore writes, aren't queued by the SDK — with
+   no signal one just retries for minutes and then fails. So a photo is only
+   uploaded straight away when there's a connection that answers quickly;
+   otherwise it's parked in this device's IndexedDB and uploaded (and its URL
+   written onto the equipment record) as soon as the device is back online. */
+const PHOTO_DB = 'vf-pending-photos', PHOTO_STORE = 'photos';
+function openPhotoDb(){
+  return new Promise((resolve, reject)=>{
+    const req = indexedDB.open(PHOTO_DB, 1);
+    req.onupgradeneeded = ()=>req.result.createObjectStore(PHOTO_STORE, { keyPath:'eqId' });
+    req.onsuccess = ()=>resolve(req.result);
+    req.onerror = ()=>reject(req.error);
+  });
 }
-function eventKind(p){
-  if(p.condemned) return 'condemned';
-  if(p.ptPerformed) return 'pressure-test';
-  if(p.rechargeRequired && p.rechargeDate) return 'recharge';
-  if(p.inspectionDate) return 'service';
-  return 'update';
+async function photoStore(mode, fn){
+  const pdb = await openPhotoDb();
+  return new Promise((resolve, reject)=>{
+    const tx = pdb.transaction(PHOTO_STORE, mode);
+    const req = fn(tx.objectStore(PHOTO_STORE));
+    tx.oncomplete = ()=>resolve(req && req.result);
+    tx.onerror = ()=>reject(tx.error);
+  });
 }
-async function logServiceEvent(equipmentId, p, e){
+function equipmentPhotoRef(companyId, eqId){
+  // Company-scoped path — Storage rules check the tenant from the path, since
+  // a brand-new item's equipment doc may not exist on the server yet.
+  return storage.ref('equipment-photos/' + companyId + '/' + eqId + '.jpg');
+}
+async function uploadEquipmentPhotoNow(companyId, eqId, dataUrl){
+  const sref = equipmentPhotoRef(companyId, eqId);
+  const timeout = new Promise((_, reject)=>setTimeout(()=>reject(new Error('timeout')), 15000));
+  await Promise.race([sref.putString(dataUrl, 'data_url'), timeout]);
+  return sref.getDownloadURL();
+}
+// Returns the download URL, or null once the photo has been queued instead.
+async function uploadEquipmentPhotoOrQueue(eqId, dataUrl){
+  if(navigator.onLine){
+    try{
+      toast('Uploading photo…');
+      return await uploadEquipmentPhotoNow(currentCompanyId, eqId, dataUrl);
+    }catch(_){ /* weak or no signal — fall through and queue it */ }
+  }
   try{
-    await db.collection('serviceEvents').add({
-      equipmentId,
-      siteId: p.siteId || (e && e.siteId) || currentSiteId,
-      companyId: p.companyId || (e && e.companyId) || currentCompanyId,
-      kind: eventKind(p),
-      type: p.type||'', make: p.make||'', serial: p.serial||'', location: p.location||'',
-      serviceDate: p.serviceDate||null, inspectionDate: p.inspectionDate||null, nextServiceDue: p.nextServiceDue||null,
-      pressureTestDate: p.pressureTestDate||null, pressureTestDue: p.pressureTestDue||null,
-      ptPerformed: !!p.ptPerformed, ptPrevDate: p.ptPrevDate||null, ptTestPressure: p.ptTestPressure||'',
-      ptResult: p.ptResult||'', ptTechnicianName: p.ptTechnicianName||'', ptTechnicianSaqcc: p.ptTechnicianSaqcc||'',
-      ptChecklist: p.ptChecklist||{}, ptNotes: p.ptNotes||'',
-      serviceMass: p.serviceMass||'', tareMass: p.tareMass||'', weightCheckDate: p.weightCheckDate||null,
-      hoseReplacedDate: p.hoseReplacedDate||null,
-      rechargeRequired: !!p.rechargeRequired, rechargeDate: p.rechargeDate||null, rechargeMedium: p.rechargeMedium||'',
-      rechargePressureBefore: p.rechargePressureBefore||'', rechargePressureAfter: p.rechargePressureAfter||'',
-      rechargeTechnicianName: p.rechargeTechnicianName||'', rechargeTechnicianSaqcc: p.rechargeTechnicianSaqcc||'',
-      rechargeChecklist: p.rechargeChecklist||{}, rechargeNotes: p.rechargeNotes||'',
-      condemned: !!p.condemned, condemnedDate: p.condemnedDate||null, condemnedReason: p.condemnedReason||'',
-      condemnedCriteria: p.condemnedCriteria||{}, replacedBy: p.replacedBy||'',
-      condemnedActionPlan: p.condemnedActionPlan||'', condemnedActionPlanNotes: p.condemnedActionPlanNotes||'',
-      condemnedActionPlanDate: p.condemnedActionPlanDate||null,
-      status: p.status||'', checklist: p.checklist||{}, notes: p.notes||'',
-      technicianName: p.technicianName||'', saqcc: p.saqcc||'',
-      recordedBy: currentUser.uid, recordedByName: currentProfile.name||'',
-      recordedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  }catch(_){ /* audit trail is best-effort; the equipment save already succeeded */ }
+    await photoStore('readwrite', s=>s.put({ eqId, companyId: currentCompanyId, dataUrl, queuedAt: Date.now() }));
+  }catch(err){
+    toast('Could not keep the photo on this device: ' + err.message);
+  }
+  return null;
 }
+let pendingPhotosRunning = false;
+async function uploadPendingPhotos(){
+  if(pendingPhotosRunning || !navigator.onLine || !currentCompanyId) return;
+  pendingPhotosRunning = true;
+  try{
+    const pending = (await photoStore('readonly', s=>s.getAll())) || [];
+    for(const p of pending.filter(x=>x.companyId===currentCompanyId)){
+      try{
+        const url = await uploadEquipmentPhotoNow(p.companyId, p.eqId, p.dataUrl);
+        db.collection('equipment').doc(p.eqId).update({ photoURL: url }).catch(()=>{});
+        await photoStore('readwrite', s=>s.delete(p.eqId));
+      }catch(_){ /* still no usable connection — try again next time */ }
+    }
+  }catch(_){ /* IndexedDB unavailable — nothing was queued */ }
+  finally{ pendingPhotosRunning = false; }
+}
+window.addEventListener('online', uploadPendingPhotos);
+
+/* The immutable service-history log (`serviceEvents`) is written server-side
+   by the `recordServiceEvent` trigger in functions/index.js on every
+   substantive change to an equipment record, including deletion — so no app
+   code path (offline save, Due-list recharge, delete) can bypass it. */
 
 async function deleteEquipment(){
   if(!editingAssetId || currentRole!=='admin') return;
@@ -6874,7 +7040,10 @@ async function deleteEquipment(){
   try{
     // Clean up any inspection-history docs left from the earlier data model.
     try{
-      const inspSnap = await db.collection('equipment').doc(editingAssetId).collection('inspections').get();
+      // Filtered on companyId: an unfiltered query here is refused outright by
+      // the read rule (it can't be proven tenant-safe), so the cleanup never ran.
+      const inspSnap = await db.collection('equipment').doc(editingAssetId).collection('inspections')
+        .where('companyId','==',currentCompanyId).get();
       let docs = inspSnap.docs.slice();
       while(docs.length){
         const batch = db.batch();
@@ -7020,7 +7189,7 @@ function openTechForm(id){
     numberField.value = t.techNumber||'';
     numberField.disabled = true;
     passField.value = '';
-    document.getElementById('techPasswordHint').textContent = "Passwords can't be changed from here — use Firebase Console → Authentication → Users → Reset password. This field is ignored when editing.";
+    document.getElementById('techPasswordHint').textContent = "Leave blank to keep their current password. To reset a forgotten one, enter a new temporary password (8+ characters) and share it with them — they can change it under Account once signed in.";
     document.getElementById('techSaqcc').value = t.saqcc||'';
     document.getElementById('techPhone').value = t.phone||'';
     document.getElementById('techCanCalibrate').checked = !!t.canCalibrate;
@@ -7055,15 +7224,17 @@ async function saveTechnician(){
   if(!name || !techNumber){ toast('Name and technician number are required'); return; }
 
   if(editingTechId){
+    if(password && password.length < 8){ toast('A new password needs at least 8 characters'); return; }
     try{
       await db.collection('technicians').doc(editingTechId).update({ name, saqcc, phone, canCalibrate, canRunToolboxTalks });
-      toast('Updated');
+      if(password) await firebase.functions().httpsCallable('setStaffPassword')({ id: editingTechId, password });
+      toast(password ? 'Updated — share the new password with them' : 'Updated');
       showView('view-technicians');
     }catch(e){ toast('Error: ' + e.message); }
     return;
   }
 
-  if(!password || password.length < 6){ toast('Set a password of at least 6 characters'); return; }
+  if(!password || password.length < 8){ toast('Set a password of at least 8 characters'); return; }
   if(!document.getElementById('techConsent').checked){ toast('Confirm they have been informed and consent (POPIA) before saving'); return; }
   try{
     // Account creation, the technicianLookup entry and the seat-limit check
@@ -7078,26 +7249,17 @@ async function saveTechnician(){
 }
 
 /* Deactivating keeps the technician's inspection records (they are compliance
-   history and must survive staff turnover). It blocks sign-in via the
-   `active:false` check in onAuthStateChanged and drops the technician from every
-   site's assignedTo, which also cuts their Firestore read access to those sites.
-   Fully deleting the Auth login still requires the Firebase Console. */
+   history and must survive staff turnover). The `deactivateTechnician` Cloud
+   Function disables their login, sets `active:false` (which firestore.rules
+   and every callable now refuse) and drops them from every site in the
+   company — it has to be server-side, since only the Admin SDK can disable an
+   Auth account. */
 async function deactivateTechnician(id){
   if(!id) return;
   const t = techsCache.find(x=>x.id===id) || competentCache.find(x=>x.id===id);
   if(!confirm(`Deactivate ${t?t.name:'this person'}? They will no longer be able to sign in and will be removed from all site assignments. Their records are kept for compliance history, and you can reactivate them later.`)) return;
   try{
-    const batch = db.batch();
-    batch.update(db.collection('technicians').doc(id), { active:false });
-    sitesCache.forEach(site=>{
-      if((site.assignedTo||[]).includes(id)){
-        batch.update(db.collection('sites').doc(site.id), {assignedTo: site.assignedTo.filter(tid=>tid!==id)});
-      }
-      if((site.assignedCompetentPersons||[]).includes(id)){
-        batch.update(db.collection('sites').doc(site.id), {assignedCompetentPersons: site.assignedCompetentPersons.filter(tid=>tid!==id)});
-      }
-    });
-    await batch.commit();
+    await firebase.functions().httpsCallable('deactivateTechnician')({ id });
     toast('Deactivated');
     showView('view-technicians');
   }catch(e){ toast('Error: ' + e.message); }
@@ -7272,7 +7434,7 @@ async function openTraineeForm(id){
     numberField.value = t.techNumber||'';
     numberField.disabled = true;
     passField.value = '';
-    document.getElementById('trPasswordHint').textContent = "Passwords can't be changed from here — use Firebase Console → Authentication → Users → Reset password. This field is ignored when editing.";
+    document.getElementById('trPasswordHint').textContent = "Leave blank to keep their current password. To reset a forgotten one, enter a new temporary password (8+ characters) and share it with them — they can change it under Account once signed in.";
     document.getElementById('trRegisteredDate').value = t.traineeRegisteredDate || '';
     document.getElementById('trPhone').value = t.phone||'';
     const a = traineeAssignmentsCache[id] || {};
@@ -7329,8 +7491,10 @@ async function saveTrainee(){
   };
 
   if(editingTraineeId){
+    if(password && password.length < 8){ toast('A new password needs at least 8 characters'); return; }
     try{
       await db.collection('technicians').doc(editingTraineeId).update({ name, phone, traineeRegisteredDate: registeredDate });
+      if(password) await firebase.functions().httpsCallable('setStaffPassword')({ id: editingTraineeId, password });
       const existing = traineeAssignmentsCache[editingTraineeId] || {};
       const payload = Object.assign({ status: existing.status || 'active' }, assignmentPayload);
       // Keep a record of who supervised this trainee and when, so a
@@ -7349,7 +7513,7 @@ async function saveTrainee(){
     return;
   }
 
-  if(!password || password.length < 6){ toast('Set a password of at least 6 characters'); return; }
+  if(!password || password.length < 8){ toast('Set a password of at least 8 characters'); return; }
   if(!document.getElementById('trConsent').checked){ toast('Confirm the trainee has been informed and consents (POPIA) before saving'); return; }
   try{
     // Account creation, the technicianLookup entry and the seat-limit check
@@ -7369,7 +7533,7 @@ async function deactivateTrainee(id){
   const t = traineesCache.find(x=>x.id===id);
   if(!confirm(`Deactivate ${t?t.name:'this trainee'}? They will no longer be able to sign in. Their logbook records are kept, and you can reactivate them later.`)) return;
   try{
-    await db.collection('technicians').doc(id).update({ active:false });
+    await firebase.functions().httpsCallable('deactivateTechnician')({ id });
     toast('Trainee deactivated');
     showView('view-trainees');
   }catch(e){ toast('Error: ' + e.message); }
@@ -7427,22 +7591,10 @@ async function qualifyTrainee(){
   if(!trimmed){ toast('Enter a technician number'); return; }
   if(!confirm(`Qualify ${t.name} as a registered technician, logging in from now on as "${trimmed}" instead of "${t.techNumber}"? Let them know their new number.`)) return;
   try{
-    if(trimmed !== t.techNumber){
-      const lookupExisting = await db.collection('technicianLookup').doc(trimmed).get();
-      if(lookupExisting.exists){ toast('That technician number is already in use'); return; }
-    }
-    const batch = db.batch();
-    batch.update(db.collection('technicians').doc(id), { role:'technician', techNumber: trimmed });
-    batch.set(db.collection('technicianLookup').doc(trimmed), { email: t.email, companyId: currentCompanyId });
-    if(t.techNumber && t.techNumber !== trimmed){
-      batch.delete(db.collection('technicianLookup').doc(t.techNumber));
-    }
-    batch.set(db.collection('traineeAssignments').doc(id), {
-      status:'completed',
-      completedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      completedBy: currentUser.uid
-    }, {merge:true});
-    await batch.commit();
+    // Server-side: qualifying occupies a technician seat, so it's seat-checked
+    // in the `qualifyTrainee` Cloud Function, which also swaps the login
+    // number and closes the placement.
+    await firebase.functions().httpsCallable('qualifyTrainee')({ id, techNumber: trimmed });
     toast(`${t.name} qualified — now listed under Technicians. Add their SAQCC registration number there.`);
     showView('view-trainees');
   }catch(e){ toast('Error: ' + e.message); }
@@ -8352,9 +8504,10 @@ async function openTalkForm(){
   // Fetched fresh here rather than reused from techsCache/traineesCache —
   // those are only ever populated by the admin-only Technicians/Trainees
   // tabs, and a permitted technician opening this form will usually have
-  // visited neither.
+  // visited neither. Read from staffDirectory (names and roles only), since
+  // a technician can't read colleagues' full technicians docs.
   const [rosterResult, topicsResult] = await Promise.allSettled([
-    db.collection('technicians').where('companyId','==',currentCompanyId).get(),
+    db.collection('staffDirectory').where('companyId','==',currentCompanyId).get(),
     db.collection('mandatoryTopics').where('companyId','==',currentCompanyId).get()
   ]);
 
