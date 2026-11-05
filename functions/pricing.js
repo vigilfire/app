@@ -12,30 +12,29 @@
  *
  * There is only one base tier (Core) now — no named plans. Every company
  * starts on Core and independently buys whichever of the 4 modules it
- * needs, each priced and gated on its own. Prices below are placeholders
- * (no Rand figures were given for this pricing round) — replace with real
- * pricing before relying on the MRR figure, same caveat every pricing
- * constants file in this project has carried since the first one.
+ * needs, each priced and gated on its own. Prices are the published Rand
+ * figures (excl. VAT) on the marketing site's #pricing section
+ * (vigilfire.github.io) — change all three together.
  */
-const CORE_PRICE = 499;
+const CORE_PRICE = 2499;
 const CORE_INCLUDED_ADMINS = 1;
 const CORE_INCLUDED_TECHNICIANS = 3;
 
-const CLIENT_MODULE_PRICE = 349;
+const CLIENT_MODULE_PRICE = 1599;
 
-const TRAINEE_MODULE_PRICE = 249;
+const TRAINEE_MODULE_PRICE = 1449;
 const TRAINEE_MODULE_INCLUDED_TRAINEES = 2;
 
-const WORKSHOP_MODULE_PRICE = 349;
+const WORKSHOP_MODULE_PRICE = 1899;
 
-const AUDITING_MODULE_PRICE = 399;
+const AUDITING_MODULE_PRICE = 1999;
 const AUDITING_MODULE_INCLUDED_WORKSHOPS = 1;
 
 const ADDON_PRICES = {
   extraTechnician: 249,
   extraAdmin: 149,
-  extraTrainee: 99,
-  extraWorkshop: 279,
+  extraTrainee: 149,
+  extraWorkshop: 1279,
 };
 
 function calculateMonthlyPrice(company) {

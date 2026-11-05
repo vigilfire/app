@@ -49,11 +49,15 @@
  *      package.json with migrate-to-multitenant.js, nothing new to add)
  *
  * Usage:
- *   node seed-demo.js /path/to/serviceAccountKey.json --email you@example.com
+ *   node seed-demo.js /path/to/serviceAccountKey.json --email you@example.com --password <demo password>
  *     Builds (or rebuilds — it wipes any previous demo-co first) the demo
  *     tenant. --email is the address the two demo sites use as their site
  *     contact — that's where "Email to site" sends will actually land, and
  *     it's the only personal detail this script touches, never committed.
+ *     --password sets the password for all four demo logins (12+ characters).
+ *     It is deliberately not stored in this file: this repo is public, and
+ *     the demo admin is a real admin account in the production project.
+ *     Re-running with a new --password rotates it on the existing accounts.
  *
  *   node seed-demo.js /path/to/serviceAccountKey.json --wipe
  *     Deletes the demo tenant (companies/companyAddons/settings docs, every
@@ -67,10 +71,12 @@ const keyPath = process.argv[2];
 const emailFlagIdx = process.argv.indexOf("--email");
 const contactEmail = emailFlagIdx !== -1 ? process.argv[emailFlagIdx + 1] : null;
 const wipeOnly = process.argv.includes("--wipe");
+const passwordFlagIdx = process.argv.indexOf("--password");
+const DEMO_PASSWORD = passwordFlagIdx !== -1 ? process.argv[passwordFlagIdx + 1] : null;
 
-if (!keyPath || (!wipeOnly && !contactEmail)) {
+if (!keyPath || (!wipeOnly && (!contactEmail || !DEMO_PASSWORD || DEMO_PASSWORD.length < 12))) {
   console.error("Usage:");
-  console.error("  node seed-demo.js /path/to/serviceAccountKey.json --email you@example.com");
+  console.error("  node seed-demo.js /path/to/serviceAccountKey.json --email you@example.com --password <12+ characters>");
   console.error("  node seed-demo.js /path/to/serviceAccountKey.json --wipe");
   process.exit(1);
 }
@@ -82,7 +88,6 @@ const db = admin.firestore();
 const auth = admin.auth();
 
 const COMPANY_ID = "demo-co";
-const DEMO_PASSWORD = "VigilDemo2026!";
 const ADMIN_EMAIL = "admin@demo.vigilfire.invalid";
 const TECH_NUMBER = "DEMO-TECH";
 const TRAINEE_NUMBER = "DEMO-TRAIN";

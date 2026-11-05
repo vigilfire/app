@@ -12,14 +12,27 @@ service cloud.firestore {
     function isSuperadmin() {
       return isSignedIn() && request.auth.token.role == 'superadmin';
     }
+    // The signed-in user's own technicians doc. Repeated get()s of the same
+    // path within one request are only fetched (and billed) once.
+    function me() {
+      return get(/databases/$(database)/documents/technicians/$(request.auth.uid)).data;
+    }
+    // A deactivated account (active:false) loses all access here, not just in
+    // the app's UI — the deactivateTechnician Cloud Function also disables the
+    // Auth login, but an ID token issued before that stays valid for up to an
+    // hour, so the rules check the flag too. A doc with no `active` field
+    // predates the flag and counts as active.
+    function isActiveMember() {
+      return isSignedIn() && me().get('active', true) != false;
+    }
     function isAdmin() {
-      return isSignedIn() &&
-        get(/databases/$(database)/documents/technicians/$(request.auth.uid)).data.role == 'admin';
+      return isActiveMember() && me().role == 'admin';
     }
     // The signed-in user's own tenant. Every multi-tenant collection carries a
-    // `companyId` field so this is one lookup, not a join per document.
+    // `companyId` field so this is one lookup, not a join per document. A
+    // deactivated account belongs to no company (null never matches).
     function myCompanyId() {
-      return get(/databases/$(database)/documents/technicians/$(request.auth.uid)).data.companyId;
+      return isActiveMember() ? me().companyId : null;
     }
     // An admin may manage a document only within their own company — plain
     // `isAdmin()` alone would let any company's admin reach any other
@@ -27,24 +40,29 @@ service cloud.firestore {
     function isCompanyAdmin(companyId) {
       return isAdmin() && myCompanyId() == companyId;
     }
+    // The tenant a site belongs to — so a record written against a site can be
+    // required to carry that same companyId (otherwise someone assigned to a
+    // site in one company could tag records with another company's id and
+    // have them appear in that company's registers).
+    function siteCompanyId(siteId) {
+      return get(/databases/$(database)/documents/sites/$(siteId)).data.companyId;
+    }
     function isAssignedToSite(siteId) {
-      return isSignedIn() &&
+      return isActiveMember() &&
         request.auth.uid in get(/databases/$(database)/documents/sites/$(siteId)).data.assignedTo;
     }
     // A Competent Person's site assignment for the SANS 10105-1 monthly
     // check — a separate list from assignedTo (maintenance technicians) on
     // purpose, so the two kinds of access never overlap.
     function isAssignedAsCompetentPerson(siteId) {
-      return isSignedIn() &&
+      return isActiveMember() &&
         request.auth.uid in get(/databases/$(database)/documents/sites/$(siteId)).data.assignedCompetentPersons;
     }
     function canCalibrate() {
-      return isSignedIn() &&
-        get(/databases/$(database)/documents/technicians/$(request.auth.uid)).data.canCalibrate == true;
+      return isActiveMember() && me().get('canCalibrate', false) == true;
     }
     function canRunToolboxTalks() {
-      return isSignedIn() &&
-        get(/databases/$(database)/documents/technicians/$(request.auth.uid)).data.canRunToolboxTalks == true;
+      return isActiveMember() && me().get('canRunToolboxTalks', false) == true;
     }
     // Vigil Core + 4 feature modules (Client / Trainee / Workshop /
     // Auditing), each independently bought on top. `modules` (the 4
@@ -89,6 +107,18 @@ service cloud.firestore {
       return isSuperadmin() || companyModules(companyId).auditingModule == true;
     }
 
+    // A canceled company (companies/{id}.status == 'canceled', set by the
+    // superadmin in admin.html) is read-only: its people can still sign in,
+    // view everything and download their records — which SANS 1475 clause
+    // 5.4 requires them to keep for 5 years — but can't change anything.
+    // Checked against the writer's own company, since every client write
+    // comes from a company member and cross-tenant writes are refused anyway.
+    // A missing companies doc or status counts as writable.
+    function myCompanyWritable() {
+      let path = /databases/$(database)/documents/companies/$(me().companyId);
+      return !exists(path) || get(path).data.get('status', 'active') != 'canceled';
+    }
+
     // Internal operator dashboard (separate admin.html, superadmin-only).
     // Nothing here is reachable by an ordinary company admin/technician/trainee.
     match /companies/{companyId} {
@@ -114,33 +144,44 @@ service cloud.firestore {
     }
 
     match /technicians/{uid} {
-      // Anyone signed in may also see the roster of *registered technicians*
-      // specifically (not other admins' or trainees' docs) — needed to list
-      // possible site-assignees, and for a trainee to pick which technician
-      // witnessed a logbook entry. `technicianLookup` (below) is already
-      // world-readable even pre-login, so this is a narrower exposure than
-      // what already exists, not a new one. All of this stays inside one
-      // company — a technician never sees another company's roster.
+      // A technicians doc holds personal information (ID number, cell, IP and
+      // device history, photo/document URLs), so only the person themselves
+      // and their own company's admins may read it. Colleagues who need a
+      // name list — a trainee picking the witnessing technician, a technician
+      // inviting people to a toolbox talk — read `staffDirectory` instead.
       allow read: if isSignedIn() && (
         request.auth.uid == uid
         || isSuperadmin()
-        || (isAdmin() && myCompanyId() == resource.data.companyId)
-        || (resource.data.role == 'technician' && myCompanyId() == resource.data.companyId)
+        || isCompanyAdmin(resource.data.companyId)
       );
       // Provisioning (and the seat-limit check that guards it) happens only in
       // the `createTechnician` / `createCompany` Cloud Functions via the Admin
       // SDK, which bypasses these rules — so no client may create or delete a
       // technician doc directly. An admin may still edit an existing one
-      // (name, phone, canCalibrate, deactivate) within their own company —
-      // except flipping active:false back to true, which is the same
-      // seat-limit-checked operation as creating a technician and is
-      // deliberately routed through the `reactivateTechnician` Cloud Function
-      // instead (bypasses this rule via the Admin SDK once the seat check
-      // passes), so a company can't reactivate past its plan's seat limit.
+      // (name, phone, canCalibrate, employee compliance fields) within their
+      // own company. Deactivating and reactivating both go through Cloud
+      // Functions (`deactivateTechnician` / `reactivateTechnician`, Admin SDK):
+      // deactivating also has to disable the Auth login, and reactivating is
+      // the same seat-limit-checked operation as creating a technician — so
+      // `active` is never client-writable.
+      //
+      // `companyId` can never change: an admin who could rewrite it (on their
+      // own doc especially) could move themselves into another company and
+      // become its admin. `role` is fixed too — otherwise an admin could mint
+      // extra admins or technicians past the seat limit; qualifying a trainee
+      // goes through the seat-checked `qualifyTrainee` function. The fraud-tracking
+      // baseline written by completeMyProfile is also locked, so the record
+      // of which device/IP set up a profile stays trustworthy.
       allow create, delete: if false;
-      allow update: if (
+      allow update: if myCompanyWritable() && (
         isCompanyAdmin(resource.data.companyId)
-        && !(resource.data.active == false && request.resource.data.active == true)
+        && request.resource.data.companyId == resource.data.companyId
+        && request.resource.data.role == resource.data.role
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'active', 'email', 'createdAt', 'consentConfirmedBy', 'consentConfirmedAt',
+          'trustedDeviceId', 'deviceHistory',
+          'profileCompletedAt', 'profileCompletedIp', 'profileCompletedUserAgent'
+        ])
       ) || (
         // Self-service last-login stamp, written on sign-in (see
         // onAuthStateChanged in index.html) — the only field a technician
@@ -150,24 +191,30 @@ service cloud.firestore {
       );
     }
 
-    // Each entry also carries a companyId (denormalised at write time) purely
-    // so this rule can scope writes to the admin's own company — plain
-    // isAdmin() here would let any company's admin repoint or delete any
-    // other company's technician-number-to-email mapping.
+    // Name-only roster of each company's staff — { name, role, companyId,
+    // active, saqcc } — kept in sync from technicians/{uid} by the
+    // `syncStaffDirectory` Cloud Function (Admin SDK; no client writes). It
+    // exists so colleagues can pick each other from a list without being
+    // able to read each other's full technicians doc.
+    match /staffDirectory/{uid} {
+      allow read: if isSuperadmin() || (isSignedIn() && myCompanyId() == resource.data.companyId);
+      allow write: if false;
+    }
+
+    // Technician-number -> login-email mapping. Each entry also carries the
+    // companyId it belongs to.
     match /technicianLookup/{techNumber} {
-      // Read stays open pre-login (no auth context yet) to resolve a
-      // technician number to an email before signing in. Technician numbers
-      // are a single flat, globally-unique namespace shared by every company
-      // (the login form has no company selector) — that's an existing
-      // constraint, not new here.
-      allow read: if true;
-      // The `createTechnician` Cloud Function writes new entries via the
-      // Admin SDK (bypassing rules) as part of its seat-limit check. An admin
-      // may still repoint/remove an entry directly within their own company —
-      // e.g. `qualifyTrainee()` renumbers one when a trainee qualifies.
-      allow create, update: if isAdmin() && myCompanyId() == request.resource.data.companyId
-        && (resource == null || resource.data.companyId == myCompanyId());
-      allow delete: if isAdmin() && resource.data.companyId == myCompanyId();
+      // Single-document get stays open pre-login (no auth context yet) to
+      // resolve a technician number to an email before signing in. Technician
+      // numbers are a single flat, globally-unique namespace shared by every
+      // company (the login form has no company selector). `list` is NOT
+      // allowed: it would let anyone, signed in or not, dump every
+      // company's technician numbers, login emails and company ids.
+      allow get: if true;
+      // Written only by Cloud Functions via the Admin SDK (bypassing rules):
+      // `createTechnician` adds entries as part of its seat-limit check, and
+      // `qualifyTrainee` renumbers one when a trainee qualifies.
+      allow write: if false;
     }
 
     // SAQCC (Fire) trainee 6-month supervised placement. One doc per trainee,
@@ -181,8 +228,8 @@ service cloud.firestore {
         || (isSignedIn() && request.auth.uid == traineeId)
         || (isSignedIn() && resource.data.supervisorId == request.auth.uid)
       );
-      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasTraineeModule(request.resource.data.companyId);
-      allow update, delete: if isCompanyAdmin(resource.data.companyId) && hasTraineeModule(resource.data.companyId);
+      allow create: if myCompanyWritable() && isCompanyAdmin(request.resource.data.companyId) && hasTraineeModule(request.resource.data.companyId);
+      allow update, delete: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasTraineeModule(resource.data.companyId);
     }
 
     // A trainee's daily logbook entry (SAQCC Fire paper form, digitised). The
@@ -208,26 +255,31 @@ service cloud.firestore {
       // Both functions also require the actor to have completed their own
       // profile first (see `requireProfileComplete`), a check that likewise
       // has to live server-side.
-      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasTraineeModule(request.resource.data.companyId);
+      allow create: if myCompanyWritable() && isCompanyAdmin(request.resource.data.companyId) && hasTraineeModule(request.resource.data.companyId);
 
-      allow update: if hasTraineeModule(resource.data.companyId) && (
+      allow update: if myCompanyWritable() && hasTraineeModule(resource.data.companyId) && (
         isCompanyAdmin(resource.data.companyId)
         || (
-          isSignedIn() && resource.data.traineeId == request.auth.uid
+          isActiveMember() && resource.data.traineeId == request.auth.uid
           && resource.data.status == 'draft' && request.resource.data.status == 'draft'
           // Re-validated exactly as on create — otherwise a trainee editing
           // their own still-draft entry could repoint traineeId/companyId,
           // or name a witness who isn't actually a same-company technician.
           && request.resource.data.traineeId == resource.data.traineeId
           && request.resource.data.companyId == resource.data.companyId
+          // Only the entry's content — never the createdIp/createdDeviceId/
+          // createdAt evidence createLogbookEntry stamped server-side.
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+               'date', 'trainingType', 'siteClient', 'workPerformed',
+               'technicianId', 'technicianName', 'technicianSaqcc', 'updatedAt'])
           && get(/databases/$(database)/documents/technicians/$(request.resource.data.technicianId)).data.role == 'technician'
           && get(/databases/$(database)/documents/technicians/$(request.resource.data.technicianId)).data.companyId == resource.data.companyId
         )
       );
 
-      allow delete: if hasTraineeModule(resource.data.companyId) && (
+      allow delete: if myCompanyWritable() && hasTraineeModule(resource.data.companyId) && (
         isCompanyAdmin(resource.data.companyId)
-        || (isSignedIn() && resource.data.traineeId == request.auth.uid && resource.data.status == 'draft')
+        || (isActiveMember() && resource.data.traineeId == request.auth.uid && resource.data.status == 'draft')
       );
     }
 
@@ -242,18 +294,18 @@ service cloud.firestore {
         || (isSignedIn() && request.auth.uid == traineeId)
         || (isSignedIn() && get(/databases/$(database)/documents/traineeAssignments/$(traineeId)).data.supervisorId == request.auth.uid)
       );
-      allow write: if hasTraineeModule(request.resource.data.companyId) && (
+      allow write: if myCompanyWritable() && hasTraineeModule(request.resource.data.companyId) && (
         isCompanyAdmin(request.resource.data.companyId)
-        || (isSignedIn() && get(/databases/$(database)/documents/traineeAssignments/$(traineeId)).data.supervisorId == request.auth.uid)
+        || (isActiveMember() && get(/databases/$(database)/documents/traineeAssignments/$(traineeId)).data.supervisorId == request.auth.uid)
       );
     }
 
     match /sites/{siteId} {
       allow read: if isSuperadmin() || isCompanyAdmin(resource.data.companyId)
-        || (isSignedIn() && request.auth.uid in resource.data.assignedTo)
-        || (isSignedIn() && request.auth.uid in resource.data.assignedCompetentPersons);
-      allow create: if isCompanyAdmin(request.resource.data.companyId);
-      allow delete: if isCompanyAdmin(resource.data.companyId);
+        || (isActiveMember() && request.auth.uid in resource.data.assignedTo)
+        || (isActiveMember() && request.auth.uid in resource.data.assignedCompetentPersons);
+      allow create: if myCompanyWritable() && isCompanyAdmin(request.resource.data.companyId);
+      allow delete: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId);
       // Admins may change anything within their own company. An assigned
       // technician may only touch a restricted set of fields (site details +
       // completion markers) — `assignedTo` is deliberately absent here too:
@@ -263,22 +315,24 @@ service cloud.firestore {
       // assignment list. `serviceType` and `companyId` are deliberately
       // absent as well: only an administrator sets them, and a site can never
       // change tenant.
-      allow update: if isCompanyAdmin(resource.data.companyId)
+      allow update: if myCompanyWritable() && (
+        isCompanyAdmin(resource.data.companyId)
         || (
-          isSignedIn()
+          isActiveMember()
           && request.auth.uid in resource.data.assignedTo
           && request.resource.data.companyId == resource.data.companyId
           && request.resource.data.assignedTo == resource.data.assignedTo
           && request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['name','address','notes','email','contactPerson','contactPhone','category','completed','completedAt','lastCompletedDate','lastCompletedBy'])
-        );
+        )
+      );
     }
 
     // Company letterhead / registration details used on generated certificates.
     // One doc per tenant, keyed by companyId (not the literal "company").
     match /settings/{companyId} {
       allow read: if isSignedIn() && myCompanyId() == companyId;
-      allow write: if isCompanyAdmin(companyId);
+      allow write: if myCompanyWritable() && isCompanyAdmin(companyId);
     }
 
     // Audit tab (Company Documents / Employees / Vehicles / Workshops /
@@ -295,21 +349,21 @@ service cloud.firestore {
     // rule above — no separate collection.
     match /branches/{id} {
       allow read:   if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
-      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
-      allow update: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
-      allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow create: if myCompanyWritable() && isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
+      allow update: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow delete: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
     }
     match /vehicles/{id} {
       allow read:   if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
-      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
-      allow update: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
-      allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow create: if myCompanyWritable() && isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
+      allow update: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow delete: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
     }
     match /companyDocuments/{id} {
       allow read:   if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
-      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
-      allow update: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
-      allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow create: if myCompanyWritable() && isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
+      allow update: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow delete: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
     }
     // Annual external calibration of the workshop's reference instruments by a
     // SANAS-accredited body — one record + certificate upload per instrument.
@@ -319,9 +373,9 @@ service cloud.firestore {
     // Storage.
     match /calibrationCertificates/{id} {
       allow read:   if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
-      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
-      allow update: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
-      allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow create: if myCompanyWritable() && isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
+      allow update: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow delete: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
     }
 
     // Tool register (Audit tab "Tools" chip) — workshop tools and each
@@ -333,15 +387,15 @@ service cloud.firestore {
     // like the rest of the workshop file.
     match /tools/{id} {
       allow read:   if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
-      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
-      allow update: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
-      allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow create: if myCompanyWritable() && isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
+      allow update: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow delete: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
     }
     match /toolChecks/{id} {
       allow read:   if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
-      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
-      allow update: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
-      allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow create: if myCompanyWritable() && isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
+      allow update: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow delete: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
     }
 
     // SANS 1475 Part 1:2025 clause-by-clause evidence register (Audit tab
@@ -351,9 +405,9 @@ service cloud.firestore {
     // files live under company-files/{companyId}/sans1475/ in Storage.
     match /sans1475Checklist/{id} {
       allow read:   if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
-      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
-      allow update: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
-      allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow create: if myCompanyWritable() && isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
+      allow update: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow delete: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
     }
     // Repeatable dated logs for specific SANS 1475 clauses (extinguishing
     // medium 4.4, PPE 4.9, conversion/modification 5.1.6, label photos 6.1/
@@ -362,9 +416,9 @@ service cloud.firestore {
     // above.
     match /sans1475RegisterEntries/{id} {
       allow read:   if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
-      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
-      allow update: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
-      allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow create: if myCompanyWritable() && isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
+      allow update: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow delete: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
     }
     // In-workshop reconditioning jobs (clause 5.1, records kept per 5.4) —
     // each job assigned to a technician and tracked through to completion,
@@ -372,9 +426,9 @@ service cloud.firestore {
     // admin-only, Audit-add-on-gated pattern as the rest of the Audit tab.
     match /reconditioningJobs/{id} {
       allow read:   if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
-      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
-      allow update: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
-      allow delete: if isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow create: if myCompanyWritable() && isCompanyAdmin(request.resource.data.companyId) && hasAuditAddon(request.resource.data.companyId);
+      allow update: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
+      allow delete: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasAuditAddon(resource.data.companyId);
     }
 
     // Weekly verification log (SANS 1475 Annex A) — production-control equipment
@@ -386,11 +440,11 @@ service cloud.firestore {
     // Workshop Module feature.
     match /calibrations/{id} {
       allow read:   if hasWorkshopModule(resource.data.companyId) && (isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && myCompanyId() == resource.data.companyId));
-      allow create: if hasWorkshopModule(request.resource.data.companyId) && (
+      allow create: if myCompanyWritable() && hasWorkshopModule(request.resource.data.companyId) && (
         isCompanyAdmin(request.resource.data.companyId)
         || (canCalibrate() && myCompanyId() == request.resource.data.companyId)
       );
-      allow update, delete: if isCompanyAdmin(resource.data.companyId) && hasWorkshopModule(resource.data.companyId);
+      allow update, delete: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasWorkshopModule(resource.data.companyId);
     }
 
     // Toolbox talks — short recorded safety briefings. Admin or a technician
@@ -402,11 +456,11 @@ service cloud.firestore {
     match /toolboxTalks/{id} {
       allow read:   if hasWorkshopModule(resource.data.companyId) && (isSuperadmin() || isCompanyAdmin(resource.data.companyId)
         || (isSignedIn() && myCompanyId() == resource.data.companyId && request.auth.uid in resource.data.invitedIds));
-      allow create: if hasWorkshopModule(request.resource.data.companyId) && (
+      allow create: if myCompanyWritable() && hasWorkshopModule(request.resource.data.companyId) && (
         isCompanyAdmin(request.resource.data.companyId)
         || (canRunToolboxTalks() && myCompanyId() == request.resource.data.companyId)
       );
-      allow update, delete: if isCompanyAdmin(resource.data.companyId) && hasWorkshopModule(resource.data.companyId);
+      allow update, delete: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasWorkshopModule(resource.data.companyId);
 
       // Each attendee's own signed attendance record — doc id is their uid, so
       // "have I signed" is a free existence check. Written only by the
@@ -417,7 +471,7 @@ service cloud.firestore {
       match /attendees/{uid} {
         allow read:           if hasWorkshopModule(resource.data.companyId) && (isCompanyAdmin(resource.data.companyId) || (isSignedIn() && myCompanyId() == resource.data.companyId));
         allow create, update: if false;
-        allow delete:         if isCompanyAdmin(resource.data.companyId) && hasWorkshopModule(resource.data.companyId);
+        allow delete:         if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasWorkshopModule(resource.data.companyId);
       }
     }
 
@@ -429,8 +483,8 @@ service cloud.firestore {
     // a talk won't necessarily have visited any admin-only screen.
     match /mandatoryTopics/{id} {
       allow read:   if hasWorkshopModule(resource.data.companyId) && (isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && myCompanyId() == resource.data.companyId));
-      allow create: if isCompanyAdmin(request.resource.data.companyId) && hasWorkshopModule(request.resource.data.companyId);
-      allow update, delete: if isCompanyAdmin(resource.data.companyId) && hasWorkshopModule(resource.data.companyId);
+      allow create: if myCompanyWritable() && isCompanyAdmin(request.resource.data.companyId) && hasWorkshopModule(request.resource.data.companyId);
+      allow update, delete: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId) && hasWorkshopModule(resource.data.companyId);
     }
 
     // Monthly responsible-person inspection log (SANS 10105-1). One record per
@@ -444,18 +498,19 @@ service cloud.firestore {
     // directly (e.g. filling one in themselves) and may delete.
     match /monthlyChecks/{id} {
       allow read:           if isCompanyAdmin(resource.data.companyId) || (isSignedIn() && isAssignedAsCompetentPerson(resource.data.siteId));
-      allow create, update: if isCompanyAdmin(request.resource.data.companyId);
-      allow delete:         if isCompanyAdmin(resource.data.companyId);
+      allow create, update: if myCompanyWritable() && isCompanyAdmin(request.resource.data.companyId);
+      allow delete:         if myCompanyWritable() && isCompanyAdmin(resource.data.companyId);
     }
 
     // Immutable service-history / audit trail. One snapshot is appended whenever
-    // an equipment record's compliance fields change. Write-once: no one may
-    // edit or delete an entry (corrections are made by adding a new one).
+    // an equipment record's compliance fields change, or it's deleted —
+    // written only by the `recordServiceEvent` trigger in functions/index.js
+    // (Admin SDK), so no client can skip, forge or pre-empt an entry. Nobody
+    // may edit or delete one (corrections are made by adding a new one).
     // Purging genuinely bad data is a Firebase Console operation.
     match /serviceEvents/{id} {
-      allow read:           if isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && isAssignedToSite(resource.data.siteId));
-      allow create:         if isCompanyAdmin(request.resource.data.companyId) || (isSignedIn() && isAssignedToSite(request.resource.data.siteId));
-      allow update, delete: if false;
+      allow read:   if isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && isAssignedToSite(resource.data.siteId));
+      allow write:  if false;
     }
 
     // Audit log of register / certificate emails sent from a site. Written only
@@ -474,19 +529,30 @@ service cloud.firestore {
       // update or delete it. That asymmetry is the actual "completely
       // separate from maintenance" boundary for this collection.
       allow read:   if isSuperadmin() || isCompanyAdmin(resource.data.companyId) || (isSignedIn() && isAssignedToSite(resource.data.siteId)) || (isSignedIn() && isAssignedAsCompetentPerson(resource.data.siteId));
-      allow create: if isCompanyAdmin(request.resource.data.companyId) || (isSignedIn() && isAssignedToSite(request.resource.data.siteId));
-      allow update: if isCompanyAdmin(resource.data.companyId) || (isSignedIn() && isAssignedToSite(resource.data.siteId));
-      allow delete: if isCompanyAdmin(resource.data.companyId);
+      // The record's companyId must be its site's company, and neither may
+      // change afterwards — an item never moves tenant, and only an admin may
+      // move it to another of their own sites.
+      allow create: if myCompanyWritable() && request.resource.data.companyId == siteCompanyId(request.resource.data.siteId) && (
+        isCompanyAdmin(request.resource.data.companyId) || isAssignedToSite(request.resource.data.siteId)
+      );
+      allow update: if myCompanyWritable() && request.resource.data.companyId == resource.data.companyId && (
+        (isCompanyAdmin(resource.data.companyId)
+          && siteCompanyId(request.resource.data.siteId) == resource.data.companyId)
+        || (isAssignedToSite(resource.data.siteId) && request.resource.data.siteId == resource.data.siteId)
+      );
+      allow delete: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId);
 
-      // Each inspection is an immutable-by-technicians history entry. It carries
-      // its own siteId and companyId (copied from the parent) so this rule
-      // needs no nested lookup of the equipment doc. Technicians assigned to
-      // the site can log new inspections; only an admin may edit or delete a
-      // saved one.
+      // Legacy per-equipment inspection history from the earlier data model.
+      // The app no longer writes here (history is the server-written
+      // serviceEvents collection), so nothing may create an entry — the old
+      // create rule never checked that {eqId} was actually on the stated
+      // site, so it let someone attach entries under another company's
+      // equipment. Existing entries stay readable, and an admin may still
+      // delete them (deleteEquipment cleans them up).
       match /inspections/{inspId} {
         allow read:   if isCompanyAdmin(resource.data.companyId) || (isSignedIn() && isAssignedToSite(resource.data.siteId));
-        allow create: if isCompanyAdmin(request.resource.data.companyId) || (isSignedIn() && isAssignedToSite(request.resource.data.siteId));
-        allow update, delete: if isCompanyAdmin(resource.data.companyId);
+        allow create: if false;
+        allow update, delete: if myCompanyWritable() && isCompanyAdmin(resource.data.companyId);
       }
     }
   }

@@ -1,6 +1,28 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    // The caller's technicians doc — same source of truth firestore.rules
+    // uses for role, tenant and the active flag.
+    function staffDoc() {
+      return firestore.get(/databases/(default)/documents/technicians/$(request.auth.uid)).data;
+    }
+    // Signed in, a member of `companyId`, and not deactivated (a doc with no
+    // `active` field predates the flag and counts as active).
+    function isActiveCompanyMember(companyId) {
+      return request.auth != null &&
+        staffDoc().companyId == companyId &&
+        staffDoc().get('active', true) != false;
+    }
+    function isActiveCompanyAdmin(companyId) {
+      return isActiveCompanyMember(companyId) && staffDoc().role == 'admin';
+    }
+    // A canceled company is read-only — the same rule as firestore.rules'
+    // myCompanyWritable(): files stay viewable, nothing new can be uploaded.
+    function companyWritable(companyId) {
+      return !firestore.exists(/databases/(default)/documents/companies/$(companyId)) ||
+        firestore.get(/databases/(default)/documents/companies/$(companyId)).data.get('status', 'active') != 'canceled';
+    }
+
     // Path is equipment-photos/{companyId}/{fileName} — the companyId segment
     // lets this rule check tenant isolation directly from the path, with no
     // need to look up the equipment doc itself (which doesn't exist yet at
@@ -9,24 +31,35 @@ service firebase.storage {
     // firestore.rules — a signed-in user may only reach their own company's
     // photos, and the internal /admin superadmin claim reaches all of them.
     match /equipment-photos/{companyId}/{fileName} {
-      allow read, write: if request.auth != null && (
+      allow read: if request.auth != null && (
         request.auth.token.role == 'superadmin' ||
-        firestore.get(/databases/(default)/documents/technicians/$(request.auth.uid)).data.companyId == companyId
+        isActiveCompanyMember(companyId)
       );
+      // The app uploads ~100–300 KB JPEGs (resized to 900px before upload);
+      // 5 MB leaves headroom while stopping the bucket being used as general
+      // file storage.
+      allow write: if isActiveCompanyMember(companyId) && companyWritable(companyId) &&
+        request.resource.size < 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
     }
 
-    // Self-service profile photo + SAQCC card photo (fraud-tracking profile
-    // completion — see firestore.rules technicians.completeMyProfile). Only
-    // the technician/trainee themselves may write their own two files; the
-    // rest of their own company (and the superadmin) may read them, since an
-    // admin needs to be able to check the SAQCC card photo.
+    // Self-service profile photo + SAQCC card / training certificate /
+    // appointment letter photo (fraud-tracking profile completion — see
+    // completeMyProfile in functions/index.js). Only the technician/trainee
+    // themselves may write their own files. Read is limited to that person,
+    // their own company's admins (who check the documents) and the
+    // superadmin — colleagues have no reason to see each other's ID-type
+    // documents.
     match /technician-photos/{companyId}/{uid}/{fileName} {
       allow read: if request.auth != null && (
         request.auth.token.role == 'superadmin' ||
-        firestore.get(/databases/(default)/documents/technicians/$(request.auth.uid)).data.companyId == companyId
+        request.auth.uid == uid ||
+        isActiveCompanyAdmin(companyId)
       );
       allow write: if request.auth != null && request.auth.uid == uid &&
-        firestore.get(/databases/(default)/documents/technicians/$(request.auth.uid)).data.companyId == companyId;
+        isActiveCompanyMember(companyId) && companyWritable(companyId) &&
+        request.resource.size < 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
     }
 
     // Audit tab: company statutory documents, service-vehicle papers, and
@@ -35,34 +68,42 @@ service firebase.storage {
     // self-service, writable only by its owning uid — these are uploaded by
     // a company admin on behalf of the business, so write is gated on the
     // caller being an admin of the matching company, AND on that company
-    // holding the Audit add-on (companyAddons/{companyId}.audit — see
-    // firestore.rules' hasAuditAddon) — read stays ungated by the add-on so
-    // a company that loses it can still see files already on file, just not
-    // add new ones. Accepts PDF as well as images (statutory documents are
-    // usually PDFs), capped at 15 MB. One {path=**} block covers documents/,
+    // holding the Auditing Module (companies/{companyId}.modules
+    // .auditingModule — the same flag firestore.rules' hasAuditAddon reads).
+    // Read stays ungated by the module so a company that loses it can still
+    // see files already on file, just not add new ones — but read IS limited
+    // to the company's admins: the Audit tab is admin-only, and these files
+    // include medical certificates (special personal information under
+    // POPIA). Accepts PDF as well as images (statutory documents are usually
+    // PDFs), capped at 15 MB. One {path=**} block covers documents/,
     // vehicles/<id>/, employees/<uid>/, branches/<id>/ and calibration/<id>/
     // under the company folder.
     match /company-files/{companyId}/{path=**} {
       allow read: if request.auth != null && (
         request.auth.token.role == 'superadmin' ||
-        firestore.get(/databases/(default)/documents/technicians/$(request.auth.uid)).data.companyId == companyId
+        isActiveCompanyAdmin(companyId)
       );
       allow write: if request.auth != null &&
-        firestore.get(/databases/(default)/documents/technicians/$(request.auth.uid)).data.role == 'admin' &&
-        firestore.get(/databases/(default)/documents/technicians/$(request.auth.uid)).data.companyId == companyId &&
-        firestore.get(/databases/(default)/documents/companyAddons/$(companyId)).data.audit == true &&
+        isActiveCompanyAdmin(companyId) && companyWritable(companyId) &&
+        firestore.get(/databases/(default)/documents/companies/$(companyId)).data.get('modules', {}).get('auditingModule', false) == true &&
         request.resource.size < 15 * 1024 * 1024 &&
         request.resource.contentType.matches('application/pdf|image/.*');
     }
+    // An employee may still view their own documents in that folder.
+    match /company-files/{companyId}/employees/{uid}/{fileName} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+    }
 
     // Legacy path from before multi-tenancy (equipment-photos/{fileName}.jpg,
-    // no companyId segment) — kept readable/writable by any signed-in user,
-    // same exposure as before this change, purely so photos uploaded before
-    // this rule shipped don't go dark. Every new upload uses the company-
-    // scoped path above. Safe to delete this block once old files have been
-    // migrated or are no longer needed.
+    // no companyId segment). Read-only now: the app stopped writing here when
+    // multi-tenancy shipped, and leaving it writable let any signed-in user
+    // of any company overwrite those photos or upload arbitrary files. The
+    // records point at these photos by download URL, which keeps working
+    // regardless of this rule. Safe to delete this block once old files have
+    // been migrated or are no longer needed.
     match /equipment-photos/{fileName} {
-      allow read, write: if request.auth != null;
+      allow read: if request.auth != null;
+      allow write: if false;
     }
   }
 }

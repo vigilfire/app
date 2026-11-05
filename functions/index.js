@@ -16,7 +16,7 @@
  */
 
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { onDocumentWritten } = require("firebase-functions/v2/firestore");
+const { onDocumentWritten, onDocumentWrittenWithAuthContext } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
@@ -67,6 +67,31 @@ function superadminEmail() {
   return (process.env.SUPERADMIN_EMAIL || "").trim() || "vigilfire1@gmail.com";
 }
 
+// A deactivated account (technicians/{uid}.active === false) may not use any
+// callable. Deactivation also disables the Auth login, but an ID token issued
+// before that stays valid for up to an hour, so every callable checks the
+// flag as well. A doc with no `active` field predates the flag and counts as
+// active — the same convention firestore.rules' isActiveMember() uses.
+function requireActive(snap) {
+  if (snap.exists && snap.data().active === false) {
+    throw new HttpsError("permission-denied", "This account has been deactivated.");
+  }
+}
+
+// A canceled company is read-only (see firestore.rules' myCompanyWritable()):
+// every callable that changes records refuses. Deactivating a leaver and
+// resetting a staff password stay allowed — one is a security action, the
+// other is how people keep access to download their 5-year records.
+async function requireCompanyWritable(db, companyId) {
+  const snap = await db.collection("companies").doc(companyId || "-").get();
+  if (snap.exists && snap.data().status === "canceled") {
+    throw new HttpsError(
+      "failed-precondition",
+      "This account has been canceled and is read-only. Contact Vigil Fire to reactivate it."
+    );
+  }
+}
+
 async function requireSuperadmin(request) {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Sign in first.");
@@ -99,6 +124,18 @@ async function renderPdf(html, landscape) {
   });
   try {
     const page = await browser.newPage();
+    // The HTML comes from the client, so the page gets no scripts and no
+    // network: the app's documents are self-contained (inline styles, logo
+    // and signature as data: URLs), and anything else — a remote image, an
+    // iframe to an internal Google address — is refused rather than fetched
+    // from inside our infrastructure.
+    await page.setJavaScriptEnabled(false);
+    await page.setRequestInterception(true);
+    page.on("request", (req) => {
+      const url = req.url();
+      if (url.startsWith("data:") || url === "about:blank") req.continue();
+      else req.abort();
+    });
     await page.setContent(html, { waitUntil: "networkidle0", timeout: 30000 });
     return await page.pdf({
       format: "A4",
@@ -130,7 +167,9 @@ exports.emailSiteDocuments = onCall(
         "Only an administrator can email site documents."
       );
     }
+    requireActive(techSnap);
     const techData = techSnap.data();
+    await requireCompanyWritable(db, techData.companyId);
     await requireClientModule(db, techData.companyId);
 
     const data = request.data || {};
@@ -391,6 +430,7 @@ exports.createCompany = onCall({ secrets: [RESEND_API_KEY] }, async (request) =>
   batch.set(db.collection("companyAddons").doc(companyId), {
     modules,
     addOns,
+    status: "trialing",   // mirrored so the app can show the read-only banner once canceled
   });
   batch.set(db.collection("technicians").doc(userRecord.uid), {
     name: adminName,
@@ -439,6 +479,7 @@ async function requireCompanyAdmin(db, uid) {
   if (!snap.exists || snap.data().role !== "admin") {
     throw new HttpsError("permission-denied", "Only an administrator can do this.");
   }
+  requireActive(snap);
   const companyId = snap.data().companyId;
   if (!companyId) {
     throw new HttpsError("failed-precondition", "Your account has no company on file.");
@@ -512,6 +553,7 @@ exports.createTechnician = onCall(async (request) => {
   }
   const db = admin.firestore();
   const companyId = await requireCompanyAdmin(db, uid);
+  await requireCompanyWritable(db, companyId);
 
   const data = request.data || {};
   const name = String(data.name || "").trim();
@@ -528,8 +570,8 @@ exports.createTechnician = onCall(async (request) => {
   if (!name || !techNumber) {
     throw new HttpsError("invalid-argument", "Name and technician number are required.");
   }
-  if (!password || password.length < 6) {
-    throw new HttpsError("invalid-argument", "Set a password of at least 6 characters.");
+  if (!password || password.length < 8) {
+    throw new HttpsError("invalid-argument", "Set a password of at least 8 characters.");
   }
   // POPIA: the admin creating this account attests the person has been
   // informed and consents (see the Privacy notice link next to the checkbox
@@ -588,6 +630,7 @@ exports.reactivateTechnician = onCall(async (request) => {
   }
   const db = admin.firestore();
   const companyId = await requireCompanyAdmin(db, uid);
+  await requireCompanyWritable(db, companyId);
 
   const targetId = String((request.data || {}).id || "").trim();
   if (!targetId) {
@@ -606,8 +649,161 @@ exports.reactivateTechnician = onCall(async (request) => {
   // — this is why firestore.rules blocks the active:false→true transition
   // for a plain client update and routes it here instead.
   await requireAddOnCapacity(db, companyId, targetSnap.data().role);
+  await admin.auth().updateUser(targetId, { disabled: false });
   await targetRef.update({ active: true });
   return { reactivated: true };
+});
+
+// Deactivation has to happen server-side: besides flipping `active`, it
+// disables the person's Firebase Auth login and revokes their refresh tokens
+// — a client-side flag alone only hid the app from them, while the account
+// itself could still sign in and use the database directly. It also removes
+// them from every site in the company (both maintenance and Competent Person
+// assignments), not just the sites the admin's own screen happened to have
+// loaded. Their records are untouched — they're compliance history.
+exports.deactivateTechnician = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "Sign in first.");
+  }
+  const db = admin.firestore();
+  const companyId = await requireCompanyAdmin(db, uid);
+
+  const targetId = String((request.data || {}).id || "").trim();
+  if (!targetId) {
+    throw new HttpsError("invalid-argument", "Missing technician id.");
+  }
+  if (targetId === uid) {
+    throw new HttpsError("failed-precondition", "You can't deactivate your own account.");
+  }
+  const targetRef = db.collection("technicians").doc(targetId);
+  const targetSnap = await targetRef.get();
+  if (!targetSnap.exists || targetSnap.data().companyId !== companyId) {
+    throw new HttpsError("not-found", "Technician not found.");
+  }
+
+  await admin.auth().updateUser(targetId, { disabled: true });
+  await admin.auth().revokeRefreshTokens(targetId);
+
+  const sites = db.collection("sites").where("companyId", "==", companyId);
+  const [techSites, competentSites] = await Promise.all([
+    sites.where("assignedTo", "array-contains", targetId).get(),
+    sites.where("assignedCompetentPersons", "array-contains", targetId).get(),
+  ]);
+  const batch = db.batch();
+  batch.update(targetRef, { active: false, deactivatedAt: admin.firestore.FieldValue.serverTimestamp(), deactivatedBy: uid });
+  techSites.forEach((d) => batch.update(d.ref, { assignedTo: admin.firestore.FieldValue.arrayRemove(targetId) }));
+  competentSites.forEach((d) => batch.update(d.ref, { assignedCompetentPersons: admin.firestore.FieldValue.arrayRemove(targetId) }));
+  await batch.commit();
+  return { deactivated: true };
+});
+
+// Technician/trainee/Competent Person logins use a made-up email address
+// (tech<number>@technicians.invalid), so there's no "forgot password" email
+// to fall back on — this lets the person's own company admin set a new
+// temporary password instead. Admin accounts have real emails and use the
+// normal reset link, so they're excluded here.
+exports.setStaffPassword = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "Sign in first.");
+  }
+  const db = admin.firestore();
+  const companyId = await requireCompanyAdmin(db, uid);
+  const data = request.data || {};
+  const targetId = String(data.id || "").trim();
+  const password = String(data.password || "");
+  if (!targetId) throw new HttpsError("invalid-argument", "Missing account id.");
+  if (password.length < 8) throw new HttpsError("invalid-argument", "Set a password of at least 8 characters.");
+  const targetSnap = await db.collection("technicians").doc(targetId).get();
+  if (!targetSnap.exists || targetSnap.data().companyId !== companyId || targetSnap.data().role === "admin") {
+    throw new HttpsError("not-found", "Account not found.");
+  }
+  await admin.auth().updateUser(targetId, { password });
+  // Signs them out everywhere, so an old session can't carry on after a reset.
+  await admin.auth().revokeRefreshTokens(targetId);
+  return { updated: true };
+});
+
+// Qualifying a trainee turns their account into a technician one (same login,
+// same history, new permanent number). It occupies a technician seat, so it's
+// seat-checked here exactly like createTechnician — as a plain client write it
+// let a company add technicians past its limit by qualifying trainees.
+exports.qualifyTrainee = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "Sign in first.");
+  }
+  const db = admin.firestore();
+  const companyId = await requireCompanyAdmin(db, uid);
+  await requireCompanyWritable(db, companyId);
+
+  const data = request.data || {};
+  const targetId = String(data.id || "").trim();
+  const newNumber = String(data.techNumber || "").trim();
+  if (!targetId) throw new HttpsError("invalid-argument", "Missing trainee id.");
+  if (!newNumber) throw new HttpsError("invalid-argument", "Enter a technician number.");
+
+  const targetRef = db.collection("technicians").doc(targetId);
+  const targetSnap = await targetRef.get();
+  if (!targetSnap.exists || targetSnap.data().companyId !== companyId || targetSnap.data().role !== "trainee") {
+    throw new HttpsError("not-found", "Trainee not found.");
+  }
+  const t = targetSnap.data();
+  if (newNumber !== t.techNumber) {
+    const taken = await db.collection("technicianLookup").doc(newNumber).get();
+    if (taken.exists) throw new HttpsError("already-exists", "That technician number is already in use.");
+  }
+
+  await requireAddOnCapacity(db, companyId, "technician");
+
+  const batch = db.batch();
+  batch.update(targetRef, { role: "technician", techNumber: newNumber });
+  batch.set(db.collection("technicianLookup").doc(newNumber), { email: t.email, companyId });
+  if (t.techNumber && t.techNumber !== newNumber) {
+    batch.delete(db.collection("technicianLookup").doc(t.techNumber));
+  }
+  batch.set(db.collection("traineeAssignments").doc(targetId), {
+    status: "completed",
+    completedAt: admin.firestore.FieldValue.serverTimestamp(),
+    completedBy: uid,
+  }, { merge: true });
+  await batch.commit();
+  return { qualified: true };
+});
+
+/* ---------- staffDirectory ----------
+   A name-only mirror of technicians/{uid} — { name, role, companyId, active,
+   saqcc } — so colleagues can pick each other from a list (a trainee choosing
+   the witnessing technician, a technician inviting people to a toolbox talk)
+   while the full technicians doc, with ID numbers and device/IP history,
+   stays readable only by the person and their company's admins (see
+   firestore.rules). Existing docs are backfilled once by
+   scripts/backfill-staff-directory.js. */
+function staffDirectoryEntry(t) {
+  return {
+    name: t.name || "",
+    role: t.role || "",
+    companyId: t.companyId || null,
+    active: t.active !== false,
+    saqcc: t.saqcc || "",
+  };
+}
+exports.syncStaffDirectory = onDocumentWritten("technicians/{uid}", async (event) => {
+  const after = event.data && event.data.after;
+  const before = event.data && event.data.before;
+  const ref = admin.firestore().collection("staffDirectory").doc(event.params.uid);
+  if (!after || !after.exists) {
+    await ref.delete();
+    return;
+  }
+  const next = staffDirectoryEntry(after.data());
+  // Most writes to a technicians doc (e.g. the lastLoginAt stamp on every
+  // sign-in) don't touch these fields — skip the rewrite for those.
+  if (before && before.exists && JSON.stringify(staffDirectoryEntry(before.data())) === JSON.stringify(next)) {
+    return;
+  }
+  await ref.set(next);
 });
 
 // A company admin inviting a second (or third, ...) admin — mirrors
@@ -623,6 +819,7 @@ exports.inviteAdmin = onCall({ secrets: [RESEND_API_KEY] }, async (request) => {
   }
   const db = admin.firestore();
   const companyId = await requireCompanyAdmin(db, uid);
+  await requireCompanyWritable(db, companyId);
 
   const data = request.data || {};
   const name = String(data.name || "").trim();
@@ -695,6 +892,7 @@ exports.addWorkshop = onCall(async (request) => {
   }
   const db = admin.firestore();
   const companyId = await requireCompanyAdmin(db, uid);
+  await requireCompanyWritable(db, companyId);
 
   const data = request.data || {};
   const name = String(data.name || "").trim();
@@ -734,19 +932,30 @@ exports.addWorkshop = onCall(async (request) => {
 // The caller's real IP/user-agent — only trustworthy read here, server-side
 // off the raw request, never from a client-supplied field (which would be
 // trivial to fake and would defeat the point of capturing it at all).
+// X-Forwarded-For is a list the caller can start themselves — anything they
+// put in the header comes first, and Google's front end appends the address
+// it actually saw — so the LAST entry is the one to trust, never the first.
 function getCallerIp(request) {
   const req = request.rawRequest;
   if (!req) return "unknown";
   const xff = req.headers && req.headers["x-forwarded-for"];
-  if (xff) return String(xff).split(",")[0].trim();
-  return req.ip || "unknown";
+  if (xff) {
+    const hops = String(xff).split(",").map((s) => s.trim()).filter(Boolean);
+    if (hops.length) return hops[hops.length - 1];
+  }
+  return (req.socket && req.socket.remoteAddress) || "unknown";
 }
 function getUserAgent(request) {
   const req = request.rawRequest;
   return (req && req.headers && req.headers["user-agent"]) || "unknown";
 }
 
+// Also refuses a deactivated account — every caller of this is a sign-off or
+// record-creating action that a former employee must not be able to perform —
+// and a canceled (read-only) company.
 async function requireProfileComplete(snap, actionLabel) {
+  requireActive(snap);
+  if (snap.exists) await requireCompanyWritable(admin.firestore(), snap.data().companyId);
   if (!snap.exists || !snap.data().profileCompletedAt) {
     throw new HttpsError(
       "failed-precondition",
@@ -778,6 +987,8 @@ exports.completeMyProfile = onCall(async (request) => {
   if (!selfSnap.exists) {
     throw new HttpsError("not-found", "Profile not found.");
   }
+  requireActive(selfSnap);
+  await requireCompanyWritable(db, selfSnap.data().companyId);
 
   const existing = selfSnap.data();
   const isTrainee = existing.role === "trainee";
@@ -1067,6 +1278,69 @@ exports.signToolboxTalk = onCall(async (request) => {
     signedUserAgent: getUserAgent(request),
   });
   return { signed: true, alreadySigned: false };
+});
+
+/* ---------- Immutable service history (`serviceEvents`) ----------
+   One snapshot per substantive change to an equipment record — including a
+   deletion — written here by a trigger rather than by the app. A client-
+   written trail could be skipped (an app closed while offline, a code path
+   that forgot to log, like the Due list's "Recharged" button) and couldn't
+   record deletions at all; this one sees every write that reaches the
+   database and stamps who made it from the request's own auth context.
+   firestore.rules blocks client writes to serviceEvents entirely. */
+const SVC_FIELDS = ["serviceDate", "inspectionDate", "nextServiceDue", "pressureTestDate", "pressureTestDue",
+  "weightCheckDate", "hoseReplacedDate", "rechargeDate", "condemnedDate", "status", "serviceMass",
+  "ptPerformed", "rechargeRequired", "condemned", "condemnedActionPlan"];
+// Fields copied from the equipment doc onto each history entry — the same
+// shape the app's old client-side logServiceEvent() wrote, so existing
+// entries and new ones read the same in the backup and reports.
+const SVC_SNAPSHOT_FIELDS = ["type", "make", "serial", "location", "serviceDate", "inspectionDate", "nextServiceDue",
+  "pressureTestDate", "pressureTestDue", "ptPerformed", "ptPrevDate", "ptTestPressure", "ptResult",
+  "ptTechnicianName", "ptTechnicianSaqcc", "ptChecklist", "ptNotes", "serviceMass", "tareMass", "weightCheckDate",
+  "hoseReplacedDate", "rechargeRequired", "rechargeDate", "rechargeMedium", "rechargePressureBefore",
+  "rechargePressureAfter", "rechargeTechnicianName", "rechargeTechnicianSaqcc", "rechargeChecklist", "rechargeNotes",
+  "condemned", "condemnedDate", "condemnedReason", "condemnedCriteria", "replacedBy", "condemnedActionPlan",
+  "condemnedActionPlanNotes", "condemnedActionPlanDate", "status", "checklist", "notes", "technicianName", "saqcc"];
+function serviceEventKind(p) {
+  if (p.condemned) return "condemned";
+  if (p.ptPerformed) return "pressure-test";
+  if (p.rechargeRequired && p.rechargeDate) return "recharge";
+  if (p.inspectionDate) return "service";
+  return "update";
+}
+exports.recordServiceEvent = onDocumentWrittenWithAuthContext("equipment/{eqId}", async (event) => {
+  const before = event.data && event.data.before && event.data.before.exists ? event.data.before.data() : null;
+  const after = event.data && event.data.after && event.data.after.exists ? event.data.after.data() : null;
+  if (!before && !after) return;
+  const changed = !before || !after ||
+    SVC_FIELDS.some((k) => JSON.stringify(after[k] ?? "") !== JSON.stringify(before[k] ?? ""));
+  if (!changed) return;   // identity-only edit (make, location…) or a photoURL update
+
+  const db = admin.firestore();
+  const source = after || before;
+  const entry = {};
+  SVC_SNAPSHOT_FIELDS.forEach((k) => { entry[k] = source[k] === undefined ? null : source[k]; });
+
+  const actorId = event.authType === "system" ? null : (event.authId || null);
+  let actorName = "";
+  if (actorId) {
+    try {
+      const t = await db.collection("technicians").doc(actorId).get();
+      if (t.exists) actorName = t.data().name || "";
+    } catch (e) { /* name is a convenience — the uid is the record */ }
+  }
+
+  await db.collection("serviceEvents").add({
+    ...entry,
+    equipmentId: event.params.eqId,
+    siteId: source.siteId || null,
+    companyId: source.companyId || null,
+    kind: after ? serviceEventKind(after) : "deleted",
+    recordedBy: actorId,
+    recordedByName: actorName,
+    recordedVia: event.authType || null,
+    recordedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
 });
 
 /* ---------- Company `lastActivityAt` ----------
