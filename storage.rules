@@ -94,6 +94,34 @@ service firebase.storage {
       allow read: if request.auth != null && request.auth.uid == uid;
     }
 
+    // Trainee logbook photos — the handwritten logbook page and supporting
+    // evidence for one entry: logbook-evidence/{companyId}/{entryId}/{file}.
+    // Only the trainee who owns the entry may add or remove photos, and only
+    // while it is still a draft — once the technician signs, its evidence is
+    // fixed. The witnessing technician, the company's admins and the
+    // superadmin may view them.
+    function logbookEntry(entryId) {
+      return firestore.get(/databases/(default)/documents/logbookEntries/$(entryId)).data;
+    }
+    match /logbook-evidence/{companyId}/{entryId}/{fileName} {
+      allow read: if request.auth != null && (
+        request.auth.token.role == 'superadmin' ||
+        isActiveCompanyAdmin(companyId) ||
+        (logbookEntry(entryId).companyId == companyId &&
+          (logbookEntry(entryId).traineeId == request.auth.uid || logbookEntry(entryId).technicianId == request.auth.uid))
+      );
+      allow create: if request.auth != null &&
+        isActiveCompanyMember(companyId) && companyWritable(companyId) &&
+        logbookEntry(entryId).companyId == companyId &&
+        logbookEntry(entryId).traineeId == request.auth.uid &&
+        logbookEntry(entryId).status == 'draft' &&
+        request.resource.size < 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null &&
+        logbookEntry(entryId).traineeId == request.auth.uid &&
+        logbookEntry(entryId).status == 'draft';
+    }
+
     // Legacy path from before multi-tenancy (equipment-photos/{fileName}.jpg,
     // no companyId segment). Read-only now: the app stopped writing here when
     // multi-tenancy shipped, and leaving it writable let any signed-in user

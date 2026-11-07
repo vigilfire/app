@@ -1061,6 +1061,105 @@ exports.completeMyProfile = onCall(async (request) => {
    device-id the client reports can be paired with a real, server-observed IP
    in the same write, and so profile completion can be required before either
    one succeeds (see requireProfileComplete). */
+/* ---------- Logbook integrity rules ----------
+   Answers the training provider's concerns about electronic logbooks: entries
+   must be contemporaneous, detailed in the trainee's own words, backed by the
+   handwritten logbook page and supporting evidence, and signed by a mentor who
+   actually comments. The app is a supplementary record that supports the
+   trainee's formal (handwritten) workplace logbook and PoE — it does not
+   replace it. All the checks live here, server-side, where they can't be
+   skipped. Every date is a South African calendar date (SAST, UTC+2, no DST). */
+const LOGBOOK = {
+  LATE_ENTRY_FLAG_DAYS: 2,     // logged more than this many days after the work → flagged "late entry"
+  MAX_BACKDATE_DAYS: 14,       // refused outright beyond this
+  LATE_SIGNOFF_FLAG_DAYS: 7,   // signed more than this many days after the work → flagged
+  BATCH_WINDOW_MINUTES: 10,    // a technician signing BATCH_COUNT+ entries inside this window → flagged
+  BATCH_COUNT: 5,
+  MAX_PAPER_PAGES: 3,
+  MAX_EVIDENCE: 8,
+  MAX_LINKED_RECORDS: 20,
+  MIN_COMMENTS: 30,            // mentor comments at sign-off
+};
+// Minimum lengths for the structured entry, in characters.
+const LOGBOOK_FIELDS = [
+  ["task", "Task or job", 10],
+  ["equipment", "Equipment or system worked on", 3],
+  ["procedure", "Procedure followed", 80],
+  ["standardRef", "Standard or clause referenced", 0],
+  ["findings", "Findings, faults or results", 20],
+  ["learned", "What I learned", 30],
+];
+const SAST_OFFSET_MS = 2 * 60 * 60 * 1000;
+function sastDate(ms) { return new Date(ms + SAST_OFFSET_MS).toISOString().slice(0, 10); }
+function dayNumber(isoDate) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate || "");
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) / 86400000 : NaN;
+}
+function daysBetween(fromIso, toIso) { return dayNumber(toIso) - dayNumber(fromIso); }
+function readLogbookFields(src) {
+  const out = {};
+  LOGBOOK_FIELDS.forEach(([k]) => { out[k] = String((src && src[k]) || "").trim().slice(0, 4000); });
+  return out;
+}
+// The first problem with an entry's content, or null. Used on create and again
+// at sign-off — a draft is edited directly by the trainee, so it's re-checked.
+function logbookContentProblem(fields) {
+  for (const [k, label, min] of LOGBOOK_FIELDS) {
+    const v = fields[k] || "";
+    if (min > 0 && v.length < min) {
+      return `"${label}" needs at least ${min} characters, in your own words (it has ${v.length}).`;
+    }
+  }
+  return null;
+}
+// Plain-text version of the structured entry, kept in workPerformed so every
+// older screen, export and backup that reads that field still shows the work.
+function composeWorkPerformed(f) {
+  return [["Task", f.task], ["Equipment/system", f.equipment], ["Procedure", f.procedure],
+    ["Standard referenced", f.standardRef], ["Findings/results", f.findings], ["What I learned", f.learned]]
+    .filter(([, v]) => v).map(([l, v]) => `${l}: ${v}`).join("\n");
+}
+
+// The maintenance records the witnessing technician (or the trainee) saved in
+// the app on the entry's date — found server-side from the immutable
+// serviceEvents trail, so they can't be picked or faked. Best-effort: a query
+// failure (e.g. the index still building) never blocks a sign-off.
+async function linkedServiceRecords(db, entry) {
+  try {
+    const start = dayNumber(entry.date) * 86400000 - SAST_OFFSET_MS;
+    const ids = [entry.technicianId, entry.traineeId].filter(Boolean);
+    const snap = await db.collection("serviceEvents")
+      .where("recordedBy", "in", ids)
+      .where("recordedAt", ">=", admin.firestore.Timestamp.fromMillis(start))
+      .where("recordedAt", "<", admin.firestore.Timestamp.fromMillis(start + 86400000))
+      .get();
+    const events = snap.docs.map((d) => d.data()).filter((e) => e.companyId === entry.companyId);
+    const siteIds = [...new Set(events.map((e) => e.siteId).filter(Boolean))];
+    const siteNames = {};
+    await Promise.all(siteIds.map(async (id) => {
+      const s = await db.collection("sites").doc(id).get();
+      if (s.exists) siteNames[id] = s.data().name || "";
+    }));
+    return {
+      count: events.length,
+      records: events.slice(0, LOGBOOK.MAX_LINKED_RECORDS).map((e) => ({
+        siteId: e.siteId || null,
+        siteName: siteNames[e.siteId] || "",
+        equipmentId: e.equipmentId || null,
+        type: e.type || "",
+        serial: e.serial || "",
+        location: e.location || "",
+        kind: e.kind || "",
+        recordedByName: e.recordedByName || "",
+        at: e.recordedAt && e.recordedAt.toMillis ? new Date(e.recordedAt.toMillis()).toISOString() : null,
+      })),
+    };
+  } catch (e) {
+    logger.warn("linkedServiceRecords failed", { error: e.message });
+    return { count: 0, records: [], error: true };
+  }
+}
+
 exports.createLogbookEntry = onCall(async (request) => {
   const uid = request.auth && request.auth.uid;
   if (!uid) {
@@ -1080,14 +1179,30 @@ exports.createLogbookEntry = onCall(async (request) => {
   const date = String(data.date || "").trim();
   const trainingType = data.trainingType === "workshop" ? "workshop" : "on-the-job";
   const siteClient = String(data.siteClient || "").trim();
-  const workPerformed = String(data.workPerformed || "").trim();
   const technicianId = String(data.technicianId || "").trim();
   const deviceId = String(data.deviceId || "").trim();
+  const fields = readLogbookFields(data);
 
-  if (!date) throw new HttpsError("invalid-argument", "Pick a date.");
-  if (!workPerformed) throw new HttpsError("invalid-argument", "Describe the work performed.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new HttpsError("invalid-argument", "Pick a date.");
+  if (!fields.task && data.workPerformed) {
+    // An app version from before the structured entry form.
+    throw new HttpsError("failed-precondition", "Your app is out of date. Close Vigil Fire completely, reopen it while online, and try again.");
+  }
+  const problem = logbookContentProblem(fields);
+  if (problem) throw new HttpsError("invalid-argument", problem);
   if (!technicianId) throw new HttpsError("invalid-argument", "Choose the technician who witnessed this.");
   if (!deviceId) throw new HttpsError("invalid-argument", "Missing device id — reload the app and try again.");
+
+  // Contemporaneous entries: the work date is checked against the server's own
+  // clock, never the phone's, and can't be changed afterwards (firestore.rules).
+  const today = sastDate(Date.now());
+  const lateDays = daysBetween(date, today);
+  if (lateDays < 0) throw new HttpsError("invalid-argument", "That date is in the future. Log an entry on or after the day the work was done.");
+  if (lateDays > LOGBOOK.MAX_BACKDATE_DAYS) {
+    throw new HttpsError("invalid-argument",
+      `That date is ${lateDays} days ago. Entries can't be logged more than ${LOGBOOK.MAX_BACKDATE_DAYS} days after the work — record it in your handwritten logbook and speak to your supervisor.`);
+  }
+  const workPerformed = composeWorkPerformed(fields);
 
   const witnessSnap = await db.collection("technicians").doc(technicianId).get();
   if (!witnessSnap.exists || witnessSnap.data().role !== "technician" || witnessSnap.data().companyId !== companyId) {
@@ -1101,6 +1216,12 @@ exports.createLogbookEntry = onCall(async (request) => {
     traineeName: traineeData.name || "",
     traineeNumber: traineeData.techNumber || "",
     date, trainingType, siteClient, workPerformed,
+    ...fields,
+    paperPages: [],
+    evidence: [],
+    createdDate: today,
+    lateDays,
+    lateEntry: lateDays > LOGBOOK.LATE_ENTRY_FLAG_DAYS,
     technicianId,
     technicianName: witness.name || "",
     technicianSaqcc: witness.saqcc || "",
@@ -1150,7 +1271,46 @@ exports.signLogbookEntry = onCall(async (request) => {
   }
   await requireTraineeModule(db, entry.companyId);
 
-  await entryRef.update({
+  // The trainee edits a draft directly, so its content is re-checked here,
+  // and the handwritten page and the mentor's own comments are required.
+  const problem = logbookContentProblem(readLogbookFields(entry));
+  if (problem) {
+    throw new HttpsError("failed-precondition", `The trainee needs to complete this entry before it can be signed. ${problem}`);
+  }
+  if (!Array.isArray(entry.paperPages) || entry.paperPages.length === 0) {
+    throw new HttpsError("failed-precondition", "The trainee hasn't attached a photo of their handwritten logbook page for this day yet. Ask them to add it, then sign.");
+  }
+  if (comments.length < LOGBOOK.MIN_COMMENTS) {
+    throw new HttpsError("invalid-argument", `Add your own comments on the trainee's work (at least ${LOGBOOK.MIN_COMMENTS} characters): what they did well, what to improve, any safety points.`);
+  }
+
+  // Late sign-off and batch sign-off flags. Batch: this technician's signatures
+  // in the last few minutes, including this one — when it reaches the limit,
+  // every entry in the burst is flagged, not just the last.
+  const nowMs = Date.now();
+  const signDelayDays = daysBetween(entry.date, sastDate(nowMs));
+  const windowStart = nowMs - LOGBOOK.BATCH_WINDOW_MINUTES * 60000;
+  const recentSnap = await db.collection("logbookEntries")
+    .where("technicianId", "==", uid).where("status", "==", "signed").get();
+  const recent = recentSnap.docs.filter((d) => {
+    const s = d.data().signedAt;
+    return s && s.toMillis && s.toMillis() >= windowStart;
+  });
+  const batchCount = recent.length + 1;
+  const batchSigned = batchCount >= LOGBOOK.BATCH_COUNT;
+  const linked = await linkedServiceRecords(db, entry);
+
+  const batch = db.batch();
+  if (batchSigned) {
+    recent.forEach((d) => batch.update(d.ref, { batchSigned: true, batchCount }));
+  }
+  batch.update(entryRef, {
+    signDelayDays,
+    lateSignoff: signDelayDays > LOGBOOK.LATE_SIGNOFF_FLAG_DAYS,
+    batchSigned,
+    batchCount,
+    linkedRecords: linked.records,
+    linkedRecordCount: linked.count,
     technicianComments: comments,
     technicianName: techData.name || "",
     technicianSaqcc: techData.saqcc || "",
@@ -1162,7 +1322,8 @@ exports.signLogbookEntry = onCall(async (request) => {
     signedDeviceId: deviceId,
     signedUserAgent: getUserAgent(request),
   });
-  return { signed: true };
+  await batch.commit();
+  return { signed: true, batchSigned, lateSignoff: signDelayDays > LOGBOOK.LATE_SIGNOFF_FLAG_DAYS };
 });
 
 /* ---------- Competent Person monthly check (SANS 10105-1) ----------

@@ -17,6 +17,14 @@
       ]
     },
     {
+      "collectionGroup": "serviceEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "recordedBy", "order": "ASCENDING" },
+        { "fieldPath": "recordedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "attendees",
       "queryScope": "COLLECTION_GROUP",
       "fields": [

@@ -192,6 +192,14 @@
   .backbar button:active{background:var(--paper-dim);}
   .backbar button svg{width:18px; height:18px;}
   .backbar h2{font-size:1.05rem;}
+  .lb-photos{display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:8px; margin:6px 0;}
+  .lb-photos:empty{display:none;}
+  .lb-photo{position:relative; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--paper);}
+  .lb-photo img{display:block; width:100%; height:96px; object-fit:cover;}
+  .lb-photo .cap{font-size:0.7rem; padding:4px 6px; color:var(--ink); line-height:1.25; word-break:break-word;}
+  .lb-photo .rm{position:absolute; top:4px; right:4px; width:26px; height:26px; border-radius:50%; border:none; background:rgba(0,0,0,.6); color:#fff; font-size:15px; line-height:26px; padding:0; cursor:pointer;}
+  .lb-flags{display:flex; flex-wrap:wrap; gap:5px; margin:4px 0;}
+  .lb-count.short{color:var(--amber);}
   .photo-preview{width:100%; max-height:180px; object-fit:cover; border-radius:8px; margin-top:8px; border:1px solid var(--line);}
   .hint{font-size:0.76rem; color:var(--grey); margin-top:6px; line-height:1.5;}
   .divider{height:1px; background:var(--line); margin:16px 0;}
@@ -430,8 +438,13 @@
     <section id="view-logbook-entry-form" class="view">
       <div class="backbar"><button onclick="showView('view-my-training')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2 id="logbookEntryFormTitle">New logbook entry</h2></div>
       <div class="card">
-        <label style="margin-top:0;">Date</label>
+        <div class="hint" style="margin:0 0 10px; padding:9px 11px; background:var(--paper); border-radius:8px;">
+          Keep writing your <strong>handwritten workplace logbook</strong> every day; it stays part of your formal Portfolio of Evidence. This entry records the same day in the app, with a photo of that handwritten page, so your supervisor can sign it and the training centre can verify it.
+        </div>
+        <div id="lbFlags"></div>
+        <label style="margin-top:0;" for="lbDate">Date the work was done</label>
         <input id="lbDate" type="date">
+        <div class="hint" id="lbDateHint">Log it on the day. Entries logged more than 2 days after the work are marked as late; after 14 days they can't be logged. The date can't be changed once the entry is saved.</div>
         <label>Training type</label>
         <div class="toggle" id="lbTypeToggle">
           <button type="button" data-type="workshop" onclick="setLbTrainingType('workshop')">Workshop</button>
@@ -439,9 +452,37 @@
         </div>
         <label>Site / client <span style="text-transform:none;font-weight:500;">(initials only — no confidential detail)</span></label>
         <input id="lbSiteClient" placeholder="e.g. BBC - Pretoria">
-        <label>Work performed</label>
-        <textarea id="lbWorkPerformed" placeholder="Describe what you did, showing the competencies being addressed"></textarea>
-        <label>Registered technician who witnessed this</label>
+        <div class="hint" style="margin-top:14px;">Describe the work in your own words, in enough detail to show you understand it. Minimum lengths are shown under each box.</div>
+        <label for="lbTask">Task or job</label>
+        <input id="lbTask" data-min="10" placeholder="e.g. Annual maintenance of 12 DCP extinguishers in the warehouse">
+        <div class="hint lb-count" data-for="lbTask"></div>
+        <label for="lbEquipment">Equipment or system worked on</label>
+        <input id="lbEquipment" data-min="3" placeholder="e.g. 9 kg DCP stored-pressure extinguishers; 30 m hose reel">
+        <div class="hint lb-count" data-for="lbEquipment"></div>
+        <label for="lbProcedure">Procedure followed</label>
+        <textarea id="lbProcedure" data-min="80" rows="5" placeholder="Step by step: what you checked, how you did it, the tools and readings you used"></textarea>
+        <div class="hint lb-count" data-for="lbProcedure"></div>
+        <label for="lbStandardRef">Standard or clause referenced <span style="text-transform:none;font-weight:500;">(if any)</span></label>
+        <input id="lbStandardRef" placeholder="e.g. SANS 1475-1 cl. 5.2; SANS 10105-1">
+        <label for="lbFindings">Findings, faults or results</label>
+        <textarea id="lbFindings" data-min="20" rows="3" placeholder="What you found, any faults and what was done about them, test results"></textarea>
+        <div class="hint lb-count" data-for="lbFindings"></div>
+        <label for="lbLearned">What I learned</label>
+        <textarea id="lbLearned" data-min="30" rows="3" placeholder="What you learned or practised today, and anything you'd do differently"></textarea>
+        <div class="hint lb-count" data-for="lbLearned"></div>
+
+        <label>Photo of today's handwritten logbook page</label>
+        <div class="hint" style="margin-top:0;">Required before your supervisor can sign. Photograph the whole page, flat and readable. Up to 3 pages.</div>
+        <div id="lbPaperList" class="lb-photos"></div>
+        <input id="lbPaperInput" type="file" accept="image/*" capture="environment" onchange="addLogbookPhoto(event,'paper')">
+
+        <label>Supporting evidence <span style="text-transform:none;font-weight:500;">(optional)</span></label>
+        <div class="hint" style="margin-top:0;">Photos of the completed work, equipment ID plates or labels, sketches or job documents. Up to 8, each with a short caption.</div>
+        <div id="lbEvidenceList" class="lb-photos"></div>
+        <input id="lbEvidenceCaption" placeholder="Caption for the next photo, e.g. Serial plate, unit 4">
+        <input id="lbEvidenceInput" type="file" accept="image/*" capture="environment" onchange="addLogbookPhoto(event,'evidence')" style="margin-top:6px;">
+
+        <label for="lbWitness">Registered technician who witnessed this</label>
         <select id="lbWitness"><option value="">Select technician…</option></select>
         <div class="hint">Only the technician who was directly present may sign this off — it's fraud otherwise, per the SAQCC logbook rules.</div>
 
@@ -466,11 +507,11 @@
       <div class="backbar"><button onclick="showView('view-signoffs')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2>Sign logbook entry</h2></div>
       <div class="card">
         <div id="signoffTraineeInfo"></div>
-        <label>Work performed</label>
-        <div class="readonly-field" id="signoffWorkPerformed" style="white-space:pre-wrap;"></div>
-        <label>Your comments</label>
-        <textarea id="signoffComments" placeholder="Feedback on the work, safety, thoroughness, etc."></textarea>
-        <div class="hint">Signing confirms you were directly present and witnessed this work. Once signed, the entry is locked and can't be edited.</div>
+        <div id="signoffDetail"></div>
+        <label for="signoffComments">Your comments</label>
+        <textarea id="signoffComments" data-min="30" rows="4" placeholder="Your own assessment: what they did well, what to improve, any safety points or guidance you gave"></textarea>
+        <div class="hint lb-count" data-for="signoffComments"></div>
+        <div class="hint">Check the handwritten page matches this entry. Signing confirms you were directly present and witnessed this work. Once signed, the entry is locked and can't be edited.</div>
         <div class="row" style="margin-top:16px;">
           <button class="btn secondary" onclick="showView('view-signoffs')">Cancel</button>
           <button class="btn" onclick="signLogbookEntry()">Sign &amp; confirm</button>
@@ -7567,7 +7608,8 @@ async function renderTraineeLogbookList(traineeId, containerId){
           <span class="date">${escapeHtml(e.date||'')}</span>
           <span class="pill ${signed?'pass':'due'}">${signed?'Signed':'Awaiting sign-off'}</span>
         </div>
-        <div class="sub">${escapeHtml(trainingTypeLabel(e.trainingType))}${e.siteClient?(' · '+escapeHtml(e.siteClient)):''}${e.technicianName?(' · Witness: '+escapeHtml(e.technicianName)):''}</div>
+        <div class="sub">${escapeHtml(e.task || trainingTypeLabel(e.trainingType))}${e.siteClient?(' · '+escapeHtml(e.siteClient)):''}${e.technicianName?(' · Witness: '+escapeHtml(e.technicianName)):''}</div>
+        ${logbookFlagsHTML(e)}
       </div>`;
     }).join('');
   }catch(e){
@@ -7776,13 +7818,34 @@ async function openTraineeLogbookReport(traineeId, backView){
   const rows = entries.map(e=>`<tr>
     <td>${escapeHtml(e.date||'')}</td>
     <td>${escapeHtml(trainingTypeLabel(e.trainingType))}</td>
-    <td>${escapeHtml(e.siteClient||'')}</td>
-    <td>${escapeHtml(e.workPerformed||'')}</td>
-    <td>${escapeHtml(e.technicianComments||'')}</td>
-    <td>${escapeHtml(e.technicianName||'')}</td>
-    <td>${escapeHtml(e.technicianSaqcc||'')}</td>
+    <td>${escapeHtml(e.task || (e.workPerformed||'').slice(0,80))}</td>
+    <td>${escapeHtml(e.technicianName||'')}${e.technicianSaqcc?('<br>'+escapeHtml(e.technicianSaqcc)):''}</td>
     <td style="text-align:center;">${e.status==='signed' ? '✓' : '—'}</td>
-  </tr>`).join('') || `<tr><td colspan="8">No entries recorded yet.</td></tr>`;
+    <td>${(e.paperPages||[]).length ? 'Attached' : '—'}</td>
+    <td>${logbookFlags(e).map(([,l])=>escapeHtml(l)).join('<br>') || 'None'}</td>
+  </tr>`).join('') || `<tr><td colspan="7">No entries recorded yet.</td></tr>`;
+
+  // Integrity summary for the assessor: the same flags, counted.
+  const signedEntries = entries.filter(e=>e.status==='signed');
+  const countOf = fn => entries.filter(fn).length;
+  const integrity = `<div class="meta">
+      <strong>Entries:</strong> ${entries.length} (${signedEntries.length} signed)<br>
+      <strong>Logged late (more than ${LB_RULES.LATE_ENTRY_FLAG_DAYS} days after the work):</strong> ${countOf(e=>e.lateEntry || e.lateDays > LB_RULES.LATE_ENTRY_FLAG_DAYS)}<br>
+      <strong>Signed late (more than ${LB_RULES.LATE_SIGNOFF_FLAG_DAYS} days after the work):</strong> ${countOf(e=>e.lateSignoff)}<br>
+      <strong>Batch sign-offs:</strong> ${countOf(e=>e.batchSigned)}<br>
+      <strong>Handwritten page attached:</strong> ${countOf(e=>(e.paperPages||[]).length)} of ${entries.length}<br>
+      <strong>Entries with supporting evidence photos:</strong> ${countOf(e=>(e.evidence||[]).length)}<br>
+      <strong>Signed entries linked to app maintenance records:</strong> ${signedEntries.filter(e=>e.linkedRecordCount>0).length} of ${signedEntries.length}
+    </div>`;
+  const details = entries.map(e=>`<div class="rep-item" style="border-top:1.5px solid var(--ink); padding-top:8px; margin-top:14px;">
+      <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <strong>${escapeHtml(e.date||'')} · ${escapeHtml(trainingTypeLabel(e.trainingType))}${e.siteClient?(' · '+escapeHtml(e.siteClient)):''}</strong>
+        <span>${e.status==='signed' ? 'Signed' : 'Not yet signed'}</span>
+      </div>
+      ${logbookDetailHTML(e, { timing:true })}
+      ${e.status==='signed' ? `<div class="kv"><div class="k">Technician comments</div><div class="v" style="white-space:pre-wrap;">${escapeHtml(e.technicianComments||'—')}</div></div>
+        <div class="kv"><div class="k">Signed by</div><div class="v">${escapeHtml(e.technicianName||'')}${e.technicianSaqcc?(' · '+escapeHtml(e.technicianSaqcc)):''}</div></div>` : ''}
+    </div>`).join('');
 
   // Grouped by category with each competency's observations shown directly
   // beneath it — the same layout as the supervising technician's own page,
@@ -7815,7 +7878,8 @@ async function openTraineeLogbookReport(traineeId, backView){
     }).join('')}`).join('');
 
   showReport('Trainee logbook', `${letterheadHTML(co)}
-    <h2 style="margin-top:16px; font-size:1rem;">SAQCC (Fire) Registered Trainee Daily Logbook</h2>
+    <h2 style="margin-top:16px; font-size:1rem;">SAQCC (Fire) Registered Trainee: Electronic Logbook Record</h2>
+    <div class="hint" style="margin:0 0 8px;">A supplementary electronic record supporting the trainee's handwritten workplace logbook and Portfolio of Evidence. It does not replace them. Each entry carries a photo of the matching handwritten page.</div>
     <div class="meta">
       <strong>Trainee:</strong> ${escapeHtml(t.name)}<br>
       <strong>Trainee registration no.:</strong> ${escapeHtml(t.techNumber||'')}<br>
@@ -7824,20 +7888,24 @@ async function openTraineeLogbookReport(traineeId, backView){
       <strong>Period of training:</strong> ${a ? escapeHtml(a.startDate||'—') : '—'} to ${a ? escapeHtml(a.endDateExpected||'—') : '—'}<br>
       <strong>Generated:</strong> ${today}
     </div>
-    <h3>Daily log</h3>
-    <div class="hint" style="margin:0 0 8px;">Print in landscape — this table is wide.</div>
+    <h3>Record integrity</h3>
+    ${integrity}
+    <h3>Daily log: summary</h3>
     <div class="tablewrap"><table class="mlog">
-      <thead><tr><th>Date</th><th>Type</th><th>Site/client</th><th>Work performed</th><th>Technician comments</th><th>Technician</th><th>SAQCC no.</th><th>Signed</th></tr></thead>
+      <thead><tr><th>Date</th><th>Type</th><th>Task</th><th>Witness &amp; SAQCC no.</th><th>Signed</th><th>Handwritten page</th><th>Flags</th></tr></thead>
       <tbody>${rows}</tbody>
-      <tfoot><tr><td colspan="8" style="border:none; border-top:1.5px solid var(--ink); padding-top:5px;">
+      <tfoot><tr><td colspan="7" style="border:none; border-top:1.5px solid var(--ink); padding-top:5px;">
         Trainee initial: ________________&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Technician initial: ________________&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Page ___ of ___
       </td></tr></tfoot>
     </table></div>
     <div class="hint" style="margin-top:4px;">Initial the bottom of every printed page — this repeats automatically on each page when printed. Fill in the page numbers by hand.</div>
+    <h3 style="margin-top:20px;">Daily log: full entries</h3>
+    <div class="hint" style="margin:0 0 4px;">Each entry in the trainee's own words, with the handwritten page, supporting evidence, the maintenance records saved in the app that day, and when it was logged and signed (server time, SAST).</div>
+    ${details || '<div class="hint">No entries recorded yet.</div>'}
     <h3 style="margin-top:20px;">Competency checklist — aspects to practice on-the-job</h3>
     <div class="hint" style="margin:0 0 8px;">${achievedCount} / ${TRAINEE_COMPETENCIES.length} achieved — achieved once ${COMPETENCY_REQUIRED_OBSERVATIONS} dated technician observations are logged against it.</div>
     ${competencySection}
-    <div class="hint" style="margin-top:14px;">Generated by Vigil Fire on ${today}. This logbook is the property of the trainee and forms part of their Portfolio of Evidence for the SAQCC EISA.</div>
+    <div class="hint" style="margin-top:14px;">Generated by Vigil Fire on ${today}. This record is the property of the trainee. It supports, and does not replace, the trainee's handwritten workplace logbook and Portfolio of Evidence for the SAQCC EISA.</div>
     <h3 style="margin-top:24px;">Declaration</h3>
     <div class="declaration">We confirm that the entries in this logbook are a true and accurate record of the training undertaken.</div>
     <div class="sign">
@@ -7979,6 +8047,89 @@ async function renderMyTraining(){
    ======================================================================== */
 function trainingTypeLabel(t){ return t==='workshop' ? 'Workshop training' : 'On-the-job training'; }
 
+/* ---------- Logbook integrity (shared by the trainee, the signing technician,
+   the admin list and the printed logbook) ----------
+   The real checks run server-side in createLogbookEntry / signLogbookEntry
+   (functions/index.js, LOGBOOK + LOGBOOK_FIELDS) — keep these in step with
+   them. These copies only drive the form's hints and counters. */
+const LB_RULES = { LATE_ENTRY_FLAG_DAYS:2, MAX_BACKDATE_DAYS:14, LATE_SIGNOFF_FLAG_DAYS:7, BATCH_WINDOW_MINUTES:10, MAX_PAPER_PAGES:3, MAX_EVIDENCE:8, MIN_COMMENTS:30 };
+const LB_FIELDS = [
+  ['task','Task or job','lbTask',10],
+  ['equipment','Equipment or system worked on','lbEquipment',3],
+  ['procedure','Procedure followed','lbProcedure',80],
+  ['standardRef','Standard or clause referenced','lbStandardRef',0],
+  ['findings','Findings, faults or results','lbFindings',20],
+  ['learned','What I learned','lbLearned',30]
+];
+function lbComposeWorkPerformed(f){
+  return [['Task',f.task],['Equipment/system',f.equipment],['Procedure',f.procedure],
+    ['Standard referenced',f.standardRef],['Findings/results',f.findings],['What I learned',f.learned]]
+    .filter(([,v])=>v).map(([l,v])=>`${l}: ${v}`).join('\n');
+}
+// Integrity flags an assessor should see. Shown, never hidden — they don't
+// block anything by themselves (except where the server refuses outright).
+function logbookFlags(e){
+  const f = [];
+  if(e.lateEntry || e.lateDays > LB_RULES.LATE_ENTRY_FLAG_DAYS) f.push(['due', `Late entry: logged ${e.lateDays} days after the work`]);
+  if(e.lateSignoff) f.push(['due', `Late sign-off: ${e.signDelayDays} days after the work`]);
+  if(e.batchSigned) f.push(['fail', `Batch sign-off: ${e.batchCount} entries signed within ${LB_RULES.BATCH_WINDOW_MINUTES} min`]);
+  if(!(e.paperPages||[]).length) f.push(['due', e.status==='signed' ? 'No handwritten page attached' : 'Handwritten page photo missing']);
+  return f;
+}
+function logbookFlagsHTML(e){
+  const f = logbookFlags(e);
+  return f.length ? `<div class="lb-flags">${f.map(([cls,l])=>`<span class="pill ${cls}" style="margin:0;">${escapeHtml(l)}</span>`).join('')}</div>` : '';
+}
+function lbTimestamp(ts){
+  if(!ts || !ts.toDate) return '—';
+  const d = ts.toDate();
+  return toLocalISO(d) + ' ' + d.toTimeString().slice(0,5);
+}
+function lbPhotoGridHTML(list, withCaptions){
+  if(!list || !list.length) return '';
+  return `<div class="lb-photos">${list.map(p=>`<a class="lb-photo" href="${escapeHtml(p.url)}" target="_blank" rel="noopener">
+      <img src="${escapeHtml(p.url)}" alt="${escapeHtml(p.caption||'Logbook photo')}" loading="lazy">
+      ${withCaptions && p.caption ? `<div class="cap">${escapeHtml(p.caption)}</div>` : ''}
+    </a>`).join('')}</div>`;
+}
+// The full entry, read-only: structured content, photos, linked records and
+// the timing evidence. Used on the sign-off screen, the trainee's signed view
+// and the printed logbook.
+function logbookDetailHTML(e, opts){
+  opts = opts || {};
+  const kv = (k,v)=> v ? `<div class="kv"><div class="k">${escapeHtml(k)}</div><div class="v" style="white-space:pre-wrap;">${escapeHtml(v)}</div></div>` : '';
+  const content = e.task
+    ? LB_FIELDS.map(([key,label])=>kv(label, e[key])).join('')
+    : kv('Work performed', e.workPerformed);   // entries from before the structured form
+  const linked = lbLinkedHTML(e);
+  return `${logbookFlagsHTML(e)}
+    ${content}
+    <label>Handwritten logbook page</label>
+    ${lbPhotoGridHTML(e.paperPages) || '<div class="hint" style="margin-top:0;">Not attached.</div>'}
+    ${(e.evidence||[]).length ? `<label>Supporting evidence</label>${lbPhotoGridHTML(e.evidence, true)}` : ''}
+    ${linked}
+    ${opts.timing ? `<label>Record of when</label>
+      ${kv('Entry logged', lbTimestamp(e.createdAt) + (e.lateDays!=null ? ` (${e.lateDays} day${e.lateDays===1?'':'s'} after the work)` : ''))}
+      ${e.status==='signed' ? kv('Signed', lbTimestamp(e.signedAt) + (e.signDelayDays!=null ? ` (${e.signDelayDays} day${e.signDelayDays===1?'':'s'} after the work)` : '')) : ''}` : ''}`;
+}
+// Maintenance records the server attached at sign-off (see linkedServiceRecords).
+function lbLinkedHTML(e){
+  return (e.linkedRecords||[]).length ? `
+    <label>App records saved that day (${e.linkedRecordCount||e.linkedRecords.length})</label>
+    <div class="hint" style="margin-top:0;">Maintenance records the witnessing technician or trainee saved in Vigil Fire on ${escapeHtml(e.date||'')}, attached automatically at sign-off.</div>
+    <ul style="margin:4px 0; padding-left:20px; font-size:0.84rem;">${e.linkedRecords.map(r=>`<li>${escapeHtml(r.siteName||'Site')}: ${escapeHtml(typeLabel(r.type)||r.type||'')} ${escapeHtml(r.serial||'')}${r.location?(' · '+escapeHtml(r.location)):''} <span style="color:var(--grey);">(${escapeHtml(r.kind||'')}${r.recordedByName?', '+escapeHtml(r.recordedByName):''})</span></li>`).join('')}</ul>`
+    : (e.status==='signed' && e.linkedRecordCount===0 ? `<div class="hint">No maintenance records were saved in the app on this date by the technician or trainee.</div>` : '');
+}
+// Live "N / min characters" counters under every box with a data-min.
+function lbUpdateCount(el){
+  const out = document.querySelector(`.lb-count[data-for="${el.id}"]`);
+  if(!out) return;
+  const min = +el.dataset.min, n = el.value.trim().length;
+  out.textContent = n >= min ? `${n} characters` : `${n} / ${min} characters minimum`;
+  out.classList.toggle('short', n < min);
+}
+document.addEventListener('input', ev=>{ if(ev.target && ev.target.dataset && ev.target.dataset.min) lbUpdateCount(ev.target); });
+
 let myLogbookEntries = [];
 async function renderMyLogbookList(){
   const wrap = document.getElementById('myLogbookList');
@@ -7994,7 +8145,8 @@ async function renderMyLogbookList(){
           <span class="date">${escapeHtml(e.date||'')}</span>
           <span class="pill ${signed?'pass':'due'}">${signed?'Signed':'Awaiting sign-off'}</span>
         </div>
-        <div class="sub">${escapeHtml(trainingTypeLabel(e.trainingType))}${e.siteClient?(' · '+escapeHtml(e.siteClient)):''}${e.technicianName?(' · Witness: '+escapeHtml(e.technicianName)):''}</div>
+        <div class="sub">${escapeHtml(e.task || trainingTypeLabel(e.trainingType))}${e.siteClient?(' · '+escapeHtml(e.siteClient)):''}${e.technicianName?(' · Witness: '+escapeHtml(e.technicianName)):''}</div>
+        ${logbookFlagsHTML(e)}
       </div>`;
     }).join('');
   }catch(e){
@@ -8028,26 +8180,50 @@ async function openLogbookEntryForm(id){
     techsCache.filter(t=>t.active!==false)
       .map(t=>`<option value="${t.id}">${escapeHtml(t.name)}${t.saqcc?(' · '+escapeHtml(t.saqcc)):''}</option>`).join('');
 
-  document.getElementById('lbDate').value = e ? (e.date||'') : toLocalISO(new Date());
+  const dateEl = document.getElementById('lbDate');
+  const todayIso = toLocalISO(new Date());
+  dateEl.value = e ? (e.date||'') : todayIso;
+  // Work date: today or up to MAX_BACKDATE_DAYS back, and fixed once saved.
+  const minD = new Date(); minD.setDate(minD.getDate() - LB_RULES.MAX_BACKDATE_DAYS);
+  dateEl.max = todayIso; dateEl.min = toLocalISO(minD);
   setLbTrainingType(e ? (e.trainingType||'on-the-job') : 'on-the-job');
   document.getElementById('lbSiteClient').value = e ? (e.siteClient||'') : '';
-  document.getElementById('lbWorkPerformed').value = e ? (e.workPerformed||'') : '';
+  LB_FIELDS.forEach(([key,,elId])=>{
+    // A draft from before the structured form keeps its old text in Procedure,
+    // so the trainee completes the entry rather than starting over.
+    document.getElementById(elId).value = e ? (e[key] || (key==='procedure' && !e.task ? (e.workPerformed||'') : '')) : '';
+  });
   witnessSel.value = e ? (e.technicianId||'') : '';
+  document.getElementById('lbFlags').innerHTML = e ? logbookFlagsHTML(e) : '';
 
-  ['lbDate','lbSiteClient','lbWorkPerformed','lbWitness'].forEach(fid=>{ document.getElementById(fid).disabled = readOnly; });
+  lbPhotos = {
+    paper: e ? (e.paperPages||[]).map(p=>Object.assign({}, p)) : [],
+    evidence: e ? (e.evidence||[]).map(p=>Object.assign({}, p)) : []
+  };
+  lbRemovedPaths = [];
+  document.getElementById('lbEvidenceCaption').value = '';
+  renderLbPhotoLists(readOnly);
+
+  const fieldIds = ['lbSiteClient','lbWitness','lbEvidenceCaption'].concat(LB_FIELDS.map(f=>f[2]));
+  fieldIds.forEach(fid=>{ document.getElementById(fid).disabled = readOnly; });
+  dateEl.disabled = readOnly || !!id;   // the work date is fixed once saved
+  document.getElementById('lbDateHint').style.display = id ? 'none' : '';
+  ['lbPaperInput','lbEvidenceInput','lbEvidenceCaption'].forEach(fid=>{ document.getElementById(fid).style.display = readOnly ? 'none' : ''; });
   document.querySelectorAll('#lbTypeToggle button').forEach(b=>{ b.disabled = readOnly; });
   document.getElementById('lbSaveBtn').style.display = readOnly ? 'none' : '';
   document.getElementById('lbDeleteBtn').style.display = (id && !readOnly) ? 'block' : 'none';
+  document.querySelectorAll('#view-logbook-entry-form [data-min]').forEach(lbUpdateCount);
 
   const signedBlock = document.getElementById('lbSignedBlock');
   if(readOnly){
     signedBlock.style.display = 'block';
     signedBlock.innerHTML = `
       <div class="divider"></div>
-      <label style="margin-top:0;">Registered technician sign-off</label>
-      <div class="kv"><div class="k">Comments</div><div class="v">${escapeHtml(e.technicianComments||'—')}</div></div>
+      ${lbLinkedHTML(e)}
+      <label>Registered technician sign-off</label>
+      <div class="kv"><div class="k">Comments</div><div class="v" style="white-space:pre-wrap;">${escapeHtml(e.technicianComments||'—')}</div></div>
       <div class="kv"><div class="k">Signed by</div><div class="v">${escapeHtml(e.technicianName||'')}${e.technicianSaqcc?(' · '+escapeHtml(e.technicianSaqcc)):''}</div></div>
-      <div class="kv"><div class="k">Signed</div><div class="v">${(e.signedAt && e.signedAt.toDate) ? toLocalISO(e.signedAt.toDate()) : '—'}</div></div>`;
+      <div class="kv"><div class="k">Signed</div><div class="v">${lbTimestamp(e.signedAt)}</div></div>`;
   } else {
     signedBlock.style.display = 'none';
     signedBlock.innerHTML = '';
@@ -8056,41 +8232,123 @@ async function openLogbookEntryForm(id){
   showView('view-logbook-entry-form');
 }
 
+/* Photos on a logbook entry. New ones are held as resized data URLs until
+   Save, then uploaded under logbook-evidence/{companyId}/{entryId}/ — the
+   entry has to exist first, since storage.rules check it's the trainee's own
+   draft. Removed ones are deleted from storage after the save succeeds. */
+let lbPhotos = { paper:[], evidence:[] };
+let lbRemovedPaths = [];
+function renderLbPhotoLists(readOnly){
+  [['paper','lbPaperList'],['evidence','lbEvidenceList']].forEach(([kind,elId])=>{
+    document.getElementById(elId).innerHTML = lbPhotos[kind].map((p,i)=>`<div class="lb-photo">
+        <img src="${escapeHtml(p.url || p.dataUrl)}" alt="">
+        ${p.caption ? `<div class="cap">${escapeHtml(p.caption)}</div>` : ''}
+        ${p.pending ? '<div class="cap" style="color:var(--amber);">Uploads when you save</div>' : ''}
+        ${readOnly ? '' : `<button type="button" class="rm" aria-label="Remove photo" onclick="removeLogbookPhoto('${kind}',${i})">×</button>`}
+      </div>`).join('');
+  });
+}
+function addLogbookPhoto(evt, kind){
+  const file = evt.target.files && evt.target.files[0];
+  evt.target.value = '';
+  if(!file) return;
+  const max = kind==='paper' ? LB_RULES.MAX_PAPER_PAGES : LB_RULES.MAX_EVIDENCE;
+  if(lbPhotos[kind].length >= max){ toast(`Up to ${max} ${kind==='paper'?'pages':'evidence photos'} per entry`); return; }
+  let caption = '';
+  if(kind==='evidence'){
+    caption = document.getElementById('lbEvidenceCaption').value.trim();
+    if(!caption){ toast('Add a short caption first, then take the photo'); return; }
+  }
+  // Wider than equipment photos: a handwritten page has to stay readable.
+  resizeImageToDataUrl(file, kind==='paper' ? 1600 : 1200, 0.75, dataUrl=>{
+    lbPhotos[kind].push(kind==='paper' ? { dataUrl, pending:true } : { dataUrl, caption, pending:true });
+    if(kind==='evidence') document.getElementById('lbEvidenceCaption').value = '';
+    renderLbPhotoLists(false);
+  });
+}
+function removeLogbookPhoto(kind, i){
+  const p = lbPhotos[kind][i];
+  if(p && p.path) lbRemovedPaths.push(p.path);
+  lbPhotos[kind].splice(i, 1);
+  renderLbPhotoLists(false);
+}
+async function uploadLbPhotos(entryId){
+  const out = { paper:[], evidence:[] };
+  for(const kind of ['paper','evidence']){
+    for(const p of lbPhotos[kind]){
+      if(!p.pending){ out[kind].push(p.caption != null ? { url:p.url, path:p.path, caption:p.caption } : { url:p.url, path:p.path }); continue; }
+      const path = `logbook-evidence/${currentCompanyId}/${entryId}/${kind}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.jpg`;
+      const ref = storage.ref(path);
+      await ref.putString(p.dataUrl, 'data_url');
+      const url = await ref.getDownloadURL();
+      out[kind].push(kind==='paper' ? { url, path } : { url, path, caption:p.caption });
+    }
+  }
+  return out;
+}
+
 async function saveLogbookEntry(){
   const date = document.getElementById('lbDate').value;
   const siteClient = document.getElementById('lbSiteClient').value.trim();
-  const workPerformed = document.getElementById('lbWorkPerformed').value.trim();
   const technicianId = document.getElementById('lbWitness').value;
-  if(!date){ toast('Pick a date'); return; }
-  if(!workPerformed){ toast('Describe the work performed'); return; }
+  const fields = {};
+  LB_FIELDS.forEach(([key,,elId])=>{ fields[key] = document.getElementById(elId).value.trim(); });
+  if(!date){ toast('Pick the date the work was done'); return; }
+  for(const [key,label,,min] of LB_FIELDS){
+    if(min && fields[key].length < min){ toast(`"${label}" needs at least ${min} characters (it has ${fields[key].length})`); document.getElementById(LB_FIELDS.find(f=>f[0]===key)[2]).focus(); return; }
+  }
   if(!technicianId){ toast('Choose the technician who witnessed this'); return; }
+  if(!navigator.onLine){ toast('You are offline. Logbook entries need a connection, so save it when you have signal (it will still count from the work date).'); return; }
+  const btn = document.getElementById('lbSaveBtn');
+  if(btn.disabled) return;
+  btn.disabled = true; btn.textContent = 'Saving…';
+  let entryId = editingLogbookEntryId;
+  let created = false;
   try{
-    if(editingLogbookEntryId){
-      const witness = techsCache.find(t=>t.id===technicianId);
-      await db.collection('logbookEntries').doc(editingLogbookEntryId).update({
-        date, trainingType: lbTrainingType, siteClient, workPerformed,
-        technicianId,
-        technicianName: witness ? witness.name : '',
-        technicianSaqcc: witness ? (witness.saqcc||'') : '',
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      toast('Entry updated');
-    } else {
-      // Goes through a Cloud Function, not a direct write — it needs a real,
-      // server-observed IP alongside the device id, and it's the fraud-
-      // tracking profile-completion gate's enforcement point for a trainee.
-      const call = firebase.functions().httpsCallable('createLogbookEntry');
-      await call({ date, trainingType: lbTrainingType, siteClient, workPerformed, technicianId, deviceId: getOrCreateDeviceId() });
-      toast('Entry saved');
+    if(!entryId){
+      // Goes through a Cloud Function, not a direct write: it stamps a real,
+      // server-observed IP and time, checks the work date against the
+      // server's clock, and enforces the profile-completion gate.
+      const res = await firebase.functions().httpsCallable('createLogbookEntry')(Object.assign(
+        { date, trainingType: lbTrainingType, siteClient, technicianId, deviceId: getOrCreateDeviceId() }, fields));
+      entryId = res.data.id;
+      editingLogbookEntryId = entryId;   // a retry after a failed photo upload updates, not duplicates
+      created = true;
+      document.getElementById('lbDate').disabled = true;
     }
+    const photos = await uploadLbPhotos(entryId);
+    const witness = techsCache.find(t=>t.id===technicianId);
+    await db.collection('logbookEntries').doc(entryId).update(Object.assign({}, fields, {
+      trainingType: lbTrainingType, siteClient,
+      workPerformed: lbComposeWorkPerformed(fields),
+      technicianId,
+      technicianName: witness ? witness.name : '',
+      technicianSaqcc: witness ? (witness.saqcc||'') : '',
+      paperPages: photos.paper,
+      evidence: photos.evidence,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }));
+    lbRemovedPaths.forEach(p=>storage.ref(p).delete().catch(()=>{}));
+    lbRemovedPaths = [];
+    toast(photos.paper.length ? 'Entry saved' : 'Entry saved. Add a photo of your handwritten page before your supervisor signs.');
     showView('view-my-training');
-  }catch(e){ toast('Error: ' + e.message); }
+  }catch(e){
+    toast(created
+      ? 'Entry saved, but the photos didn\'t upload (' + e.message + '). Tap Save again when your signal is better.'
+      : 'Could not save: ' + e.message);
+  }finally{
+    btn.disabled = false; btn.textContent = 'Save entry';
+  }
 }
 
 async function deleteLogbookEntry(){
   if(!editingLogbookEntryId) return;
   if(!confirm('Delete this draft entry? This cannot be undone.')) return;
   try{
+    // Photos first: storage.rules only allow it while the draft still exists.
+    const e = myLogbookEntries.find(x=>x.id===editingLogbookEntryId) || {};
+    await Promise.all([].concat(e.paperPages||[], e.evidence||[]).filter(p=>p.path)
+      .map(p=>storage.ref(p.path).delete().catch(()=>{})));
     await db.collection('logbookEntries').doc(editingLogbookEntryId).delete();
     toast('Entry deleted');
     showView('view-my-training');
@@ -8116,7 +8374,8 @@ async function renderSignoffs(){
     wrap.innerHTML = mySignoffs.map(e=>`
       <div class="insp-row status-due" onclick="openSignoffForm('${e.id}')">
         <div class="top"><span class="date">${escapeHtml(e.traineeName||'Trainee')}</span><span class="pill due">Awaiting sign-off</span></div>
-        <div class="sub">${escapeHtml(e.date||'')} · ${escapeHtml(trainingTypeLabel(e.trainingType))}${e.siteClient?(' · '+escapeHtml(e.siteClient)):''}</div>
+        <div class="sub">${escapeHtml(e.date||'')} · ${escapeHtml(e.task || trainingTypeLabel(e.trainingType))}${e.siteClient?(' · '+escapeHtml(e.siteClient)):''}</div>
+        ${logbookFlagsHTML(e)}
       </div>`).join('');
   }catch(e){
     wrap.innerHTML = `<div class="empty">Could not load: ${escapeHtml(e.message)}</div>`;
@@ -8138,24 +8397,32 @@ function openSignoffForm(id){
     <div class="kv"><div class="k">Date</div><div class="v">${escapeHtml(e.date||'')}</div></div>
     <div class="kv"><div class="k">Type</div><div class="v">${escapeHtml(trainingTypeLabel(e.trainingType))}</div></div>
     <div class="kv"><div class="k">Site / client</div><div class="v">${escapeHtml(e.siteClient||'—')}</div></div>`;
-  document.getElementById('signoffWorkPerformed').textContent = e.workPerformed || '';
-  document.getElementById('signoffComments').value = '';
+  document.getElementById('signoffDetail').innerHTML = logbookDetailHTML(e, { timing:true });
+  const commentsEl = document.getElementById('signoffComments');
+  commentsEl.value = '';
+  lbUpdateCount(commentsEl);
   showView('view-signoff-form');
 }
 
 async function signLogbookEntry(){
   if(!editingSignoffId) return;
-  if(!confirm('Sign this entry? You are confirming you were personally present and witnessed this work. Once signed it cannot be edited.')) return;
+  const e = mySignoffs.find(x=>x.id===editingSignoffId) || {};
   const comments = document.getElementById('signoffComments').value.trim();
+  // Same checks the server makes, so the technician hears it before confirming.
+  if(!(e.paperPages||[]).length){ toast('The trainee hasn\'t attached a photo of their handwritten logbook page yet. Ask them to add it first.'); return; }
+  if(comments.length < LB_RULES.MIN_COMMENTS){ toast(`Add your own comments on their work (at least ${LB_RULES.MIN_COMMENTS} characters)`); document.getElementById('signoffComments').focus(); return; }
+  if(!confirm('Sign this entry? You are confirming you were personally present and witnessed this work, and that the handwritten page matches it. Once signed it cannot be edited.')) return;
   try{
-    // Goes through a Cloud Function, not a direct write — same reason as
-    // createLogbookEntry: a real server-observed IP, and the profile-
-    // completion gate's enforcement point for the signing technician.
-    const call = firebase.functions().httpsCallable('signLogbookEntry');
-    await call({ id: editingSignoffId, comments, deviceId: getOrCreateDeviceId() });
-    toast('Entry signed');
+    // Goes through a Cloud Function, not a direct write: a real server-observed
+    // IP and time, the late/batch sign-off flags, the linked maintenance
+    // records, and the profile-completion gate for the signing technician.
+    const res = await firebase.functions().httpsCallable('signLogbookEntry')({ id: editingSignoffId, comments, deviceId: getOrCreateDeviceId() });
+    const r = res.data || {};
+    toast(r.batchSigned ? `Entry signed. Note: you've signed several entries in the last ${LB_RULES.BATCH_WINDOW_MINUTES} minutes, so these are marked as a batch sign-off.`
+      : r.lateSignoff ? 'Entry signed. It\'s marked as a late sign-off, as it\'s more than a week after the work.'
+      : 'Entry signed');
     showView('view-signoffs');
-  }catch(e){ toast('Error: ' + e.message); }
+  }catch(err){ toast('Error: ' + err.message); }
 }
 
 /* ---------- Sign-off verification (admin) ----------

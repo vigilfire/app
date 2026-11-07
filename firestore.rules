@@ -267,11 +267,19 @@ service cloud.firestore {
           // or name a witness who isn't actually a same-company technician.
           && request.resource.data.traineeId == resource.data.traineeId
           && request.resource.data.companyId == resource.data.companyId
-          // Only the entry's content — never the createdIp/createdDeviceId/
-          // createdAt evidence createLogbookEntry stamped server-side.
+          // Only the entry's content and its photos — never the createdIp/
+          // createdDeviceId/createdAt evidence or the lateDays/lateEntry flags
+          // createLogbookEntry stamped server-side. `date` is deliberately
+          // absent: the work date is fixed when the entry is created (and
+          // checked against the server's clock there), so a late entry can't
+          // be re-dated afterwards to look contemporaneous.
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-               'date', 'trainingType', 'siteClient', 'workPerformed',
+               'trainingType', 'siteClient', 'workPerformed',
+               'task', 'equipment', 'procedure', 'standardRef', 'findings', 'learned',
+               'paperPages', 'evidence',
                'technicianId', 'technicianName', 'technicianSaqcc', 'updatedAt'])
+          && request.resource.data.get('paperPages', []).size() <= 3
+          && request.resource.data.get('evidence', []).size() <= 8
           && get(/databases/$(database)/documents/technicians/$(request.resource.data.technicianId)).data.role == 'technician'
           && get(/databases/$(database)/documents/technicians/$(request.resource.data.technicianId)).data.companyId == resource.data.companyId
         )
